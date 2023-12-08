@@ -1,0 +1,20 @@
+Map<String, String> selfCreateLocales_EN = {
+  'hd_CreateASlickbill': 'Create a SlickBill',
+  'btn_UploadPDF': 'Upload PDF',
+  'btn_UploadReceipt': 'Upload Receipt',
+  'lbl_SenderName': "Sender's name",
+  'lbl_Description': 'Description',
+  'lbl_Amount': 'Amount',
+  'lbl_DueDate': 'Due date',
+  'lbl_OriginalInvoiceNo': 'Original invoice number',
+  'lbl_ReferenceNumber': 'Reference number',
+  'lbl_SenderIban': "Sender's IBAN",
+  'btn_CreateSlickbill': 'Create SlickBill',
+  'inf_AnalyzingPDF': 'Analyzing your input...',
+  'btn_AddSlickBill': 'Add your SlickBill',
+  'inf_AddedToSlickBill': 'Added to SlickBills',
+  'lbl_IBAN': 'IBAN',
+  'lbl_AccountHolder': 'Acoount holder',
+  'lbl_PasteText': 'Paste text here...',
+  'btn_AnalyzeText': 'Analyze text'
+};

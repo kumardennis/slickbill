@@ -1,0 +1,20 @@
+Map<String, String> dashboardLocales_EN = {
+  'hd_YourSlickBills': 'Your SlickBills',
+  'hd_ObsoleteSlickBills': 'Trash',
+  'hd_Sent': 'Sent',
+  'hd_Received': 'Received',
+  'lbl_Unpaid': 'Unpaid',
+  'lbl_Paid': 'Paid',
+  'lbl_Due': 'Due @date',
+  'lbl_PaidOn': 'Paid on @date',
+  'lbl_NoInvoices': 'No invoices',
+  'lbl_Pending': 'Pending',
+  'lbl_ReceivedThisMonth': 'Received this month',
+  'lbl_PaidThisMonth': 'Paid this month',
+  'inf_StatusUpdated': 'Status updated!',
+  'btn_Pay': 'Pay this SlickBill',
+  'btn_Unpay': 'Unpay this SlickBill',
+  'btn_MarkObsolete': 'Mark as trash',
+  'btn_MarkNotObsolete': 'Mark as not trash',
+  'lbl_Category': 'Category'
+};

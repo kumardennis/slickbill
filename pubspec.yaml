@@ -1,0 +1,50 @@
+name: slickbill
+description: A new Flutter project.
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ">=3.0.1 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  google_fonts: ^4.0.4
+  intl: ^0.18.1
+  badges: ^3.1.1
+  json_annotation: ^4.7.0
+  flutter_hooks: ^0.18.5+1
+  flutter_dotenv: ^5.0.2
+  get: ^4.6.5
+  shared_preferences: ^2.0.15
+  font_awesome_flutter: ^10.5.0
+  persistent_bottom_nav_bar: ^5.0.2
+  flutter_local_notifications: ^15.1.0+1
+  syncfusion_flutter_datepicker: ^23.1.38
+  liquid_pull_to_refresh: ^3.0.1
+  supabase_flutter: ^1.10.19
+  file_picker: ^5.5.0
+  http: ^1.1.0
+  http_parser: ^4.0.2
+  syncfusion_flutter_pdf: ^23.1.38
+  html_unescape: ^2.0.0
+  syncfusion_flutter_pdfviewer: ^23.1.38
+  modal_bottom_sheet: ^2.1.2
+  flutter_typeahead: ^4.8.0
+  image_picker: ^1.0.4
+  image_picker_for_web: ^3.0.1
+  timeline_tile: ^2.0.0
+  ticket_widget: ^1.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - .env
+    - media/temporary_logo.png
+    - media/temporary_logo_text.png
