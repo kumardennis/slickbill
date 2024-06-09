@@ -17,7 +17,6 @@ import { handler as get_private_user_sent_obsolete_invoices } from "./get-privat
 import { handler as get_private_user_received_obsolete_invoices } from "./get-private-user-received-obsolete-invoices/handler.ts";
 import { handler as update_invoice_status } from "./update-invoice-status/handler.ts";
 import { handler as update_invoice_obsolete } from "./update-invoice-obsolete/handler.ts";
-import { handler as get_ticket_brief_data } from "./get-ticket-brief-data/handler.ts";
 
 console.log("Setting up localdev");
 
@@ -36,7 +35,6 @@ const handlers = {
     get_private_user_received_obsolete_invoices,
   "update-invoice-status": update_invoice_status,
   "update-invoice-obsolete": update_invoice_obsolete,
-  "get-ticket-brief-data": get_ticket_brief_data,
 } as Record<string, Handler>;
 
 function localdevHandler(req: Request, connInfo: ConnInfo) {

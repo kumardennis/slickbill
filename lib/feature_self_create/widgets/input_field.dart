@@ -42,7 +42,7 @@ class InputField extends HookWidget {
           ),
         ),
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.light,
+              color: Theme.of(context).colorScheme.dark,
             ),
         textAlign: TextAlign.start,
       ),

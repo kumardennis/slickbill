@@ -35,6 +35,10 @@ dependencies:
   image_picker_for_web: ^3.0.1
   timeline_tile: ^2.0.0
   ticket_widget: ^1.0.2
+  nfc_manager: ^3.4.0
+  flutter_nfc_hce: ^0.1.8
+  pulsator: ^1.0.0
+  flutter_nearby_connections: ^1.1.2
 
 dev_dependencies:
   flutter_test:

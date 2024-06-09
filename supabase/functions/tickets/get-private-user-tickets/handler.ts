@@ -8,38 +8,38 @@ import {
   errorResponseData,
 } from "../../_shared/confirmedRequiredParams.ts";
 import { corsHeaders } from "../../_shared/cors.ts";
-import { EdenAIService } from "../../_shared/edenAIService.ts";
-import { OpenAIService } from "../../_shared/openAIService.ts";
-import { PdfCoService } from "../../_shared/pdfCoService.ts";
 import { createSupabase } from "../../_shared/supabaseClient.ts";
 
 export const handler = async (req: Request) => {
   const supabase = createSupabase(req);
 
   try {
-    const { fileText, fileUrl } = await req.json();
+    const { privateUserId, dateRange } = await req.json();
 
-    if (!confirmedRequiredParams([fileText])) {
+    if (!confirmedRequiredParams([privateUserId])) {
       return new Response(JSON.stringify(errorResponseData), {
-        headers: {
-          ...corsHeaders,
-          "Content-Type": "application/json; charset=utf-8",
-        },
+        headers: { "Content-Type": "application/json" },
       });
     }
 
-    const response = await OpenAIService.getCategoryOfTicket(fileText);
+    const query = supabase
+      .from("tickets")
+      .select("*")
+      .eq("privateUserId", privateUserId)
+      .order("dateOfActivity", { ascending: true });
 
-    const scanPdfResponse = await PdfCoService.scanBarcodeOrQRFromPdf(fileUrl);
+    if (dateRange) {
+      query
+        .gte("dateOfActivity", dateRange[0])
+        .lte("dateOfActivity", dateRange[1]);
+    }
 
-    const generateQRResponse = await PdfCoService.generateQRCode(
-      scanPdfResponse.value
-    );
+    const { data, error } = await query;
 
     const responseData = {
       isRequestSuccessfull: true,
-      data: { ...response, category: response, qrCodeUri: generateQRResponse },
-      error: null,
+      data: data,
+      error: error,
     };
 
     return new Response(JSON.stringify(responseData), {
@@ -56,10 +56,7 @@ export const handler = async (req: Request) => {
     };
 
     return new Response(JSON.stringify(responseData), {
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "application/json; charset=utf-8",
-      },
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 };

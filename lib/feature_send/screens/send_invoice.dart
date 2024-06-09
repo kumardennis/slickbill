@@ -28,23 +28,17 @@ class SendInvoice extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final NavigationController navigationController =
-        Get.find(); // Initialize controller
+    final NavigationController navigationController = Get.find();
 
     var receiverUsers = useState<List<ReceiverUserModel>>([]);
 
     var descriptionController = useTextEditingController();
-    var amountController = useTextEditingController();
     var dueDateController = useTextEditingController();
     var referenceNumberController = useTextEditingController();
 
     var category = useState<String>(Constants().categories.last);
 
     var originalInvoiceNoController = useTextEditingController();
-
-    var selectedIbanIndex = useState<int>(0);
-
-    var extractedData = useState<ExtractedInvoiceDataModel?>(null);
 
     var receiverUserId = useState<int?>(null);
 
@@ -60,38 +54,7 @@ class SendInvoice extends HookWidget {
       }
     }, [dueDateController.text]);
 
-    FilesClass filesClass = FilesClass();
     SendInvoicesClass sendInvoicesClass = SendInvoicesClass();
-
-    Future pickFile() async {
-      FilePickerResult? result = await FilePicker.platform.pickFiles();
-
-      if (result != null) {
-        var fileBytes = result.files.single.bytes;
-
-        isLoading.value = true;
-        var data = await filesClass.uploadFileToExtractData(fileBytes);
-
-        isLoading.value = false;
-
-        if (data != null) {
-          originalInvoiceNoController.text = data.invoiceNo;
-
-          descriptionController.text = data.description;
-
-          amountController.text = data.totalAmount.toString();
-
-          dueDateController.text = data.dueDate;
-
-          referenceNumberController.text = data.referenceNumber;
-
-          extractedData.value = data;
-        }
-      } else {
-        print('cncelled');
-        isLoading.value = false;
-      }
-    }
 
     Future createInvoice() async {
       print(receiverUsers.value.first.amount);
@@ -140,7 +103,10 @@ class SendInvoice extends HookWidget {
             TypeAheadField<UsersByUsername>(
               textFieldConfiguration: TextFieldConfiguration(
                   autofocus: false,
-                  style: Theme.of(context).textTheme.bodyMedium,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(color: Theme.of(context).colorScheme.dark),
                   decoration: InputDecoration(
                       counterStyle: Theme.of(context).textTheme.bodyMedium,
                       labelText: 'lbl_SearchUsers'.tr,
@@ -165,6 +131,7 @@ class SendInvoice extends HookWidget {
               onSuggestionSelected: (suggestion) {
                 receiverUserId.value = suggestion.id;
                 receiverUsers.value.add(ReceiverUserModel(
+                    userId: suggestion.users.id,
                     amount: 0.0,
                     firstName: suggestion.firstName,
                     lastName: suggestion.lastName,

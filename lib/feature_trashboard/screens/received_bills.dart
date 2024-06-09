@@ -93,7 +93,7 @@ class ReceivedBills extends HookWidget {
 
     return (SingleChildScrollView(
       child: Padding(
-        padding: const EdgeInsets.all(20.0),
+        padding: const EdgeInsets.fromLTRB(0.0, 20.0, 20.0, 20.0),
         child: isLoading.value
             ? const Center(
                 child: CircularProgressIndicator(),
@@ -102,93 +102,88 @@ class ReceivedBills extends HookWidget {
                 ? Text('lbl_NoInvoices'.tr)
                 : Column(
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          Expanded(
-                            child: Container(
-                              height: 100,
-                              child: Card(
-                                color: Theme.of(context).colorScheme.dark,
-                                child: Center(
-                                  child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          pending.value != null
-                                              ? formatNumber
-                                                  .formatMoney(pending.value!)
-                                              : '-',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .headlineLarge
-                                              ?.copyWith(
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .yellow,
-                                                  fontWeight: FontWeight.w600),
-                                        ),
-                                        Text(
-                                          'lbl_Pending'.tr,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .light),
-                                        )
-                                      ]),
-                                ),
+                      Container(
+                        decoration: BoxDecoration(
+                            borderRadius: const BorderRadius.only(
+                                topRight: Radius.circular(50.0),
+                                bottomRight: Radius.circular(10.0)),
+                            gradient: LinearGradient(colors: [
+                              Theme.of(context)
+                                  .colorScheme
+                                  .lightGray
+                                  .withOpacity(0.1),
+                              Theme.of(context).colorScheme.lightGray
+                            ])),
+                        height: 100,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            Expanded(
+                              child: Center(
+                                child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        pending.value != null
+                                            ? formatNumber
+                                                .formatMoney(pending.value!)
+                                            : '-',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .headlineLarge
+                                            ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .yellow,
+                                                fontWeight: FontWeight.w600),
+                                      ),
+                                      Text(
+                                        'lbl_Pending'.tr,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .light),
+                                      )
+                                    ]),
                               ),
                             ),
-                          ),
-                          Expanded(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                  gradient: LinearGradient(colors: [
-                                Theme.of(context).colorScheme.dark,
-                                Theme.of(context).colorScheme.darkGray
-                              ])),
-                              height: 100,
-                              child: Card(
-                                color: Theme.of(context).colorScheme.dark,
-                                child: Center(
-                                  child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          paidThisMonth.value != null
-                                              ? formatNumber.formatMoney(
-                                                  paidThisMonth.value!)
-                                              : '-',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .headlineLarge
-                                              ?.copyWith(
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .green,
-                                                  fontWeight: FontWeight.w600),
-                                        ),
-                                        Text(
-                                          'lbl_PaidThisMonth'.tr,
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .light),
-                                        )
-                                      ]),
-                                ),
+                            Expanded(
+                              child: Center(
+                                child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        paidThisMonth.value != null
+                                            ? formatNumber.formatMoney(
+                                                paidThisMonth.value!)
+                                            : '-',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .headlineLarge
+                                            ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .green,
+                                                fontWeight: FontWeight.w600),
+                                      ),
+                                      Text(
+                                        'lbl_PaidThisMonth'.tr,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .light),
+                                      )
+                                    ]),
                               ),
-                            ),
-                          )
-                        ],
+                            )
+                          ],
+                        ),
                       ),
                       const SizedBox(
                         height: 20,

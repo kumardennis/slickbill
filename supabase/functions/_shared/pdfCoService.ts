@@ -52,4 +52,42 @@ export const PdfCoService = {
 
     return parsedDataToJSON;
   },
+
+  uploadFileTemporary: async (fileBytes: Uint8Array, privateUserId: number) => {
+    const getPresignedUrlToUploadToResponse = await fetch(
+      `${baseUrl}/file/upload/get-presigned-url?name=temporary_file_slickbills_${privateUserId}_${Date.now()}`,
+      {
+        method: "GET",
+        headers: {
+          "x-api-key": `Bearer ${Deno.env.get("PDF_CO_KEY")}`,
+          "Content-Type": "application/pdf",
+        },
+      }
+    );
+
+    const getPresignedUrlToUploadToJSON =
+      await getPresignedUrlToUploadToResponse.json();
+
+    const uploadFileResponse = await fetch(
+      `${getPresignedUrlToUploadToJSON.presignedUrl}`,
+      {
+        method: "PUT",
+        headers: {
+          "x-api-key": `Bearer ${Deno.env.get("PDF_CO_KEY")}`,
+          "Content-Type": "application/octet-stream",
+        },
+        body: JSON.stringify({
+          "data-binary": fileBytes,
+        }),
+      }
+    );
+
+    const responseData = await uploadFileResponse.json();
+
+    const tempraryUrl = responseData.url;
+
+    console.log("TEMPURI: ", responseData);
+
+    return tempraryUrl;
+  },
 };

@@ -79,7 +79,7 @@ export const OpenAIService = {
 
   getCategoryOfTicket: async (text: string) => {
     const systemPropmpt =
-      'The following are categories for ticket classification: Boarding Passes, Movie/Theater Tickets, Concert/Event Tickets, Transportation Tickets, Festival Passes, Conference Passes/Badges, Museum or Park Entry Passes, Sports Event Tickets, Parking Passes. The assistant will categorize the text extracted from a PDF ticket into one of these categories.\r\nGive output in JSON format :\r\n\r\n{\r\n"category": string,\r\n"dateOfActivity": DD-MM-YYYY,\r\n"Description": string (max 10 words)\r\n"Title": string (max 4 words)\r\n}';
+      'The following are categories for ticket classification: Boarding Passes, Movie/Theater, Concert/Event, Transportation, Festival Passes, Conference Passes/Badges, Museum/Park Passes, Sports Event, Parking Passes. The assistant will categorize the text extracted from a PDF ticket into one of these categories.\r\nGive output in JSON format :\r\n\r\n{\r\n"category": string,\r\n"dateOfActivity": YYYY-MM-DD,\r\n"Description": string (max 10 words)\r\n"Title": string (max 4 words)\r\n}';
     const userPrompt = `I have text extracted from a PDF ticket and I need to categorize it into one of the predefined categories. The text is: ${text}`;
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {

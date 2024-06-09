@@ -4,14 +4,10 @@ import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_send/models/receiver_user_model.dart';
 
-class InputFieldAmount extends HookWidget {
-  final ReceiverUserModel receiverUser;
+class BigInputAmount extends HookWidget {
   final Function changeReceiverAmount;
 
-  const InputFieldAmount(
-      {super.key,
-      required this.receiverUser,
-      required this.changeReceiverAmount});
+  const BigInputAmount({super.key, required this.changeReceiverAmount});
 
   @override
   Widget build(BuildContext context) {
@@ -33,11 +29,12 @@ class InputFieldAmount extends HookWidget {
         keyboardType: TextInputType.number,
         controller: amountController,
         onChanged: (value) {
-          changeReceiverAmount(receiverUser.id, double.parse(value));
+          changeReceiverAmount(double.parse(value));
         },
         decoration: InputDecoration(
           labelText: 'lbl_Amount'.tr,
-          labelStyle: TextStyle(color: Theme.of(context).colorScheme.gray),
+          labelStyle: TextStyle(
+              color: Theme.of(context).colorScheme.gray, fontSize: 32),
           hintStyle: TextStyle(color: Theme.of(context).colorScheme.gray),
           enabledBorder: const UnderlineInputBorder(
             borderSide: BorderSide(
@@ -60,9 +57,10 @@ class InputFieldAmount extends HookWidget {
             ),
           ),
         ),
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.light,
-            ),
+        style: Theme.of(context)
+            .textTheme
+            .bodyMedium
+            ?.copyWith(color: Theme.of(context).colorScheme.dark, fontSize: 48),
         textAlign: TextAlign.center,
       ),
     );

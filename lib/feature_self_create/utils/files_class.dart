@@ -19,64 +19,6 @@ class FilesClass {
 
   var unescape = HtmlUnescape();
 
-  Future<ExtractedInvoiceDataModel?> uploadFileToExtractData(fileBytes,
-      [incomingText]) async {
-    // html.FormData formData = html.FormData();
-
-    // formData.append('file', fileBytes);
-
-    try {
-      PdfDocument document = PdfDocument(inputBytes: fileBytes);
-//Extract the text from page 1.
-      String text = incomingText ??
-          PdfTextExtractor(document).extractText(startPageIndex: 0);
-
-      //Create a new instance of the PdfTextExtractor.
-      PdfTextExtractor extractor = PdfTextExtractor(document);
-
-//Extract all the text from a particular page.
-      List<TextLine> result = extractor.extractTextLines(startPageIndex: 0);
-
-//Dispose the document.
-      document.dispose();
-
-      List<String> joinedTextList = [];
-
-      result.forEach(
-        (element) {
-          joinedTextList.add(element.text);
-        },
-      );
-
-      String joinedText = (joinedTextList.join('\n'));
-
-      final response = await Supabase.instance.client.functions
-          .invoke('invoices/get-invoice-custom-fields', headers: {
-        'Authorization': 'Bearer ${userController.user.value.accessToken}'
-      }, body: {
-        "privateUserId": userController.user.value.privateUserId,
-        "fileText": joinedText
-      });
-
-      final data = await response.data;
-
-      if (data['isRequestSuccessfull'] == true) {
-        Map<String, dynamic> extractData =
-            (data['data'] as Map<String, dynamic>);
-        ExtractedInvoiceDataModel extractedData =
-            ExtractedInvoiceDataModel.fromJson(extractData);
-
-        return extractedData;
-      } else {
-        Get.snackbar('Oops..', data['error'].toString());
-        return null;
-      }
-    } catch (err) {
-      print(err);
-      return null;
-    }
-  }
-
   Future<ExtractedInvoiceDataModel?> uploadTextToExtractData(
       incomingText) async {
     try {

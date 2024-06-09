@@ -1,9 +1,11 @@
 import 'package:get/get.dart';
+import 'package:slickbill/feature_nearby_transaction/locales/en_locale.dart';
 
 import '../feature_Auth/locales/en_locale.dart';
 import '../feature_Dashboard/locales/en_locale.dart';
 import '../feature_self_create/locales/en_locale.dart';
 import '../feature_send/locales/en_locale.dart';
+import '../feature_tickets/locales/en_locale.dart';
 
 class AppTranslations extends Translations {
   @override
@@ -21,7 +23,9 @@ class AppTranslations extends Translations {
           ...authLocales_EN,
           ...dashboardLocales_EN,
           ...selfCreateLocales_EN,
-          ...sendLocales_EN
+          ...sendLocales_EN,
+          ...ticketLocales_EN,
+          ...nearbyTransactionLocales_EN
         },
         'et_EE': {
           'hello': 'Hallo Welt',

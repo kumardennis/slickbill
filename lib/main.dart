@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -13,13 +15,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feature_auth/screens/sign_in.dart';
 
 void main() async {
-  final localDBUrl = 'http://127.0.0.1:44321';
+  final localDBUrl = 'http://192.168.1.3:44321';
   final remoteDDUrl = 'https://fwujdruuvspdoqflttrl.supabase.co';
 
   await dotenv.load();
   await Supabase.initialize(
       url: localDBUrl, anonKey: dotenv.env['SUPABASE_LOCAL_ANON_KEY'] ?? '');
   // Get.put(NavigationController());
+
   runApp(MyApp(
     home: SignIn(),
   ));
@@ -40,7 +43,7 @@ class MyApp extends StatelessWidget {
       locale: const Locale('en', 'US'),
       title: 'Flutter Demo',
       theme: ThemeData(
-          scaffoldBackgroundColor: Theme.of(context).colorScheme.dark,
+          scaffoldBackgroundColor: Theme.of(context).colorScheme.light,
           primarySwatch: Colors.blue,
           textTheme: GoogleFonts.robotoTextTheme(TextTheme(
               displayLarge: TextStyle(

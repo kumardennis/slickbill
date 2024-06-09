@@ -14,21 +14,20 @@ class CustomAppbar extends HookWidget implements PreferredSizeWidget {
       {super.key, required this.title, required this.appbarIcon, this.tabBar});
 
   @override
-  Size get preferredSize => Size.fromHeight(140.0);
+  Size get preferredSize => const Size.fromHeight(120.0);
 
   @override
   Widget build(BuildContext context) {
     return (AppBar(
       bottom: tabBar,
-      backgroundColor: Theme.of(context).colorScheme.dark,
+      backgroundColor: Theme.of(context).colorScheme.light,
       elevation: 10,
       title: Center(
         child: Text(
           '$title'.tr,
-          style: Theme.of(context)
-              .textTheme
-              .displayMedium
-              ?.copyWith(fontWeight: FontWeight.bold),
+          style: Theme.of(context).textTheme.displayMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: Theme.of(context).colorScheme.darkGray),
         ),
       ),
     ));

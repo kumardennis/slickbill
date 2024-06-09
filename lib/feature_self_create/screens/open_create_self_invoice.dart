@@ -15,6 +15,7 @@ import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/constants.dart';
 import 'package:slickbill/feature_self_create/utils/create_invoices_class.dart';
 import 'package:slickbill/feature_self_create/utils/files_class.dart';
+import 'package:slickbill/shared_utils/shared_files_class.dart';
 import 'package:slickbill/shared_widgets/custom_appbar.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:flutter/foundation.dart';
@@ -31,6 +32,7 @@ class OpenAndCreateSelfInvoice extends HookWidget {
         Get.find(); // Initialize controller
 
     FilesClass filesClass = FilesClass();
+    SharedFilesClass sharedFilesClass = SharedFilesClass();
     CreateInvoicesClass createInvoicesClass = CreateInvoicesClass();
 
     var pdfPath = useState<String?>(null);
@@ -59,27 +61,21 @@ class OpenAndCreateSelfInvoice extends HookWidget {
 
     Future getFileData(Uint8List? fileBytes, [String? text]) async {
       isLoading.value = true;
-      var data = await filesClass.uploadFileToExtractData(fileBytes, text);
+      var convertedText =
+          await sharedFilesClass.convertPdfToText(fileBytes, text);
+      var data = await filesClass.uploadTextToExtractData(convertedText);
 
       isLoading.value = false;
 
       if (data != null) {
         originalInvoiceNoController.text = data.invoiceNo;
-
         senderNameController.text = data.merchantName;
-
         ibanController.text = data.iban.first.iban;
-
         descriptionController.text = data.description;
-
         amountController.text = data.totalAmount.toString();
-
         dueDateController.text = data.dueDate;
-
         referenceNumberController.text = data.referenceNumber;
-
         extractedData.value = data;
-
         category.value = data.category;
       }
       analyzeTextController.text = '';
@@ -302,7 +298,10 @@ class OpenAndCreateSelfInvoice extends HookWidget {
                     ),
                   ),
                 ),
-                Text('OR'),
+                Text(
+                  'OR',
+                  style: TextStyle(color: Theme.of(context).colorScheme.gray),
+                ),
                 Padding(
                   padding: const EdgeInsets.all(10.0),
                   child: OutlinedButton(
@@ -331,7 +330,13 @@ class OpenAndCreateSelfInvoice extends HookWidget {
                     ),
                   ),
                 ),
-                Text('OR'),
+                Text(
+                  'OR',
+                  style: TextStyle(color: Theme.of(context).colorScheme.gray),
+                ),
+                const SizedBox(
+                  height: 10,
+                ),
                 Padding(
                   padding: const EdgeInsets.all(10.0),
                   child: Column(
@@ -343,13 +348,15 @@ class OpenAndCreateSelfInvoice extends HookWidget {
                               hintText: 'lbl_PasteText'.tr,
                               hintStyle: TextStyle(
                                   color: Theme.of(context).colorScheme.gray),
-                              fillColor:
-                                  Theme.of(context).colorScheme.darkGray),
+                              fillColor: Theme.of(context).colorScheme.light),
                           controller: analyzeTextController,
                           keyboardType: TextInputType.multiline,
                           minLines: 3,
                           maxLines: 3,
                         ),
+                      ),
+                      const SizedBox(
+                        height: 10,
                       ),
                       OutlinedButton(
                         style: OutlinedButton.styleFrom(

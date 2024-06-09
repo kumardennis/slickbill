@@ -43,19 +43,23 @@ class InvoiceCard extends HookWidget {
       decoration: BoxDecoration(
           gradient: LinearGradient(
               colors: [
-                Theme.of(context).colorScheme.darkGray.withOpacity(0.1),
-                Theme.of(context).colorScheme.darkGray,
+                Theme.of(context).colorScheme.lighterBlue,
+                Theme.of(context).colorScheme.blue,
+                Theme.of(context).colorScheme.darkerBlue,
               ],
               stops: const [
-                0.1,
-                0.4,
+                0.05,
+                0.7,
+                0.9
               ],
               transform: GradientRotation(3.14 / 4),
               tileMode: TileMode.clamp,
               begin: Alignment.topLeft,
               end: Alignment.bottomRight),
           color: Theme.of(context).colorScheme.darkGray,
-          borderRadius: BorderRadius.all(Radius.circular(10))),
+          borderRadius: const BorderRadius.only(
+              topRight: Radius.circular(50.0),
+              bottomRight: Radius.circular(10.0))),
       width: MediaQuery.of(context).size.width,
       padding: const EdgeInsets.all(15.0),
       child: Column(
@@ -148,7 +152,9 @@ class InvoiceCard extends HookWidget {
                           fontWeight: FontWeight.w600,
                           color: paidOnDate != null
                               ? Theme.of(context).colorScheme.green
-                              : Theme.of(context).colorScheme.yellow)),
+                              : dateIsPassed
+                                  ? Theme.of(context).colorScheme.red
+                                  : Theme.of(context).colorScheme.yellow)),
                   SizedBox(
                     width: MediaQuery.of(context).size.width / 3,
                     child: Align(

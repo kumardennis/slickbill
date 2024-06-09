@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
+import 'package:slickbill/feature_nearby_transaction/screens/send_nfc_invoice.dart';
 import 'package:slickbill/feature_tickets/screens/tickets_folder_list.dart';
 
 import '../../feature_dashboard/screens/all_bills.dart';
@@ -19,7 +20,7 @@ class HomeScreen extends StatelessWidget {
     AllBills(),
     const SendInvoice(),
     const OpenAndCreateSelfInvoice(),
-    const TicketsFolderList(),
+    const SendNfcInvoice(),
     const AllTrashBills()
   ];
 
@@ -33,7 +34,7 @@ class HomeScreen extends StatelessWidget {
           type: BottomNavigationBarType.fixed,
           currentIndex: navigationController.currentIndex.value,
           onTap: (index) => navigationController.changeIndex(index),
-          backgroundColor: Theme.of(context).colorScheme.dark,
+          backgroundColor: Theme.of(context).colorScheme.blue,
           selectedItemColor: Theme.of(context).colorScheme.light,
           unselectedItemColor: Theme.of(context).colorScheme.gray,
           items: const [
@@ -48,7 +49,7 @@ class HomeScreen extends StatelessWidget {
               label: '',
             ),
             BottomNavigationBarItem(
-              icon: FaIcon(FontAwesomeIcons.ticket),
+              icon: FaIcon(FontAwesomeIcons.nfcSymbol),
               label: '',
             ),
             BottomNavigationBarItem(
