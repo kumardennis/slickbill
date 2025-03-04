@@ -12,8 +12,8 @@ import 'package:slickbill/shared_widgets/custom_appbar.dart';
 import 'package:flutter_nfc_hce/flutter_nfc_hce.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-class MakeNfcAvailable extends HookWidget {
-  const MakeNfcAvailable({super.key});
+class ReadQrInvoice extends HookWidget {
+  const ReadQrInvoice({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -112,10 +112,7 @@ class MakeNfcAvailable extends HookWidget {
                     repeat: 0,
                   ),
                   Center(
-                    child: FaIcon(
-                      FontAwesomeIcons.nfcSymbol,
-                      color: Theme.of(context).colorScheme.light,
-                    ),
+                    child: Text(""),
                   ),
                 ],
               ),

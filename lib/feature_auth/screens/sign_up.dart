@@ -65,27 +65,21 @@ class SignUp extends HookWidget {
                   children: [
                     Container(
                       width: double.infinity,
-                      height: 180,
+                      height: 300,
                       decoration: const BoxDecoration(
                         color: Color.fromARGB(0, 233, 20, 20),
                       ),
                       child: Align(
                         alignment: const AlignmentDirectional(0, 0),
-                        child: Stack(
-                          children: [
-                            Image.asset('media/temporary_logo.png'),
-                            Positioned(
-                              child:
-                                  Image.asset('media/temporary_logo_text.png'),
-                              top: 120.0,
-                            ),
-                          ],
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.all(Radius.circular(50)),
+                          child: Image.asset('media/logo blue.webp'),
                         ),
                       ),
                     ),
                     Container(
                       width: double.infinity,
-                      height: 311,
+                      height: 511,
                       decoration: const BoxDecoration(
                         color: Color(0x00FFFFFF),
                       ),

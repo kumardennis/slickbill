@@ -231,7 +231,9 @@ class SentInvoiceSheet extends HookWidget {
                   children: [
                     SizedBox(
                       width: MediaQuery.of(context).size.width - 150,
-                      child: Text(invoice.senderName,
+                      child: Text(
+                          invoice.senders?.privateUsers?.bankAccountName ??
+                              invoice.senderName,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context)
                               .textTheme

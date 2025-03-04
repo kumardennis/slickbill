@@ -6,6 +6,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
+import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_dashboard/screens/received_bills.dart';
 import 'package:slickbill/feature_dashboard/screens/sent_bills.dart';
 import 'package:slickbill/feature_navigation/getx_controllers/navigation_controller.dart';
@@ -18,6 +19,7 @@ class AllBills extends HookWidget {
   Widget build(BuildContext context) {
     final tabController = useTabController(initialLength: 2);
     NavigationController navigationController = Get.find();
+    UserController userController = Get.find();
 
     IntentController intentController = Get.put(IntentController());
 
@@ -64,8 +66,10 @@ class AllBills extends HookWidget {
 
     return (Scaffold(
       appBar: CustomAppbar(
-        title: 'hd_YourSlickBills'.tr,
+        title:
+            '${'hd_YourSlickBills'.tr} @${userController.user.value.username}',
         appbarIcon: null,
+        showSettings: true,
         tabBar: TabBar(
             indicatorColor: Theme.of(context).colorScheme.blue,
             onTap: (value) {

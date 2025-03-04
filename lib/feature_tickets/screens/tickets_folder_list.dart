@@ -5,10 +5,8 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:slickbill/feature_tickets/models/ticket_model.dart';
 import 'package:slickbill/feature_tickets/utils/tickets_crud_ops_class.dart';
-import 'package:slickbill/feature_tickets/widgets/custom_ticket.dart';
 import 'package:slickbill/feature_tickets/widgets/custom_timeline_tile.dart';
 import 'package:slickbill/shared_widgets/custom_appbar.dart';
-import 'package:timeline_tile/timeline_tile.dart';
 
 import '../../feature_auth/getx_controllers/user_controller.dart';
 

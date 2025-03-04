@@ -1,15 +1,8 @@
-import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:get/get.dart';
 import 'package:html_unescape/html_unescape.dart';
-import 'package:http_parser/http_parser.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
-import 'package:syncfusion_flutter_pdf/pdf.dart';
-import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
 
 import '../../feature_auth/getx_controllers/user_controller.dart';
 import '../models/extracted_invoice_data_model.dart';

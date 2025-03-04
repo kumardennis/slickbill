@@ -29,7 +29,9 @@ class BigInputAmount extends HookWidget {
         keyboardType: TextInputType.number,
         controller: amountController,
         onChanged: (value) {
-          changeReceiverAmount(double.parse(value));
+          if (value.isNotEmpty) {
+            changeReceiverAmount(double.parse(value));
+          }
         },
         decoration: InputDecoration(
           labelText: 'lbl_Amount'.tr,

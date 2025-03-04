@@ -45,10 +45,14 @@ class InvoiceCard extends HookWidget {
               colors: [
                 Theme.of(context).colorScheme.lighterBlue,
                 Theme.of(context).colorScheme.blue,
-                Theme.of(context).colorScheme.darkerBlue,
+                Theme.of(context).colorScheme.darkGreen,
+                Theme.of(context).colorScheme.blue,
+                Theme.of(context).colorScheme.turqouise,
               ],
               stops: const [
-                0.05,
+                0.15,
+                0.4,
+                0.5,
                 0.7,
                 0.9
               ],

@@ -2,15 +2,6 @@
 // https://deno.land/manual/getting_started/setup_your_environment
 // This enables autocomplete, go to definition, etc.
 import {
-  ConnInfo,
-  Handler,
-  serve,
-} from "https://deno.land/std@0.168.0/http/server.ts";
-import {
-  AuthError,
-  User,
-} from "https://esm.sh/v96/@supabase/gotrue-js@2.16.0/dist/module/index.d.ts";
-import {
   confirmedRequiredParams,
   errorResponseData,
 } from "../../_shared/confirmedRequiredParams.ts";
@@ -21,22 +12,18 @@ export const handler = async (req: Request) => {
   const supabase = createSupabase(req);
 
   try {
-    const { query } = await req
-      .json();
+    const { query } = await req.json();
 
-    if (
-      !confirmedRequiredParams([
-        query,
-      ])
-    ) {
+    if (!confirmedRequiredParams([query])) {
       return new Response(JSON.stringify(errorResponseData), {
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    const { data, error } = await supabase.from("private_users").select(
-      "id, firstName, lastName,  users!inner(username, id)",
-    ).eq("users.username", query);
+    const { data, error } = await supabase
+      .from("private_users")
+      .select("id, firstName, lastName,  users!inner(username, id)")
+      .eq("users.username", query);
 
     const responseData = {
       isRequestSuccessfull: error === null,
@@ -48,6 +35,7 @@ export const handler = async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
+    console.log(err);
     const responseData = {
       isRequestSuccessful: false,
       data: null,

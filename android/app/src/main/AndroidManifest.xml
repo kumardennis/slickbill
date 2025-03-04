@@ -4,6 +4,7 @@
 <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" /> 
 
 <uses-permission android:name="android.permission.NFC" />
+<uses-permission android:name="android.permission.CAMERA" />
 <uses-feature android:name="android.hardware.nfc" android:required="false" />
 <uses-feature android:name="android.hardware.nfc.hce" android:required="false" />
     <application
@@ -40,6 +41,18 @@
     <!-- <data android:pathPattern=".*\\.pdf" /> -->
     <data android:mimeType="application/pdf" />
 </intent-filter>
+
+<intent-filter>
+    <action android:name="android.nfc.action.NDEF_DISCOVERED"/>
+    <action android:name="android.nfc.action.TECH_DISCOVERED"/>
+    <action android:name="android.nfc.action.TAG_DISCOVERED"/>
+    <category android:name="android.intent.category.DEFAULT"/>
+</intent-filter>
+
+<meta-data
+    android:name="android.nfc.action.TECH_DISCOVERED"
+    android:resource="@xml/nfc_tech_filter" />
+
 
         </activity>
 

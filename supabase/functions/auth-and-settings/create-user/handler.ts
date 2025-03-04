@@ -2,9 +2,7 @@
 // https://deno.land/manual/getting_started/setup_your_environment
 // This enables autocomplete, go to definition, etc.
 
-import {
-  User,
-} from "https://esm.sh/v96/@supabase/gotrue-js@2.16.0/dist/module/index.d.ts";
+import { User } from "https://esm.sh/v96/@supabase/gotrue-js@2.16.0/dist/module/index.d.ts";
 import {
   confirmedRequiredParams,
   errorResponseData,
@@ -17,9 +15,9 @@ interface CreateUserStudentResponseModel {
   error: any;
   data:
     | {
-      createdStudentUserData: User | null;
-      createdStudentRecordData: any[] | null;
-    }
+        createdStudentUserData: User | null;
+        createdStudentRecordData: any[] | null;
+      }
     | { user: User | null }
     | null;
 }
@@ -39,8 +37,7 @@ export const handler = async (req: Request) => {
       isPrivateUser,
       iban,
       accountHolder,
-    } = await req
-      .json();
+    } = await req.json();
 
     if (
       !confirmedRequiredParams([
@@ -60,16 +57,16 @@ export const handler = async (req: Request) => {
     /* Check if username is available */
     const { data: usernameData, error: usernameError } = await supabase
       .from("users")
-      .select().match({ username });
+      .select()
+      .match({ username: "kumardennis" });
 
-    if (
-      usernameData === undefined || usernameData?.length === undefined ||
-      usernameData?.length > 0
-    ) {
+    console.log("ASSSS", usernameData, usernameError);
+
+    if (usernameData?.length > 0 || usernameError !== null) {
       const responseData: CreateUserStudentResponseModel = {
-        isRequestSuccessfull: false,
-        data: null,
-        error: "username already taken :(",
+        isRequestSuccessfull: !Boolean(usernameError),
+        data: Boolean(usernameError) ? null : usernameData,
+        error: usernameError ?? "username already taken :(",
       };
 
       return new Response(JSON.stringify(responseData), {
@@ -95,12 +92,13 @@ export const handler = async (req: Request) => {
     }
 
     const { data: userData, error: userError } = await supabase
-      .from("users").insert({
+      .from("users")
+      .insert({
         username,
         email,
         authUserId: data.user?.id,
       })
-      .select();
+      .select("*");
 
     if (userData === null) {
       const responseData: CreateUserStudentResponseModel = {
@@ -116,7 +114,8 @@ export const handler = async (req: Request) => {
 
     if (isPrivateUser) {
       const { data: privateUserData, error: privateUserError } = await supabase
-        .from("private_users").insert({
+        .from("private_users")
+        .insert({
           firstName,
           lastName,
           userId: userData[0].id,
@@ -137,7 +136,8 @@ export const handler = async (req: Request) => {
     } else {
       const { data: businessUserData, error: businessUserError } =
         await supabase
-          .from("business_users").insert({
+          .from("business_users")
+          .insert({
             fullName,
             publicName,
             userId: userData[0].id,

@@ -302,38 +302,6 @@ class OpenAndCreateSelfInvoice extends HookWidget {
                   'OR',
                   style: TextStyle(color: Theme.of(context).colorScheme.gray),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(10.0),
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                        padding: EdgeInsets.all(20),
-                        side: BorderSide(
-                            color: Theme.of(context).colorScheme.blue)),
-                    onPressed: pickImage,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'btn_UploadReceipt'.tr,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyLarge
-                              ?.copyWith(
-                                  color: Theme.of(context).colorScheme.blue),
-                        ),
-                        const SizedBox(
-                          width: 10,
-                        ),
-                        FaIcon(FontAwesomeIcons.upload,
-                            color: Theme.of(context).colorScheme.blue)
-                      ],
-                    ),
-                  ),
-                ),
-                Text(
-                  'OR',
-                  style: TextStyle(color: Theme.of(context).colorScheme.gray),
-                ),
                 const SizedBox(
                   height: 10,
                 ),

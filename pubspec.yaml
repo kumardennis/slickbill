@@ -9,7 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  google_fonts: ^4.0.4
+  google_fonts: ^5.1.0
   intl: ^0.18.1
   badges: ^3.1.1
   json_annotation: ^4.7.0
@@ -22,7 +22,7 @@ dependencies:
   flutter_local_notifications: ^15.1.0+1
   syncfusion_flutter_datepicker: ^23.1.38
   liquid_pull_to_refresh: ^3.0.1
-  supabase_flutter: ^1.10.19
+  supabase_flutter: ^2.5.1
   file_picker: ^5.5.0
   http: ^1.1.0
   http_parser: ^4.0.2
@@ -33,12 +33,14 @@ dependencies:
   flutter_typeahead: ^4.8.0
   image_picker: ^1.0.4
   image_picker_for_web: ^3.0.1
-  timeline_tile: ^2.0.0
-  ticket_widget: ^1.0.2
+  # timeline_tile: ^2.0.0
+  # ticket_widget: ^1.0.2
   nfc_manager: ^3.4.0
   flutter_nfc_hce: ^0.1.8
   pulsator: ^1.0.0
-  flutter_nearby_connections: ^1.1.2
+  # flutter_nearby_connections: ^1.1.2
+  qr_flutter: ^4.1.0
+  flutter_pro_barcode_scanner: ^0.0.1
 
 dev_dependencies:
   flutter_test:
@@ -52,3 +54,4 @@ flutter:
     - .env
     - media/temporary_logo.png
     - media/temporary_logo_text.png
+    - media/logo blue.webp

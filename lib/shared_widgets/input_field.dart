@@ -8,12 +8,14 @@ class InputField extends HookWidget {
 
   final String label;
   final bool obscure;
+  final bool? isTextDark;
 
   const InputField(
       {super.key,
       required this.controller,
       required this.label,
-      required this.obscure});
+      required this.obscure,
+      this.isTextDark});
 
   @override
   Widget build(BuildContext context) {
@@ -49,7 +51,9 @@ class InputField extends HookWidget {
           ),
         ),
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.light,
+              color: isTextDark != null && isTextDark!
+                  ? Theme.of(context).colorScheme.dark
+                  : Theme.of(context).colorScheme.light,
             ),
         textAlign: TextAlign.start,
       ),

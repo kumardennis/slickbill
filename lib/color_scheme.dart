@@ -7,7 +7,8 @@ extension CustomColorScheme on ColorScheme {
   Color get lighterBlue => const Color(0xFF0074B9);
   Color get darkerBlue => const Color(0xFF003453);
   Color get lightGreen => const Color(0xFFA1CDAF);
-  Color get turqouise => const Color(0xFF123138);
+  Color get darkGreen => Color.fromARGB(255, 46, 19, 78);
+  Color get turqouise => const Color.fromARGB(255, 1, 56, 73);
   Color get green => const Color(0xFF399E5A);
   Color get red => const Color(0xFFDB2B39);
   Color get light => const Color(0xFFF3F9FA);
@@ -24,7 +25,8 @@ Map customColorScheme = {
   'lighterBlue': const Color(0xFF0074B9),
   'darkerBlue': const Color(0xFF003453),
   'lightGreen': const Color(0xFFA1CDAF),
-  'turqouise': const Color(0xFF123138),
+  'darkGreen': Color.fromARGB(255, 46, 19, 78),
+  'turqouise': Color.fromARGB(255, 1, 56, 73),
   'green': const Color(0xFF399E5A),
   'red': const Color(0xFFDB2B39),
   'light': const Color(0xFFF3F9FA),

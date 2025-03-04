@@ -4,14 +4,20 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
+import 'package:slickbill/feature_dashboard/screens/profile.dart';
 
 class CustomAppbar extends HookWidget implements PreferredSizeWidget {
   final String title;
   final Widget? appbarIcon;
   final PreferredSizeWidget? tabBar;
+  final bool showSettings;
 
   const CustomAppbar(
-      {super.key, required this.title, required this.appbarIcon, this.tabBar});
+      {super.key,
+      required this.title,
+      required this.appbarIcon,
+      this.tabBar,
+      this.showSettings = false});
 
   @override
   Size get preferredSize => const Size.fromHeight(120.0);
@@ -19,6 +25,17 @@ class CustomAppbar extends HookWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     return (AppBar(
+      automaticallyImplyLeading: true,
+      leading: showSettings
+          ? GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const Profile()),
+                );
+              },
+              child: Center(child: FaIcon(FontAwesomeIcons.gear)))
+          : null,
       bottom: tabBar,
       backgroundColor: Theme.of(context).colorScheme.light,
       elevation: 10,

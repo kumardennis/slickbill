@@ -137,7 +137,7 @@ class SupabaseAuthManger {
     try {
       final response = await Supabase.instance.client.functions
           .invoke('auth-and-settings/create-user', headers: {
-        'Authorization': 'Bearer ${dotenv.env['SUPABASE_ANON_KEY']}'
+        'Authorization': 'Bearer ${dotenv.env['SUPABASE_ANON_LOCAL_KEY']}'
       }, body: {
         "email": email,
         "password": password,
