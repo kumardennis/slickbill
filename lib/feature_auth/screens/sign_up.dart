@@ -137,7 +137,7 @@ class SignUp extends HookWidget {
                       child: ElevatedButton(
                         onPressed: signIn,
                         style: ElevatedButton.styleFrom(
-                            primary: Theme.of(context).colorScheme.blue,
+                            backgroundColor: Theme.of(context).colorScheme.blue,
                             elevation: 5,
                             fixedSize: const Size(100, 70)),
                         child: Text(

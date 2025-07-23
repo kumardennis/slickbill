@@ -23,7 +23,7 @@ void main() async {
 
   await dotenv.load();
   await Supabase.initialize(
-      url: localDBUrl, anonKey: dotenv.env['SUPABASE_ANON_LOCAL_KEY'] ?? '');
+      url: remoteDDUrl, anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '');
   // Get.put(NavigationController());
   runApp(MyApp(
     home: SignIn(),
