@@ -5,6 +5,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:slickbill/color_scheme.dart';
@@ -12,7 +13,6 @@ import 'package:slickbill/constants.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_navigation/getx_controllers/navigation_controller.dart';
 import 'package:slickbill/feature_nearby_transaction/screens/make_nfc_available.dart';
-import 'package:flutter_pro_barcode_scanner/flutter_pro_barcode_scanner.dart';
 import 'package:slickbill/feature_nearby_transaction/widgets/big_input_amount.dart';
 import 'package:slickbill/feature_self_create/widgets/input_field.dart';
 import 'package:slickbill/feature_send/models/users_by_username_model.dart';
@@ -41,6 +41,7 @@ class SendNfcInvoice extends HookWidget {
     var category = useState<String>(Constants().categories.last);
 
     var originalInvoiceNoController = useTextEditingController();
+    var qrCodeReadValue = useState<String>('');
 
     useEffect(() {
       if (dueDateController.text == '') {
@@ -132,32 +133,71 @@ class SendNfcInvoice extends HookWidget {
       }
     }
 
-    // useEffect(() {
-    //   return () => NfcManager.instance.stopSession();
-    // }, []);
+    String? _handleBarcode(BarcodeCapture barcodes) {
+      return barcodes.barcodes.firstOrNull?.rawValue;
+    }
 
-    Future<void> scanQR() async {
-      String scannedCode = await Navigator.push(context,
-          MaterialPageRoute(builder: (context) => const ScannerScreen()));
+    Future<void> createSlickillFromQR(result) async {
+      try {
+        Map<String, dynamic> jsonObject = jsonDecode(result);
 
-      debugPrint(scannedCode);
-
-      Map<String, dynamic> jsonObject = jsonDecode(scannedCode);
-
-      print(jsonObject);
-
-      await sendInvoicesClass.createReceivePrivateQRInvoice(
+        await sendInvoicesClass.createReceivePrivateQRInvoice(
           jsonObject['description'],
           jsonObject['dueDate'],
           jsonObject['referenceNumber'],
           jsonObject['senderPrivateUserId'],
           jsonObject['amount'],
-          jsonObject['category']);
+          jsonObject['category'],
+        );
 
-      navigationController.changeIndex(0);
+        navigationController.changeIndex(0);
 
-      Get.snackbar('Slickbill Received', 'Received a slickbill from a user!');
+        Get.snackbar('Slickbill Received', 'Received a slickbill from a user!');
+      } catch (e) {
+        debugPrint('Error parsing QR code: $e');
+        Get.snackbar('Error', 'Failed to process the QR code.');
+      }
     }
+
+    void scanQR() {
+      bool isProcessing = false;
+
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => MobileScanner(
+            onDetect: (BarcodeCapture barcodes) {
+              if (!isProcessing) {
+                isProcessing = true;
+                final scannedResult = _handleBarcode(barcodes);
+                if (scannedResult != null) {
+                  qrCodeReadValue.value = scannedResult;
+
+                  Navigator.of(context).pop();
+
+                  // Show a success message
+                  Get.snackbar(
+                      'QR Code Scanned', 'Processing the slickbill...');
+
+                  Future.delayed(const Duration(milliseconds: 500), () {
+                    isProcessing = false;
+                  });
+                } else {
+                  isProcessing = false;
+                }
+              }
+            },
+          ),
+        ),
+      );
+    }
+
+    useEffect(() {
+      final result = qrCodeReadValue.value;
+
+      if (result.isNotEmpty) {
+        createSlickillFromQR(result);
+      }
+    }, [qrCodeReadValue.value]);
 
     void updateQRData() {
       qrData.value = jsonEncode({

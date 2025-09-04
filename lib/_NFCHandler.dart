@@ -23,7 +23,7 @@ class _NFCHandlerWidgetState extends State<NFCHandlerWidget> {
 
   Future<void> _handleIntent() async {
     try {
-      final String intentAction =
+      final String? intentAction =
           await platform.invokeMethod('getIntentAction');
       if (intentAction == 'android.nfc.action.NDEF_DISCOVERED' ||
           intentAction == 'android.nfc.action.TECH_DISCOVERED' ||

@@ -81,7 +81,7 @@ class SendInvoice extends HookWidget {
       navigationController.changeIndex(0);
     }
 
-    FutureOr<Iterable<UsersByUsername>> getOptions(query) async {
+    FutureOr<List<UsersByUsername>> getOptions(query) async {
       final response = await sendInvoicesClass.getUsersByUsername(query);
 
       return response != null ? response.toList() : [];
@@ -101,16 +101,20 @@ class SendInvoice extends HookWidget {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             TypeAheadField<UsersByUsername>(
-              textFieldConfiguration: TextFieldConfiguration(
-                  autofocus: false,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(color: Theme.of(context).colorScheme.dark),
-                  decoration: InputDecoration(
-                      counterStyle: Theme.of(context).textTheme.bodyMedium,
-                      labelText: 'lbl_SearchUsers'.tr,
-                      fillColor: Theme.of(context).colorScheme.gray)),
+              builder: (context, controller, focusNode) {
+                return TextField(
+                    controller: controller,
+                    focusNode: focusNode,
+                    autofocus: true,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodyMedium
+                        ?.copyWith(color: Theme.of(context).colorScheme.dark),
+                    decoration: InputDecoration(
+                        counterStyle: Theme.of(context).textTheme.bodyMedium,
+                        labelText: 'lbl_SearchUsers'.tr,
+                        fillColor: Theme.of(context).colorScheme.gray));
+              },
               suggestionsCallback: (pattern) => getOptions(pattern),
               itemBuilder: (context, UsersByUsername suggestion) {
                 return ListTile(
@@ -128,7 +132,7 @@ class SendInvoice extends HookWidget {
                           color: Theme.of(context).colorScheme.darkGray),
                     ));
               },
-              onSuggestionSelected: (suggestion) {
+              onSelected: (suggestion) {
                 receiverUserId.value = suggestion.id;
                 receiverUsers.value.add(ReceiverUserModel(
                     userId: suggestion.users.id,

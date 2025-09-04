@@ -20,9 +20,9 @@ dependencies:
   font_awesome_flutter: ^10.6.0
   persistent_bottom_nav_bar: ^5.0.2
   flutter_local_notifications: ^17.0.0
-  syncfusion_flutter_datepicker: ^23.1.38
-  syncfusion_flutter_pdf: ^23.1.38
-  syncfusion_flutter_pdfviewer: ^23.1.38
+  syncfusion_flutter_datepicker: ^30.2.7
+  syncfusion_flutter_pdf: ^30.2.7
+  syncfusion_flutter_pdfviewer: ^30.2.7
   liquid_pull_to_refresh: ^3.0.1
   supabase_flutter: ^2.5.6
   file_picker: ^8.1.0
@@ -30,14 +30,15 @@ dependencies:
   http_parser: ^4.0.2
   html_unescape: ^2.0.0
   modal_bottom_sheet: ^3.0.0
-  flutter_typeahead: ^4.8.0
-  image_picker: ^1.0.7
+  flutter_typeahead: ^5.2.0
+  image_picker: ^1.2.0
   image_picker_for_web: ^3.0.4
   nfc_manager: ^3.4.0
   flutter_nfc_hce: ^0.1.8
   pulsator: ^1.0.0
   qr_flutter: ^4.1.0
-  flutter_pro_barcode_scanner: ^0.0.1
+  path_provider: ^2.1.1
+  mobile_scanner: ^7.0.1
 
 dev_dependencies:
   flutter_test:
@@ -55,4 +56,7 @@ flutter:
 
 dependency_overrides:
   web: ^0.5.1
-  image_picker_platform_interface: ^2.10.0
+  image_picker_platform_interface: ^2.11.0
+  path_provider_android: ^2.2.1  # Add this to force newer version
+  path_provider_platform_interface: ^2.1.1 
+  url_launcher_android: ^6.3.0
