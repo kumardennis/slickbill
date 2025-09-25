@@ -49,3 +49,5 @@ app.*.map.json
 /android/app/.cxx/Debug/5x6w4y5k
 /android/app/.cxx
 /android/build/ios/XCBuildData
+/server/node_modules
+supabase/.env.local

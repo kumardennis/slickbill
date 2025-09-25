@@ -1,0 +1,42 @@
+Flow to get Authorized
+
+- oauth/authoization/links handles on client side.
+- OR oauth/decoupled to get authourization id
+- use oauth/token to get new token for further requests. 
+
+Flow to get consent
+
+- consent endpoint 
+    - provide device ip
+    - user bank username as psuID
+    - psuCorporateId (personal id code ee)
+    - X-request-id is TPP ID unique identifier
+    - DATE liek Wed, 2 Jan 2019 07:57:24 GMT
+    - RequestBody must contain 
+        { 
+  "access": {
+    "accounts": [
+      {
+        "iban": "EE479243815346847962"
+      }
+    ],
+    "balances": [
+      {
+        "iban": "EE479243815346847962"
+      }
+    ],
+    "transactions": [
+      {
+        "iban": "EE479243815346847962"
+      }
+    ]
+  },
+  "recurringIndicator": true,
+  "validUntil": "2026-03-11",
+  "frequencyPerDay": 4
+}
+
+Flow to open banking
+
+- now use accounts/balances 
+- initiate payment
