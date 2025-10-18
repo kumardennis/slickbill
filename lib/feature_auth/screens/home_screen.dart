@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
+import 'package:slickbill/feature_auth/getx_controllers/current_bank_controller.dart';
+import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
+import 'package:slickbill/feature_auth/models/user_model.dart';
 import 'package:slickbill/feature_nearby_transaction/screens/send_nfc_invoice.dart';
 import 'package:slickbill/feature_tickets/screens/tickets_folder_list.dart';
 
@@ -26,6 +29,21 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    UserController userController = Get.put(UserController());
+
+    CurrentBankController currentBankController =
+        Get.put(CurrentBankController());
+
+    var selectedBank = userController.user.value.ibans?.firstWhere(
+      (bank) => bank.iban == userController.user.value.iban,
+      orElse: () => userController.user.value.ibans!.first,
+    );
+
+    currentBankController.loadCurrentBank(BankAccount(
+      bankName: selectedBank!.bankName,
+      iban: selectedBank.iban,
+    ));
+
     return Scaffold(
       body: Obx(() =>
           _pages[navigationController.currentIndex.value]), // Current page

@@ -5,6 +5,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:loader_overlay/loader_overlay.dart';
 import 'package:slickbill/color_scheme.dart';
 
 import '../../feature_auth/utils/money_formatter.dart';
@@ -12,17 +13,22 @@ import '../models/invoice_model.dart';
 
 class ReceivedInvoiceSheet extends HookWidget {
   final InvoiceModel invoice;
+  final Function payInvoice;
   final Function updateInvoiceStatus;
   final Function updateInvoiceObsolete;
   const ReceivedInvoiceSheet(
       {super.key,
       required this.invoice,
+      required this.payInvoice,
       required this.updateInvoiceStatus,
       required this.updateInvoiceObsolete});
 
   @override
   Widget build(BuildContext context) {
     FormatNumber formatNumber = FormatNumber();
+
+    var paymentStarted = useState<bool>(false);
+    var unpayingStarted = useState<bool>(false);
 
     bool dateIsPassed =
         DateTime.now().isAfter(DateTime.parse(invoice.deadline));
@@ -372,7 +378,24 @@ class ReceivedInvoiceSheet extends HookWidget {
                       style: ElevatedButton.styleFrom(
                           backgroundColor: Theme.of(context).colorScheme.green),
                       onPressed: () async {
-                        await updateInvoiceStatus!(invoice, true);
+                        context.loaderOverlay.show(
+                            widgetBuilder: (_) => Center(
+                                    child: Text(
+                                  'inf_CreatingTokenAndStartingPayment'.tr,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyLarge
+                                      ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .light),
+                                )));
+
+                        paymentStarted.value = true;
+                        await payInvoice(invoice, true);
+                        paymentStarted.value = false;
+
+                        context.loaderOverlay.hide();
                         // await openInvoice(invoice);
                       },
                       child: Padding(
@@ -381,7 +404,9 @@ class ReceivedInvoiceSheet extends HookWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              'btn_Pay'.tr,
+                              paymentStarted.value
+                                  ? 'inf_StatusUpdating'.tr
+                                  : 'btn_Pay'.tr,
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyLarge
@@ -401,7 +426,9 @@ class ReceivedInvoiceSheet extends HookWidget {
                       style: ElevatedButton.styleFrom(
                           backgroundColor: Theme.of(context).colorScheme.red),
                       onPressed: () async {
+                        unpayingStarted.value = true;
                         await updateInvoiceStatus!(invoice, false);
+                        unpayingStarted.value = false;
                         // await openInvoice(invoice);
                       },
                       child: Padding(
@@ -410,7 +437,9 @@ class ReceivedInvoiceSheet extends HookWidget {
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Text(
-                              'btn_Unpay'.tr,
+                              unpayingStarted.value
+                                  ? 'inf_StatusUpdating'.tr
+                                  : 'btn_Unpay'.tr,
                               style: Theme.of(context)
                                   .textTheme
                                   .bodyLarge

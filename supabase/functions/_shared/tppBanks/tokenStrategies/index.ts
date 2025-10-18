@@ -1,5 +1,7 @@
 import { LHVTokenStrategy } from "./LHVToken/index.ts";
 
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export class Token {
   token: string = "";
   tokenClass = new LHVTokenStrategy();
@@ -7,15 +9,17 @@ export class Token {
   constructor() {}
 
   async getLHVToken() {
-    const result = await this.tokenClass.execute(
+    await this.tokenClass.execute(
       async () => await this.tokenClass.createAuthorization()
     );
-    // await this.tokenClass.execute(
-    //   async () => await this.tokenClass.getAuthorisationCode()
-    // );
-    // const result = await this.tokenClass.execute(
-    //   async () => await this.tokenClass.getTokenFromAuthorisationCode()
-    // );
+    await delay(5000);
+
+    await this.tokenClass.execute(
+      async () => await this.tokenClass.getAuthorisationCode()
+    );
+    const result = await this.tokenClass.execute(
+      async () => await this.tokenClass.getTokenFromAuthorisationCode()
+    );
 
     if (typeof result === "string") {
       this.token = result;

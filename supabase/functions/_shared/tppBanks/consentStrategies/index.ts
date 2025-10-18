@@ -5,12 +5,15 @@ export class Consent {
   token: string = "";
   consentId: string = "";
 
-  constructor() {}
+  constructor(token: string, bankName: "LHV" | "SEB") {
+    this.token = token;
+    this.bankName = bankName;
+  }
 
   async getLHVConsent() {
-    const consent = new LHVConsentStrategy(this.token);
+    const consent = new LHVConsentStrategy();
 
-    await consent.execute(async () => await consent.createConsent());
+    await consent.execute(async () => await consent.createConsent(this.token));
     await consent.execute(async () => await consent.getAuthorisationId());
     const result = await consent.execute(
       async () => await consent.getConsent()
@@ -29,12 +32,8 @@ export class Consent {
     }
   }
 
-  public async createConsent(
-    bankName: "LHV" | "SEB",
-    token: string
-  ): Promise<void> {
-    this.token = token;
-    if (bankName === "LHV") {
+  public async createConsent(): Promise<void> {
+    if (this.bankName === "LHV") {
       await this.getLHVConsent();
       return;
     }

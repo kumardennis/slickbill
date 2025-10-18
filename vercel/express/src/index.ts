@@ -8,7 +8,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use(express.text());
 
 // Create HTTPS agent with client certificates
 const httpsAgent = new https.Agent({
@@ -23,23 +25,44 @@ app.get("/", (req, res) => {
 // Simple proxy endpoint
 app.post("/proxy", async (req: any, res: any) => {
   try {
+    console.log("BODY:", req.body);
+
     const { url, method, headers, body } = req.body;
+
+    console.log(`➡️ Proxying request to: ${url}`);
 
     const response = await fetch(url, {
       method,
       headers,
-      body: body ? JSON.stringify(body) : undefined,
+      ...(body && {
+        body: typeof body === "string" ? body : JSON.stringify(body),
+      }),
       agent: httpsAgent,
     });
 
-    const data = await response.json();
-    console.log("✅ Response data:", data);
+    // Get response as text first
+    const responseText = await response.text();
+    console.log(
+      "📥 Response (first 500 chars):",
+      responseText.substring(0, 500)
+    );
+
+    // Try to parse as JSON, fallback to text
+    let data;
+    try {
+      data = JSON.parse(responseText);
+      console.log("✅ Parsed JSON response:", data);
+    } catch (e) {
+      console.log("⚠️ Response is not JSON, returning as text");
+      data = responseText;
+    }
 
     res
       .status(response.status)
       .set(Object.fromEntries(response.headers.entries()))
       .send(data);
   } catch (error) {
+    console.error("❌ Proxy error:", error);
     res.status(500).json({
       error:
         error instanceof Error ? error.message : "An unknown error occurred",

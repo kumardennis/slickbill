@@ -16,5 +16,11 @@ Map<String, String> dashboardLocales_EN = {
   'btn_Unpay': 'Unpay this SlickBill',
   'btn_MarkObsolete': 'Mark as trash',
   'btn_MarkNotObsolete': 'Mark as not trash',
+  'inf_TokenReceived': 'Payment token received, proceed to pay',
+  'inf_PaymentInitiated': 'Payment initiated, check SmartID app',
+  'err_PaymentFailed': 'Payment failed, please try again',
+  'inf_CreatingTokenAndStartingPayment':
+      'Creating payment token and starting payment...',
+  'inf_StatusUpdating': 'Updating status...',
   'lbl_Category': 'Category'
 };

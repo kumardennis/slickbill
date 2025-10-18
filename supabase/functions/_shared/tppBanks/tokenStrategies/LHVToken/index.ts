@@ -1,12 +1,12 @@
 // import cert from "../../../../../../certs/lhv-sandbox-cert.crt";
-import https from "node:https";
-import fs from "node:fs";
+
+import { fetchProxy } from "../../../fetchProxy.ts";
 
 const mockData = {
   psuId: "donaldduck",
   psuCorporateId: "duckinc",
   xRequestId: "123e4567-e89b-12d3-a456-426614174000",
-  tppRedirectUri: "https://example.com/redirect",
+  tppRedirectUri: "",
   tppId: "PSDEE-LHVTEST-5d8bb6",
 };
 
@@ -20,10 +20,7 @@ export class LHVTokenStrategy {
   authorisationId: string = "";
   scaStatus: string = "";
 
-  constructor() {
-    console.log("Current working directory:", Deno.cwd());
-    console.log("Current file URL:", import.meta.url);
-  }
+  constructor() {}
 
   async execute<T = void, P extends any[] = []>(
     action: (...args: P) => Promise<T>,
@@ -46,26 +43,52 @@ export class LHVTokenStrategy {
 
   async createAuthorization(): Promise<string | void> {
     const url = `${this.baseUrl}/v1/oauth/authorisations`;
-    const proxyUrl = "http://localhost:3000";
 
     try {
-      const response = await fetch(`${proxyUrl}/proxy`, {
+      const response = await fetchProxy({
+        url: url,
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "PSU-ID": mockData.psuId,
+          "X-Request-ID": mockData.xRequestId,
         },
-        body: JSON.stringify({
-          url: url,
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "PSU-ID": mockData.psuId,
-            "X-Request-ID": mockData.xRequestId,
-          },
-          body: {
-            authenticationMethodId: "SID",
-          },
-        }),
+        body: {
+          authenticationMethodId: "SID",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const responseData = await response.json();
+
+      console.log("Response data:", responseData["authorisationId"]);
+
+      this.authorisationId = responseData["authorisationId"];
+      return this.authorisationId;
+    } catch (error) {
+      console.error("Error during authorization:", error);
+    }
+  }
+
+  async getAuthorisationCode(): Promise<Record<string, string>> {
+    if (!this.authorisationId) {
+      throw new Error("No authorization ID. Call createAuthorization first.");
+    }
+
+    const url = `${this.baseUrl}/v1/oauth/authorisations/${this.authorisationId}`;
+
+    try {
+      const response = await fetchProxy({
+        url,
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          "PSU-ID": mockData.psuId,
+          "X-Request-ID": mockData.xRequestId,
+        },
       });
 
       if (!response.ok) {
@@ -75,92 +98,61 @@ export class LHVTokenStrategy {
       const responseData = await response.json();
       console.log("Response data:", responseData);
 
-      this.authorisationId = responseData["authorisationId"];
-      return this.authorisationId;
+      this.authorisationCode = responseData["authorisationCode"];
+      this.scaStatus = responseData["scaStatus"];
+
+      return {
+        authorisationCode: this.authorisationCode,
+        scaStatus: this.scaStatus,
+      };
     } catch (error) {
-      console.error("Error during authorization:", error);
+      console.error("Error fetching authorisation code:", error);
+      throw error;
     }
   }
 
-  // async getAuthorisationCode(): Promise<Record<string, string>> {
-  //   if (!this.authorisationId) {
-  //     throw new Error("No authorization ID. Call createAuthorization first.");
-  //   }
+  async getTokenFromAuthorisationCode(): Promise<string> {
+    if (!this.authorisationCode) {
+      throw new Error(
+        "No authorization code. Call getAuthorisationCode first."
+      );
+    }
 
-  //   const url = `${this.baseUrl}/v1/oauth/authorisations/${this.authorisationId}`;
+    const url = `${this.baseUrl}/oauth/token`;
 
-  //   try {
-  //     const response = await this.fetchWithClient(url, {
-  //       method: "GET",
-  //       headers: {
-  //         "Content-Type": "application/json",
-  //         "PSU-ID": mockData.psuId, // Fixed: should be PSU-ID
-  //         "X-Request-ID": mockData.xRequestId,
-  //       },
-  //     });
+    console.log("Using authorisation code:", this.authorisationCode);
 
-  //     if (!response.ok) {
-  //       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-  //     }
+    try {
+      const params = new URLSearchParams({
+        grant_type: "authorization_code",
+        code: this.authorisationCode,
+        client_id: mockData.tppId,
+      });
 
-  //     const responseData = await response.json();
-  //     console.log("Response data:", responseData);
+      const response = await fetchProxy({
+        url,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-Request-ID": mockData.xRequestId,
+        },
+        body: params.toString(),
+      });
 
-  //     this.authorisationCode = responseData["authorisationCode"];
-  //     this.scaStatus = responseData["scaStatus"];
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
-  //     return {
-  //       authorisationCode: this.authorisationCode,
-  //       scaStatus: this.scaStatus,
-  //     };
-  //   } catch (error) {
-  //     console.error("Error fetching authorisation code:", error);
-  //     throw error;
-  //   }
-  // }
+      const responseData = await response.json();
+      console.log("Response data:", responseData);
 
-  // async getTokenFromAuthorisationCode(): Promise<string> {
-  //   if (!this.authorisationCode) {
-  //     throw new Error(
-  //       "No authorization code. Call getAuthorisationCode first."
-  //     );
-  //   }
+      this.accessToken = responseData["access_token"];
+      this.token = this.accessToken;
 
-  //   const url = `${this.baseUrl}/v1/oauth/token`;
-
-  //   console.log("Using authorisation code:", this.authorisationCode);
-
-  //   try {
-  //     const params = new URLSearchParams({
-  //       grant_type: "authorization_code",
-  //       code: this.authorisationCode,
-  //       redirect_uri: mockData.tppRedirectUri,
-  //       client_id: mockData.tppId,
-  //     });
-
-  //     const response = await this.fetchWithClient(url, {
-  //       method: "POST",
-  //       headers: {
-  //         "Content-Type": "application/x-www-form-urlencoded",
-  //         "X-Request-ID": mockData.xRequestId,
-  //       },
-  //       body: params.toString(),
-  //     });
-
-  //     if (!response.ok) {
-  //       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-  //     }
-
-  //     const responseData = await response.json();
-  //     console.log("Response data:", responseData);
-
-  //     this.accessToken = responseData["access_token"];
-  //     this.token = this.accessToken;
-
-  //     return this.accessToken;
-  //   } catch (error) {
-  //     console.error("Error fetching token:", error);
-  //     throw error;
-  //   }
-  // }
+      return this.accessToken;
+    } catch (error) {
+      console.error("Error fetching token:", error);
+      throw error;
+    }
+  }
 }

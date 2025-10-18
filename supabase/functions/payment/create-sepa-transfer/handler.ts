@@ -7,26 +7,51 @@ import {
   errorResponseData,
 } from "../../_shared/confirmedRequiredParams.ts";
 import { corsHeaders } from "../../_shared/cors.ts";
-import { Token } from "../../_shared/tppBanks/tokenStrategies/index.ts";
+import { Payment } from "../../_shared/tppBanks/paymentStategies/index.ts";
 
 export const handler = async (req: Request) => {
-  const tokenStrategy = new Token();
-
   try {
-    const { bankName } = await req.json();
+    const {
+      token,
+      bankName,
+      accountIban,
+      amount,
+      creditorAccount,
+      creditorName,
+      description,
+      reference,
+    } = await req.json();
 
-    if (!confirmedRequiredParams([])) {
+    if (
+      !confirmedRequiredParams([
+        token,
+        bankName,
+        accountIban,
+        amount,
+        creditorAccount,
+        creditorName,
+        description,
+      ])
+    ) {
       return new Response(JSON.stringify(errorResponseData), {
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    await tokenStrategy.createToken(bankName);
-    const token = tokenStrategy.getToken();
+    const paymentStrategy = new Payment(bankName, token);
+
+    const result = await paymentStrategy.createPayment(
+      amount,
+      accountIban,
+      creditorAccount,
+      creditorName,
+      description,
+      reference
+    );
 
     const responseData = {
       isRequestSuccessfull: true,
-      data: { token },
+      data: result,
       error: null,
     };
 
@@ -34,6 +59,7 @@ export const handler = async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
+    console.log("err", err);
     const responseData = {
       isRequestSuccessfull: false,
       data: null,

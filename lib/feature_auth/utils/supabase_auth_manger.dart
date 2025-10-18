@@ -17,6 +17,34 @@ class SupabaseAuthManger {
   final supabseClient = Supabase.instance.client;
   final userController = Get.put(UserController());
 
+  List<BankAccount>? _parseIbans(dynamic ibansData) {
+    if (ibansData == null) return null;
+
+    try {
+      List<dynamic> ibansList;
+
+      // If it's already a List, use it directly
+      if (ibansData is List) {
+        ibansList = ibansData;
+      }
+      // If it's a string, decode it first
+      else if (ibansData is String) {
+        ibansList = jsonDecode(ibansData) as List;
+      }
+      // If it's neither, return null
+      else {
+        return null;
+      }
+
+      return ibansList
+          .map((item) => BankAccount.fromJson(item as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      print('Error parsing ibans: $e');
+      return null;
+    }
+  }
+
   Future<void> loadFreshUser(authUserId, accessToken) async {
     final tokenToUse = accessToken;
 
@@ -49,6 +77,12 @@ class SupabaseAuthManger {
       Get.snackbar('Oops..', 'An error occured');
     }
 
+    final ibansData = privateUserResponse.length > 0
+        ? privateUserResponse[0]['ibans']
+        : businessUserResponse[0]['ibans'];
+
+    final parsedIbans = _parseIbans(ibansData);
+
     final clientUserClassed = ClientUserModel(
       userRecordResponse[0]['id'],
       privateUserResponse.length > 0 ? privateUserResponse[0]['id'] : null,
@@ -60,6 +94,7 @@ class SupabaseAuthManger {
       privateUserResponse.length > 0
           ? privateUserResponse[0]['iban']
           : businessUserResponse[0]['iban'],
+      parsedIbans,
       privateUserResponse.length > 0
           ? privateUserResponse[0]['bankAccountName']
           : businessUserResponse[0]['bankAccountName'],

@@ -1,4 +1,4 @@
-import axios from "https://esm.sh/axios@1.5.0";
+import { fetchProxy } from "../../../fetchProxy.ts";
 
 const mockData = {
   psuId: "donaldduck",
@@ -14,26 +14,11 @@ export class LHVPaymentStrategy {
   agent: null | Deno.HttpClient = null;
   token: string;
   accountIban: string = "EE857700771001735904";
-  consentId: string = "";
   paymentId: string = "";
   authorisationId: string = "";
 
-  constructor(token: string, consentId: string, accountIban?: string) {
-    if (accountIban) {
-      this.accountIban = accountIban;
-    }
-
-    this.consentId = consentId;
+  constructor(token: string) {
     this.token = token;
-
-    const cert = Deno.readFileSync(
-      "../../../../../certs/lhv-sandbox-certificate.crt"
-    );
-    const key = Deno.readFileSync("../../../../../certs/lhv-sandbox-key.key");
-    this.agent = Deno.createHttpClient({
-      cert: cert as unknown as string,
-      key: key as unknown as string,
-    });
   }
 
   initialize(): void {
@@ -61,19 +46,20 @@ export class LHVPaymentStrategy {
 
   async createSepaTransfer(
     amount: number,
+    accountIban: string,
     creditorAccount: string,
     creditorName: string,
     description: string,
     reference: string
   ): Promise<string | void> {
-    const url = `${this.baseUrl}/v1/accounts`;
+    const url = `${this.baseUrl}/v1.1/payments/sepa-credit-transfers`;
 
     const today = Temporal.Now.plainDateISO();
-    const formattedToday = today.toString().replace(/-/g, "/");
+    const formattedToday = today.toString().replace(/-/g, "-");
 
     const requestBody = {
       debtorAccount: {
-        iban: this.accountIban,
+        iban: accountIban,
       },
       instructedAmount: {
         currency: "EUR",
@@ -84,88 +70,107 @@ export class LHVPaymentStrategy {
       },
       creditorName: creditorName,
       remittanceInformationUnstructured: description,
-      remittanceInformationStructured: {
-        reference: reference,
-      },
+      // remittanceInformationStructured: {
+      //   reference: reference,
+      // },
       requestedExecutionDate: formattedToday,
     };
 
     try {
-      const response = await axios.post(url, requestBody, {
+      const response = await fetchProxy({
+        url: url,
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Consent-ID": this.consentId,
           "X-Request-ID": mockData.xRequestId,
           Authorization: `Bearer ${this.token}`,
-          "TPP-Redirect-Preferred": false,
+          "TPP-Redirect-Preferred": "false",
           "PSU-IP-Address": mockData.psuIpAddress,
-          PSU_Corporate_ID: mockData.psuCorporateId,
         },
-
-        httpsAgent: this.agent,
+        body: requestBody,
       });
 
-      console.log("Response status:", response.status);
-      console.log("Response data:", response.data);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
-      this.paymentId = response.data["paymentId"];
+      const responseData = await response.json();
 
-      return response.data;
+      console.log("Response data:", responseData);
+
+      this.paymentId = responseData["paymentId"];
+
+      return responseData;
     } catch (error) {
-      console.error("Error during authorization:", error);
+      console.error("Error during createSepaTransfer:", error);
     }
   }
 
   async authoriseSepaTransfer(): Promise<string | void> {
-    const url = `${this.baseUrl}/v1/accounts?paymentId=${this.paymentId}`;
+    const url = `${this.baseUrl}/v1/payments/sepa-credit-transfers/${this.paymentId}/authorisations`;
 
     const requestBody = {
       authenticationMethodId: "SID",
     };
 
     try {
-      const response = await axios.post(url, requestBody, {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.token}`,
-          "PSU-IP-Address": mockData.psuIpAddress,
-        },
-
-        httpsAgent: this.agent,
-      });
-
-      console.log("Response status:", response.status);
-      console.log("Response data:", response.data);
-
-      this.authorisationId = response.data["authorisationId"];
-
-      return response.data;
-    } catch (error) {
-      console.error("Error during authorization:", error);
-    }
-  }
-
-  async getAuthorisationStatusForSepaTransfer(): Promise<string | void> {
-    const url = `${this.baseUrl}/v1/accounts?paymentId=${this.paymentId}/authorisations/${this.authorisationId}`;
-
-    try {
-      const response = await axios.get(url, {
+      const response = await fetchProxy({
+        url: url,
+        method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${this.token}`,
           "PSU-IP-Address": mockData.psuIpAddress,
           "X-Request-ID": mockData.xRequestId,
         },
-
-        httpsAgent: this.agent,
+        body: requestBody,
       });
 
-      console.log("Response status:", response.status);
-      console.log("Response data:", response.data);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
-      return response.data;
+      const responseData = await response.json();
+
+      console.log("Response data:", responseData);
+
+      this.authorisationId = responseData["authorisationId"];
+
+      return responseData;
     } catch (error) {
-      console.error("Error during authorization:", error);
+      console.error("Error during authoriseSepaTransfer:", error);
+    }
+  }
+
+  async getAuthorisationStatusForSepaTransfer(): Promise<string | void> {
+    const url = `${this.baseUrl}/v1/payments/sepa-credit-transfers/${this.paymentId}/authorisations/${this.authorisationId}`;
+
+    try {
+      const response = await fetchProxy({
+        url: url,
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.token}`,
+          "PSU-IP-Address": mockData.psuIpAddress,
+          "X-Request-ID": mockData.xRequestId,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const responseData = await response.json();
+
+      console.log("Response data:", responseData);
+
+      return responseData;
+    } catch (error) {
+      console.error(
+        "Error during getAuthorisationStatusForSepaTransfer:",
+        error
+      );
     }
   }
 }

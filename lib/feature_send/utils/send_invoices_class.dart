@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:slickbill/feature_auth/getx_controllers/current_bank_controller.dart';
 import 'package:slickbill/feature_send/models/users_by_username_model.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -9,6 +10,7 @@ import '../models/receiver_user_model.dart';
 
 class SendInvoicesClass {
   final UserController userController = Get.find();
+  CurrentBankController currentBankController = Get.find();
 
   Future<void> createSendPrivateInvoice(originalInvoiceNo, description, dueDate,
       referenceNo, List<ReceiverUserModel> receiverUsers, category) async {
@@ -20,6 +22,8 @@ class SendInvoicesClass {
         "privateUserId": userController.user.value.privateUserId,
         "senderName":
             '${userController.user.value.firstName} ${userController.user.value.lastName}',
+
+        "senderIban": currentBankController.current.value.iban,
 
         "receiverUserId": receiverUsers.first.id,
         "receiverIsPrivate": true,
@@ -62,6 +66,7 @@ class SendInvoicesClass {
         "senderName":
             '${userController.user.value.firstName} ${userController.user.value.lastName?[0].toUpperCase()}',
 
+        "senderIban": currentBankController.current.value.iban,
         "receiverUserId": receiverUserId,
         "receiverIsPrivate": true,
         // "originalInvoiceNo": originalInvoiceNo,
@@ -97,6 +102,8 @@ class SendInvoicesClass {
         "privateUserId": senderPrivateUserId,
         "senderName":
             '${userController.user.value.firstName} ${userController.user.value.lastName?[0].toUpperCase()}',
+
+        "senderIban": currentBankController.current.value.iban,
 
         "receiverUserId": userController.user.value.privateUserId,
         "receiverIsPrivate": true,
@@ -139,6 +146,7 @@ class SendInvoicesClass {
         "privateUserId": userController.user.value.privateUserId,
         "senderName":
             '${userController.user.value.firstName} ${userController.user.value.lastName?[0].toUpperCase()}',
+        "senderIban": currentBankController.current.value.iban,
         "receiverUsers": receivers,
         "description": description,
         "dueDate": dueDate,

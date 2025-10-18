@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
+import 'package:slickbill/feature_dashboard/utils/payment_class.dart';
 import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
 import 'package:slickbill/feature_dashboard/widgets/invoice_card.dart';
 import 'package:slickbill/feature_dashboard/widgets/received_invoice_sheet.dart';
@@ -16,7 +17,9 @@ import '../../feature_auth/utils/money_formatter.dart';
 
 class ReceivedBills extends HookWidget {
   ReceivedInvoicesClass receivedInvoicesClass = ReceivedInvoicesClass();
+  PaymentClass payment = PaymentClass();
   final UserController userController = Get.find();
+  bool callInProgress = false;
 
   ReceivedBills({super.key});
 
@@ -59,7 +62,25 @@ class ReceivedBills extends HookWidget {
       await getInvoices();
       await getPendingSum();
       await getRceivedSum();
+      callInProgress = false;
       Navigator.of(context).pop();
+    }
+
+    Future payInvoice(InvoiceModel invoice, bool isPaid) async {
+      final token = await payment.getPaymentToken("LHV");
+
+      if (token.isEmpty) {
+        return;
+      }
+
+      final paymentSuccess = await payment.createSepaTransfer(
+          "LHV", token, invoice.amount.toString());
+
+      if (!paymentSuccess) {
+        return;
+      }
+
+      await updateInvoiceStatus(invoice, isPaid);
     }
 
     Future updateInvoiceObsolete(InvoiceModel invoice, isObsolete) async {
@@ -75,19 +96,14 @@ class ReceivedBills extends HookWidget {
           context: context,
           builder: (context) => ReceivedInvoiceSheet(
               invoice: invoice,
+              payInvoice: payInvoice,
               updateInvoiceStatus: updateInvoiceStatus,
               updateInvoiceObsolete: updateInvoiceObsolete));
     }
 
     useEffect(() {
       getInvoices();
-    }, [userController.user.value.accessToken]);
-
-    useEffect(() {
       getPendingSum();
-    }, [userController.user.value.accessToken]);
-
-    useEffect(() {
       getRceivedSum();
     }, [userController.user.value.accessToken]);
 

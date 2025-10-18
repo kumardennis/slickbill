@@ -7,22 +7,23 @@ import {
   errorResponseData,
 } from "../../_shared/confirmedRequiredParams.ts";
 import { corsHeaders } from "../../_shared/cors.ts";
+import { Consent } from "../../_shared/tppBanks/consentStrategies/index.ts";
 import { Token } from "../../_shared/tppBanks/tokenStrategies/index.ts";
 
 export const handler = async (req: Request) => {
-  const tokenStrategy = new Token();
+  const { token, bankName } = await req.json();
+
+  if (!confirmedRequiredParams([token, bankName])) {
+    return new Response(JSON.stringify(errorResponseData), {
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const consentStrategy = new Consent(token, bankName);
 
   try {
-    const { bankName } = await req.json();
-
-    if (!confirmedRequiredParams([])) {
-      return new Response(JSON.stringify(errorResponseData), {
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    await tokenStrategy.createToken(bankName);
-    const token = tokenStrategy.getToken();
+    await consentStrategy.createConsent();
+    const token = consentStrategy.getConsentId();
 
     const responseData = {
       isRequestSuccessfull: true,

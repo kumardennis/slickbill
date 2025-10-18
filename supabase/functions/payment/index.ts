@@ -6,11 +6,15 @@ import {
 import { corsHeaders } from "../_shared/cors.ts";
 
 import { handler as get_token } from "./get-token/handler.ts";
+import { handler as get_consent } from "./get-consent/handler.ts";
+import { handler as create_sepa_transfer } from "./create-sepa-transfer/handler.ts";
 
 console.log("Setting up localdev");
 
 const handlers = {
   "get-token": get_token,
+  "get-consent": get_consent,
+  "create-sepa-transfer": create_sepa_transfer,
 } as Record<string, Handler>;
 
 function localdevHandler(req: Request, connInfo: ConnInfo) {
@@ -25,9 +29,11 @@ function localdevHandler(req: Request, connInfo: ConnInfo) {
   const handler = handlers[handlerName];
 
   console.log(`${handlerName} ${req.url}`);
+  console.log(handlers, handler);
   try {
     return handler(req, connInfo);
   } catch (err) {
+    console.error(err);
     return new Response(JSON.stringify({ error: err }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,

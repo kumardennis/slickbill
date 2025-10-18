@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:get/get.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:loader_overlay/loader_overlay.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:slickbill/_NFCHandler.dart';
 import 'package:slickbill/color_scheme.dart';
@@ -18,7 +19,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'feature_auth/screens/sign_in.dart';
 
 void main() async {
-  final localDBUrl = 'http://192.168.1.3:44321';
+  final localDBUrl = 'http://localhost:44321';
   final remoteDDUrl = 'https://fwujdruuvspdoqflttrl.supabase.co';
 
   await dotenv.load();
@@ -40,41 +41,50 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return NFCHandlerWidget(
-      child: GetMaterialApp(
-        scrollBehavior: MyCustomScrollBehavior(),
-        translations: AppTranslations(),
-        locale: const Locale('en', 'US'),
-        title: 'Flutter Demo',
-        theme: ThemeData(
-            scaffoldBackgroundColor: Theme.of(context).colorScheme.light,
-            primarySwatch: Colors.blue,
-            textTheme: GoogleFonts.robotoTextTheme(TextTheme(
-                displayLarge: TextStyle(
-                    fontSize: 24.0, color: Theme.of(context).colorScheme.light),
-                displayMedium: TextStyle(
-                    fontSize: 20.0, color: Theme.of(context).colorScheme.light),
-                displaySmall: TextStyle(
-                    fontSize: 16.0, color: Theme.of(context).colorScheme.light),
-                bodyLarge: TextStyle(
-                    fontSize: 20, color: Theme.of(context).colorScheme.light),
-                bodyMedium: TextStyle(
-                    fontSize: 16.0, color: Theme.of(context).colorScheme.light),
-                bodySmall: TextStyle(
-                    fontSize: 12.0, color: Theme.of(context).colorScheme.light),
-                headlineLarge: TextStyle(
-                    fontSize: 32, color: Theme.of(context).colorScheme.light),
-                headlineMedium: TextStyle(
-                    fontSize: 24.0, color: Theme.of(context).colorScheme.light),
-                headlineSmall: TextStyle(
-                    fontSize: 18.0,
-                    color: Theme.of(context).colorScheme.light)))),
-        home: home,
-        initialRoute: '/sign-in',
-        getPages: [
-          GetPage(name: '/sign-up', page: () => SignUp()),
-          GetPage(name: '/sign-in', page: () => SignIn()),
-          GetPage(name: '/home-screen', page: () => HomeScreen()),
-        ],
+      child: GlobalLoaderOverlay(
+        overlayColor: Theme.of(context).colorScheme.dark.withAlpha(210),
+        child: GetMaterialApp(
+          scrollBehavior: MyCustomScrollBehavior(),
+          translations: AppTranslations(),
+          locale: const Locale('en', 'US'),
+          title: 'Flutter Demo',
+          theme: ThemeData(
+              scaffoldBackgroundColor: Theme.of(context).colorScheme.light,
+              primarySwatch: Colors.blue,
+              textTheme: GoogleFonts.robotoTextTheme(TextTheme(
+                  displayLarge: TextStyle(
+                      fontSize: 24.0,
+                      color: Theme.of(context).colorScheme.light),
+                  displayMedium: TextStyle(
+                      fontSize: 20.0,
+                      color: Theme.of(context).colorScheme.light),
+                  displaySmall: TextStyle(
+                      fontSize: 16.0,
+                      color: Theme.of(context).colorScheme.light),
+                  bodyLarge: TextStyle(
+                      fontSize: 20, color: Theme.of(context).colorScheme.light),
+                  bodyMedium: TextStyle(
+                      fontSize: 16.0,
+                      color: Theme.of(context).colorScheme.light),
+                  bodySmall: TextStyle(
+                      fontSize: 12.0,
+                      color: Theme.of(context).colorScheme.light),
+                  headlineLarge: TextStyle(
+                      fontSize: 32, color: Theme.of(context).colorScheme.light),
+                  headlineMedium: TextStyle(
+                      fontSize: 24.0,
+                      color: Theme.of(context).colorScheme.light),
+                  headlineSmall: TextStyle(
+                      fontSize: 18.0,
+                      color: Theme.of(context).colorScheme.light)))),
+          home: home,
+          initialRoute: '/sign-in',
+          getPages: [
+            GetPage(name: '/sign-up', page: () => SignUp()),
+            GetPage(name: '/sign-in', page: () => SignIn()),
+            GetPage(name: '/home-screen', page: () => HomeScreen()),
+          ],
+        ),
       ),
     );
   }
