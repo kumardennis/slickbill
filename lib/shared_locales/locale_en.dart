@@ -20,6 +20,10 @@ class AppTranslations extends Translations {
           'btn_Add': 'Add',
           'hd_Settings': 'Settings',
           'inf_Copied': 'Copied!',
+          'inf_NFCInstruction':
+              'Tap your device to another NFC enabled device.',
+          'inf_QRInstruction':
+              'Scan the QR code to receive the SlickBill invoice.',
           ...authLocales_EN,
           ...dashboardLocales_EN,
           ...selfCreateLocales_EN,

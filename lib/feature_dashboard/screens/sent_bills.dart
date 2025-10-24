@@ -11,6 +11,7 @@ import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
 import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
 import 'package:slickbill/feature_dashboard/utils/sent_invoices_class.dart';
 import 'package:slickbill/feature_dashboard/widgets/invoice_card.dart';
+import 'package:slickbill/feature_dashboard/widgets/statistics_card.dart';
 
 import '../../feature_auth/getx_controllers/user_controller.dart';
 import '../../feature_auth/utils/money_formatter.dart';
@@ -35,8 +36,7 @@ class SentBills extends HookWidget {
     Future getInvoices() async {
       isLoading.value = true;
 
-      var response = await sentInvoicesClass
-          .getPrivateSentInvoices(userController.user.value.accessToken);
+      var response = await sentInvoicesClass.getPrivateSentInvoices();
 
       invoices.value = response;
 
@@ -44,8 +44,7 @@ class SentBills extends HookWidget {
     }
 
     Future getPendingSum() async {
-      var response = await sentInvoicesClass
-          .getPendingInvoicesSum(userController.user.value.accessToken);
+      var response = await sentInvoicesClass.getPendingInvoicesSum();
 
       pending.value = response;
     }
@@ -78,8 +77,7 @@ class SentBills extends HookWidget {
 
     useEffect(() {
       Future getPendingSum() async {
-        var response = await sentInvoicesClass
-            .getPendingInvoicesSum(userController.user.value.accessToken);
+        var response = await sentInvoicesClass.getPendingInvoicesSum();
 
         pending.value = response;
       }
@@ -102,88 +100,11 @@ class SentBills extends HookWidget {
                 ? Text('lbl_NoInvoices'.tr)
                 : Column(
                     children: [
-                      Container(
-                        decoration: BoxDecoration(
-                            borderRadius: const BorderRadius.only(
-                                topRight: Radius.circular(50.0),
-                                bottomRight: Radius.circular(10.0)),
-                            gradient: LinearGradient(colors: [
-                              Theme.of(context)
-                                  .colorScheme
-                                  .lightGray
-                                  .withOpacity(0.1),
-                              Theme.of(context).colorScheme.lightGray
-                            ])),
-                        height: 100,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            Expanded(
-                              child: Center(
-                                child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        pending.value != null
-                                            ? formatNumber
-                                                .formatMoney(pending.value!)
-                                            : '-',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .headlineLarge
-                                            ?.copyWith(
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .yellow,
-                                                fontWeight: FontWeight.w600),
-                                      ),
-                                      Text(
-                                        'lbl_Pending'.tr,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .yellow),
-                                      )
-                                    ]),
-                              ),
-                            ),
-                            Expanded(
-                              child: Center(
-                                child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        receivedThisMonth.value != null
-                                            ? formatNumber.formatMoney(
-                                                receivedThisMonth.value!)
-                                            : '-',
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .headlineLarge
-                                            ?.copyWith(
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .green,
-                                                fontWeight: FontWeight.w600),
-                                      ),
-                                      Text(
-                                        'lbl_ReceivedThisMonth'.tr,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .bodySmall
-                                            ?.copyWith(
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .green),
-                                      )
-                                    ]),
-                              ),
-                            )
-                          ],
-                        ),
+                      StatisticsCard(
+                        pendingAmount: pending.value,
+                        paidAmount: receivedThisMonth.value,
+                        pendingLabel: 'lbl_Pending'.tr,
+                        paidLabel: 'lbl_ReceivedThisMonth'.tr,
                       ),
                       const SizedBox(
                         height: 20,

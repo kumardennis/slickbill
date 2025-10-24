@@ -16,12 +16,14 @@ class ReceivedInvoiceSheet extends HookWidget {
   final Function payInvoice;
   final Function updateInvoiceStatus;
   final Function updateInvoiceObsolete;
+  final Function createStrigaPayment;
   const ReceivedInvoiceSheet(
       {super.key,
       required this.invoice,
       required this.payInvoice,
       required this.updateInvoiceStatus,
-      required this.updateInvoiceObsolete});
+      required this.updateInvoiceObsolete,
+      required this.createStrigaPayment});
 
   @override
   Widget build(BuildContext context) {
@@ -378,24 +380,24 @@ class ReceivedInvoiceSheet extends HookWidget {
                       style: ElevatedButton.styleFrom(
                           backgroundColor: Theme.of(context).colorScheme.green),
                       onPressed: () async {
-                        context.loaderOverlay.show(
-                            widgetBuilder: (_) => Center(
-                                    child: Text(
-                                  'inf_CreatingTokenAndStartingPayment'.tr,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyLarge
-                                      ?.copyWith(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .light),
-                                )));
+                        // context.loaderOverlay.show(
+                        //     widgetBuilder: (_) => Center(
+                        //             child: Text(
+                        //           'inf_CreatingTokenAndStartingPayment'.tr,
+                        //           style: Theme.of(context)
+                        //               .textTheme
+                        //               .bodyLarge
+                        //               ?.copyWith(
+                        //                   color: Theme.of(context)
+                        //                       .colorScheme
+                        //                       .light),
+                        //         )));
 
                         paymentStarted.value = true;
-                        await payInvoice(invoice, true);
+                        await createStrigaPayment(invoice, true);
                         paymentStarted.value = false;
 
-                        context.loaderOverlay.hide();
+                        // context.loaderOverlay.hide();
                         // await openInvoice(invoice);
                       },
                       child: Padding(

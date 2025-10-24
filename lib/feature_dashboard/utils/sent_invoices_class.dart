@@ -8,12 +8,14 @@ import '../models/invoice_model.dart';
 class SentInvoicesClass {
   final UserController userController = Get.find();
 
-  Future<List<InvoiceModel>?> getPrivateSentInvoices(accessToken) async {
+  Future<List<InvoiceModel>?> getPrivateSentInvoices() async {
     try {
-      final response = await Supabase.instance.client.functions.invoke(
-          'invoices/get-private-user-sent-invoices',
-          headers: {'Authorization': 'Bearer ${accessToken}'},
-          body: {"privateUserId": userController.user.value.privateUserId});
+      final response = await Supabase.instance.client.functions
+          .invoke('invoices/get-private-user-sent-invoices', headers: {
+        'Authorization': 'Bearer ${userController.user.value.accessToken}'
+      }, body: {
+        "privateUserId": userController.user.value.privateUserId
+      });
 
       final data = await response.data;
 
@@ -35,11 +37,11 @@ class SentInvoicesClass {
     }
   }
 
-  Future<double?> getPendingInvoicesSum(accessToken) async {
+  Future<double?> getPendingInvoicesSum() async {
     try {
       final response = await Supabase.instance.client.functions
           .invoke('invoices/get-private-user-sent-invoices', headers: {
-        'Authorization': 'Bearer ${accessToken}'
+        'Authorization': 'Bearer ${userController.user.value.accessToken}'
       }, body: {
         "privateUserId": userController.user.value.privateUserId,
         "status": "UNPAID"

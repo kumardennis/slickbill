@@ -393,7 +393,7 @@ class SendNfcInvoice extends HookWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Text(
-                            'btn_ReceiveSlickbillNfc'.tr,
+                            'btn_ReceiveSlickbillQR'.tr,
                             style: Theme.of(context)
                                 .textTheme
                                 .bodyLarge

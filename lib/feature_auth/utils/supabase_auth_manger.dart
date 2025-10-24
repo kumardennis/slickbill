@@ -111,6 +111,8 @@ class SupabaseAuthManger {
           ? businessUserResponse[0]['publicName']
           : null,
       privateUserResponse.length > 0,
+      privateUserResponse[0]['strigaUserId'],
+      privateUserResponse[0]['strigaWalletId'],
     );
 
     userController.loadUser(clientUserClassed);

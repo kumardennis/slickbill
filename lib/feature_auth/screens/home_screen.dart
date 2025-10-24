@@ -7,6 +7,7 @@ import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/models/user_model.dart';
 import 'package:slickbill/feature_nearby_transaction/screens/send_nfc_invoice.dart';
 import 'package:slickbill/feature_tickets/screens/tickets_folder_list.dart';
+import 'package:slickbill/shared_widgets/global_invoice_receiver.dart';
 
 import '../../feature_dashboard/screens/all_bills.dart';
 import '../../feature_navigation/getx_controllers/navigation_controller.dart';
@@ -75,6 +76,34 @@ class HomeScreen extends StatelessWidget {
               label: '',
             ),
           ],
+        ),
+      ),
+      floatingActionButton: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Theme.of(context).colorScheme.darkerBlue,
+              Theme.of(context).colorScheme.blue,
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Theme.of(context).colorScheme.darkerBlue.withOpacity(0.3),
+              blurRadius: 15,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: FloatingActionButton(
+          onPressed: () => GlobalReceiveService.showReceiveOptions(context),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: const FaIcon(
+            FontAwesomeIcons.download,
+            color: Colors.white,
+            size: 24,
+          ),
         ),
       ),
     );

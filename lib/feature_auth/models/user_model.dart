@@ -65,6 +65,8 @@ class ClientUserModel {
   final String? fullName;
   final String? publicName;
   final bool isPrivate;
+  final String? strigaUserId;
+  final String? sringaWalletId;
 
   ClientUserModel(
       this.id,
@@ -81,5 +83,7 @@ class ClientUserModel {
       this.lastName,
       this.fullName,
       this.publicName,
-      this.isPrivate);
+      this.isPrivate,
+      this.strigaUserId,
+      this.sringaWalletId);
 }

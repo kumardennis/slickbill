@@ -20,33 +20,54 @@ class CustomAppbar extends HookWidget implements PreferredSizeWidget {
       this.showSettings = false});
 
   @override
-  Size get preferredSize => const Size.fromHeight(120.0);
+  Size get preferredSize => Size.fromHeight(tabBar != null ? 120.0 : 70.0);
 
   @override
   Widget build(BuildContext context) {
-    return (AppBar(
+    return AppBar(
       automaticallyImplyLeading: true,
       leading: showSettings
-          ? GestureDetector(
-              onTap: () {
+          ? IconButton(
+              onPressed: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const Profile()),
                 );
               },
-              child: Center(child: FaIcon(FontAwesomeIcons.gear)))
+              icon: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color:
+                      Theme.of(context).colorScheme.darkerBlue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: FaIcon(
+                  FontAwesomeIcons.gear,
+                  color: Theme.of(context).colorScheme.darkerBlue,
+                  size: 18,
+                ),
+              ),
+            )
           : null,
       bottom: tabBar,
       backgroundColor: Theme.of(context).colorScheme.light,
-      elevation: 10,
-      title: Center(
-        child: Text(
-          '$title'.tr,
-          style: Theme.of(context).textTheme.displayMedium?.copyWith(
+      elevation: 0,
+      shadowColor: Colors.transparent,
+      surfaceTintColor: Colors.transparent,
+      title: Text(
+        '$title'.tr,
+        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.darkGray),
+              color: Theme.of(context).colorScheme.darkerBlue,
+              letterSpacing: 0.5,
+            ),
+      ),
+      centerTitle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          bottom: Radius.circular(0),
         ),
       ),
-    ));
+    );
   }
 }

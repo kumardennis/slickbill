@@ -41,29 +41,27 @@ class InvoiceCard extends HookWidget {
     return (Container(
       height: 180,
       decoration: BoxDecoration(
-          gradient: LinearGradient(
-              colors: [
-                Theme.of(context).colorScheme.lighterBlue,
-                Theme.of(context).colorScheme.blue,
-                Theme.of(context).colorScheme.darkGreen,
-                Theme.of(context).colorScheme.blue,
-                Theme.of(context).colorScheme.turqouise,
-              ],
-              stops: const [
-                0.15,
-                0.4,
-                0.5,
-                0.7,
-                0.9
-              ],
-              transform: GradientRotation(3.14 / 4),
-              tileMode: TileMode.clamp,
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight),
-          color: Theme.of(context).colorScheme.darkGray,
-          borderRadius: const BorderRadius.only(
-              topRight: Radius.circular(50.0),
-              bottomRight: Radius.circular(10.0))),
+        gradient: LinearGradient(
+          colors: [
+            Theme.of(context).colorScheme.darkerBlue,
+            Theme.of(context).colorScheme.lighterBlue.withAlpha(100),
+            Theme.of(context).colorScheme.darkerBlue.withOpacity(0.3),
+          ],
+          stops: const [0.0, 0.4, 8.0],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.only(
+            topRight: Radius.circular(24), bottomRight: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: Theme.of(context).colorScheme.darkerBlue.withOpacity(0.9),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+            spreadRadius: -2,
+          ),
+        ],
+      ),
       width: MediaQuery.of(context).size.width,
       padding: const EdgeInsets.all(15.0),
       child: Column(
@@ -98,6 +96,7 @@ class InvoiceCard extends HookWidget {
                   Text(status == 'PAID' ? 'lbl_Paid'.tr : 'lbl_Unpaid'.tr,
                       style:
                           Theme.of(context).textTheme.displayMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
                               color: status == 'PAID'
                                   ? Theme.of(context).colorScheme.green
                                   : dateIsPassed
@@ -145,6 +144,7 @@ class InvoiceCard extends HookWidget {
                               '${DateFormat('EEE, dd MMM').format(DateTime.parse(dueDate!))}'
                         }),
                   style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                      fontWeight: FontWeight.w600,
                       color: paidOnDate != null
                           ? Theme.of(context).colorScheme.green
                           : dateIsPassed

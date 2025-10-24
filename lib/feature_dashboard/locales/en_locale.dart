@@ -22,5 +22,9 @@ Map<String, String> dashboardLocales_EN = {
   'inf_CreatingTokenAndStartingPayment':
       'Creating payment token and starting payment...',
   'inf_StatusUpdating': 'Updating status...',
-  'lbl_Category': 'Category'
+  'lbl_Category': 'Category',
+  'inf_WalletFetched': 'Wallet fetched successfully',
+  'lbl_WaitingForPayment': 'Waiting for Payment',
+  'lbl_PendingToPay': 'Pending to Pay',
+  'inf_PaymentConfirmed': 'Payment confirmed successfully',
 };
