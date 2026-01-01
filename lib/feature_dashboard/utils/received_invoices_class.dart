@@ -8,13 +8,16 @@ import '../models/invoice_model.dart';
 class ReceivedInvoicesClass {
   final UserController userController = Get.find();
 
-  Future<List<InvoiceModel>?> getPrivateReceivedInvoices() async {
+  Future<List<InvoiceModel>?> getPrivateReceivedInvoices({int? id}) async {
+    print("=====BILS=====");
+    print(userController.user.value.privateUserId);
     try {
       final response = await Supabase.instance.client.functions
           .invoke('invoices/get-private-user-received-invoices', headers: {
         'Authorization': 'Bearer ${userController.user.value.accessToken}'
       }, body: {
-        "privateUserId": userController.user.value.privateUserId
+        "privateUserId": userController.user.value.privateUserId,
+        if (id != null) "invoiceId": id,
       });
 
       final data = await response.data;

@@ -45,24 +45,24 @@ class InvoiceModel {
 
   InvoiceModel.fromJson(Map<String, dynamic> json) {
     id = json['id'];
-    createdAt = json['created_at'];
-    updatedAt = json['updated_at'];
+    createdAt = json['created_at'] ?? "";
+    updatedAt = json['updated_at'] ?? "";
     senderId = json['senderId'];
     receiverId = json['receiverId'];
-    category = json['category'];
+    category = json['category'] ?? "-";
     status = json['status'];
-    amount = json['amount'].toDouble();
+    amount = json['amount']?.toDouble() ?? 0.0;
     data = json['data'];
-    description = json['description'];
+    description = json['description'] ?? "";
     rawInvoiceId = json['rawInvoiceId'];
-    senderName = json['senderName'];
-    senderIban = json['senderIban'];
-    deadline = json['deadline'];
+    senderName = json['senderName'] ?? "";
+    senderIban = json['senderIban'] ?? "";
+    deadline = json['deadline'] ?? "";
     paidOnDate = json['paidOnDate'];
-    invoiceNo = json['invoiceNo'];
+    invoiceNo = json['invoiceNo'] ?? "";
     originalInvoiceNo = json['originalInvoiceNo'];
-    isSeen = json['isSeen'];
-    referenceNo = json['referenceNo'];
+    isSeen = json['isSeen'] ?? false;
+    referenceNo = json['referenceNo'] ?? "-";
     receivers = Receivers.fromJson(json['receivers']);
     senders =
         json['senders'] != null ? Senders.fromJson(json['senders']) : null;
@@ -110,7 +110,7 @@ class Receivers {
 
   Receivers.fromJson(Map<String, dynamic> json) {
     id = json['id'];
-    createdAt = json['created_at'];
+    createdAt = json['created_at'] ?? "";
     privateUserId = json['privateUserId'];
     businessUserId = json['businessUserId'];
     privateUsers = PrivateUsers.fromJson(json['private_users']);
@@ -149,12 +149,12 @@ class PrivateUsers {
 
   PrivateUsers.fromJson(Map<String, dynamic> json) {
     id = json['id'];
-    createdAt = json['created_at'];
-    firstName = json['firstName'];
-    lastName = json['lastName'];
-    userId = json['userId'];
-    iban = json['iban'];
-    bankAccountName = json['bankAccountName'];
+    createdAt = json['created_at'] ?? "";
+    firstName = json['firstName'] ?? "";
+    lastName = json['lastName'] ?? "";
+    userId = json['userId'] ?? 0;
+    iban = json['iban'] ?? "";
+    bankAccountName = json['bankAccountName'] ?? "";
   }
 
   Map<String, dynamic> toJson() {
@@ -190,12 +190,12 @@ class BusinessUsers {
 
   BusinessUsers.fromJson(Map<String, dynamic> json) {
     id = json['id'];
-    createdAt = json['created_at'];
-    fullName = json['fullName'];
-    publicName = json['publicName'];
-    userId = json['userId'];
-    iban = json['iban'];
-    bankAccountName = json['bankAccountName'];
+    createdAt = json['created_at'] ?? "";
+    fullName = json['fullName'] ?? "";
+    publicName = json['publicName'] ?? "";
+    userId = json['userId'] ?? 0;
+    iban = json['iban'] ?? "";
+    bankAccountName = json['bankAccountName'] ?? "";
   }
 
   Map<String, dynamic> toJson() {
@@ -227,7 +227,7 @@ class Senders {
 
   Senders.fromJson(Map<String, dynamic> json) {
     id = json['id'];
-    createdAt = json['created_at'];
+    createdAt = json['created_at'] ?? "";
     privateUserId = json['privateUserId'];
     businessUserId = json['businessUserId'];
     privateUsers = PrivateUsers.fromJson(json['private_users']);

@@ -6,6 +6,9 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:slickbill/color_scheme.dart';
+import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
+import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
+import 'package:slickbill/shared_screens/received_invoice.dart';
 import '../feature_nearby_transaction/screens/make_nfc_available.dart';
 import '../feature_send/utils/send_invoices_class.dart';
 import '../feature_navigation/getx_controllers/navigation_controller.dart';
@@ -179,7 +182,7 @@ class GlobalReceiveService {
             elevation: 0,
           ),
           body: MobileScanner(
-            onDetect: (BarcodeCapture barcodes) {
+            onDetect: (BarcodeCapture barcodes) async {
               if (!isProcessing) {
                 isProcessing = true;
                 final scannedResult = _handleBarcode(barcodes);
@@ -196,7 +199,7 @@ class GlobalReceiveService {
                   );
 
                   // Process the QR code
-                  _createSlickbillFromQR(scannedResult);
+                  await _createSlickbillFromQR(scannedResult);
 
                   Future.delayed(const Duration(milliseconds: 500), () {
                     isProcessing = false;
@@ -216,14 +219,15 @@ class GlobalReceiveService {
     return barcodes.barcodes.firstOrNull?.rawValue;
   }
 
-  static Future<void> _createSlickbillFromQR(String result) async {
+  static Future<InvoiceModel?> _createSlickbillFromQR(String result) async {
     try {
       final NavigationController navigationController = Get.find();
       SendInvoicesClass sendInvoicesClass = SendInvoicesClass();
+      ReceivedInvoicesClass receivedInvoicesClass = ReceivedInvoicesClass();
 
       Map<String, dynamic> jsonObject = jsonDecode(result);
 
-      await sendInvoicesClass.createReceivePrivateQRInvoice(
+      final invoiceId = await sendInvoicesClass.createReceivePrivateQRInvoice(
         jsonObject['description'],
         jsonObject['dueDate'],
         jsonObject['referenceNumber'],
@@ -231,6 +235,13 @@ class GlobalReceiveService {
         jsonObject['amount'],
         jsonObject['category'],
       );
+
+      if (invoiceId == null) {
+        throw Exception('Failed to create slickbill from QR code.');
+      }
+
+      final invoices = await receivedInvoicesClass.getPrivateReceivedInvoices(
+          id: int.parse(invoiceId));
 
       navigationController.changeIndex(0);
 
@@ -241,6 +252,8 @@ class GlobalReceiveService {
             Theme.of(Get.context!).colorScheme.green.withOpacity(0.1),
         colorText: Theme.of(Get.context!).colorScheme.green,
       );
+
+      return invoices?.first;
     } catch (e) {
       print('Error parsing QR code: $e');
       Get.snackbar(
@@ -251,5 +264,6 @@ class GlobalReceiveService {
         colorText: Theme.of(Get.context!).colorScheme.red,
       );
     }
+    return null;
   }
 }

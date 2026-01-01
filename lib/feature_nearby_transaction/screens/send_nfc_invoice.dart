@@ -221,7 +221,7 @@ class SendNfcInvoice extends HookWidget {
     }, [receiverUserAmount.value, category.value]);
 
     return (Scaffold(
-      appBar: CustomAppbar(title: 'hd_NfcTransaction'.tr, appbarIcon: null),
+      appBar: CustomAppbar(title: 'hd_QrNfcTransaction'.tr, appbarIcon: null),
       body: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,

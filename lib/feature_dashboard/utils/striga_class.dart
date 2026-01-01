@@ -1,6 +1,7 @@
 import 'package:get/get.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:iban_to_bic/iban_to_bic.dart';
 
 class StrigaClass {
   final UserController userController = Get.find();
@@ -33,7 +34,7 @@ class StrigaClass {
 
   Future<String> initiateStrigaTransaction(
       int destinationUserId, String memo, double amount) async {
-    final int CENT = 100;
+    const int CENT = 100;
     try {
       final response = await Supabase.instance.client.functions
           .invoke('striga/initiate-transaction', headers: {
@@ -41,6 +42,37 @@ class StrigaClass {
       }, body: {
         "userId": userController.user.value.id,
         "destinationUserId": destinationUserId,
+        "amount": (amount * CENT).toString(),
+        "memo": memo,
+      });
+
+      final data = await response.data;
+
+      if (data['isRequestSuccessfull'] == true) {
+        Get.snackbar('Success', 'inf_PaymentInitiated'.tr);
+        return data['data']['strigaResponseBody']['challengeId'];
+      } else {
+        Get.snackbar('Oops..', data['error'].toString());
+        return "";
+      }
+    } catch (err) {
+      print(err);
+      return "";
+    }
+  }
+
+  Future<String> initiateStrigaSepaTransaction(
+      String destinationIban, String memo, double amount) async {
+    const int CENT = 100;
+    final Bic bic = ibanToBic(destinationIban);
+    try {
+      final response = await Supabase.instance.client.functions
+          .invoke('striga/initiate-sepa-transaction', headers: {
+        'Authorization': 'Bearer ${userController.user.value.accessToken}'
+      }, body: {
+        "userId": userController.user.value.id,
+        "destinationIban": destinationIban,
+        "destinationBic": bic.value,
         "amount": (amount * CENT).toString(),
         "memo": memo,
       });

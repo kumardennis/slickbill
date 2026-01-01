@@ -11,6 +11,7 @@ import { handler as get_wallets } from "./get-wallets/handler.ts";
 import { handler as enrich_account } from "./enrich-account/handler.ts";
 import { handler as get_kyc_status } from "./get-kyc-status/handler.ts";
 import { handler as initiate_transaction } from "./initiate-transaction/handler.ts";
+import { handler as initiate_sepa_transaction } from "./initiate-sepa-transaction/handler.ts";
 import { handler as confirm_transaction } from "./confirm-transaction/handler.ts";
 import { handler as ping } from "./ping/handler.ts";
 
@@ -23,6 +24,7 @@ const handlers = {
   "enrich-account": enrich_account,
   "get-kyc-status": get_kyc_status,
   "initiate-transaction": initiate_transaction,
+  "initiate-sepa-transaction": initiate_sepa_transaction,
   "confirm-transaction": confirm_transaction,
   ping: ping,
 } as Record<string, Handler>;

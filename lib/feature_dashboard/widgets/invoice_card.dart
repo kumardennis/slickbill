@@ -136,8 +136,9 @@ class InvoiceCard extends HookWidget {
               Text(
                   paidOnDate != null
                       ? 'lbl_PaidOn'.trParams({
-                          'date':
-                              '${DateFormat('EEE, dd MMM').format(DateTime.parse(paidOnDate!))}'
+                          'date': paidOnDate != ''
+                              ? '${DateFormat('EEE, dd MMM').format(DateTime.parse(paidOnDate!))}'
+                              : '-'
                         })
                       : 'lbl_Due'.trParams({
                           'date':

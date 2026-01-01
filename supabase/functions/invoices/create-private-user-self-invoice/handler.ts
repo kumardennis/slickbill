@@ -2,9 +2,7 @@
 // https://deno.land/manual/getting_started/setup_your_environment
 // This enables autocomplete, go to definition, etc.
 
-import {
-  User,
-} from "https://esm.sh/v96/@supabase/gotrue-js@2.16.0/dist/module/index.d.ts";
+import { User } from "https://esm.sh/v96/@supabase/gotrue-js@2.16.0/dist/module/index.d.ts";
 import {
   confirmedRequiredParams,
   errorResponseData,
@@ -27,8 +25,7 @@ export const handler = async (req: Request) => {
       dueDate,
       referenceNo,
       category,
-    } = await req
-      .json();
+    } = await req.json();
 
     if (
       !confirmedRequiredParams([
@@ -48,11 +45,12 @@ export const handler = async (req: Request) => {
       });
     }
 
-    const { data: receiverData, error: receiverError } = await supabase.from(
-      "receivers",
-    ).insert({
-      privateUserId: privateUserId,
-    }).select();
+    const { data: receiverData, error: receiverError } = await supabase
+      .from("receivers")
+      .insert({
+        privateUserId: privateUserId,
+      })
+      .select();
 
     if (receiverError) {
       const responseData = {
@@ -67,21 +65,23 @@ export const handler = async (req: Request) => {
     }
 
     const { data: digitalInvoiceData, error: digitalInvoiceError } =
-      await supabase.from(
-        "digital_invoices",
-      ).insert({
-        senderId: null,
-        receiverId: receiverData[0].id,
-        amount,
-        description,
-        senderName,
-        senderIban,
-        originalInvoiceNo,
-        deadline: dueDate,
-        referenceNo,
-        category,
-        invoiceNo: `${privateUserId}${Date.now()}`,
-      }).select();
+      await supabase
+        .from("digital_invoices")
+        .insert({
+          senderId: null,
+          receiverId: receiverData[0].id,
+          amount,
+          description,
+          senderName,
+          senderIban,
+          originalInvoiceNo,
+          deadline: dueDate,
+          referenceNo,
+          category,
+          invoiceNo: `${privateUserId}${Date.now()}`,
+          receiverPrivateUserId: privateUserId,
+        })
+        .select();
 
     if (digitalInvoiceError) {
       const responseData = {

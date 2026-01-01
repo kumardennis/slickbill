@@ -40,6 +40,9 @@ dependencies:
   path_provider: ^2.1.1
   mobile_scanner: ^7.0.1
   loader_overlay: ^5.0.0
+  iban_to_bic: ^0.0.8
+  google_sign_in: ^7.2.0
+  universal_html: ^2.2.4
 
 dev_dependencies:
   flutter_test:
@@ -48,16 +51,18 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-
   assets:
     - .env
     - media/temporary_logo.png
     - media/temporary_logo_text.png
     - media/logo blue.webp
+    - assets/logo_text.png
+    - assets/logo_icon.png
+    - assets/logo_text_darkbg.png
 
 dependency_overrides:
   web: ^0.5.1
   image_picker_platform_interface: ^2.11.0
-  path_provider_android: ^2.2.1  # Add this to force newer version
+  path_provider_android: ^2.2.1
   path_provider_platform_interface: ^2.1.1 
   url_launcher_android: ^6.3.0

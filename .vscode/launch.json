@@ -5,9 +5,27 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Dart & Flutter",
+            "name": "Flutter (Mobile)",
             "request": "launch",
             "type": "dart"
+        },
+        {
+            "name": "Flutter (Chrome)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "chrome",
+            "args": [
+                "--web-port=53532"
+            ]
+        },
+        {
+            "name": "Flutter (Web Server)",
+            "request": "launch",
+            "type": "dart",
+            "deviceId": "web-server",
+            "args": [
+                "--web-port=53532"
+            ]
         }
     ]
 }

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -6,10 +7,10 @@ import 'package:get/get.dart';
 class NFCHandlerWidget extends StatefulWidget {
   final Widget child;
 
-  NFCHandlerWidget({Key? key, required this.child}) : super(key: key);
+  const NFCHandlerWidget({Key? key, required this.child}) : super(key: key);
 
   @override
-  _NFCHandlerWidgetState createState() => _NFCHandlerWidgetState();
+  State<NFCHandlerWidget> createState() => _NFCHandlerWidgetState();
 }
 
 class _NFCHandlerWidgetState extends State<NFCHandlerWidget> {
@@ -18,10 +19,14 @@ class _NFCHandlerWidgetState extends State<NFCHandlerWidget> {
   @override
   void initState() {
     super.initState();
-    _handleIntent();
+
+    // Only initialize NFC on mobile platforms
+    if (!kIsWeb) {
+      _initNFC();
+    }
   }
 
-  Future<void> _handleIntent() async {
+  Future<void> _initNFC() async {
     try {
       final String? intentAction =
           await platform.invokeMethod('getIntentAction');

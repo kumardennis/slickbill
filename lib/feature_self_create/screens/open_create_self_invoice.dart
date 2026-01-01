@@ -13,6 +13,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/constants.dart';
+import 'package:slickbill/feature_self_create/utils/IbanExtractor.dart';
 import 'package:slickbill/feature_self_create/utils/create_invoices_class.dart';
 import 'package:slickbill/feature_self_create/utils/files_class.dart';
 import 'package:slickbill/shared_utils/shared_files_class.dart';
@@ -61,16 +62,16 @@ class OpenAndCreateSelfInvoice extends HookWidget {
 
     Future getFileData(Uint8List? fileBytes, [String? text]) async {
       isLoading.value = true;
+
       var convertedText =
           await sharedFilesClass.convertPdfToText(fileBytes, text);
       var data = await filesClass.uploadTextToExtractData(convertedText);
 
-      isLoading.value = false;
-
       if (data != null) {
         originalInvoiceNoController.text = data.invoiceNo;
         senderNameController.text = data.merchantName;
-        ibanController.text = data.iban.first.iban;
+        ibanController.text =
+            IbanExtractor.extractIban(data.iban.first.iban) ?? '-';
         descriptionController.text = data.description;
         amountController.text = data.totalAmount.toString();
         dueDateController.text = data.dueDate;
@@ -78,63 +79,23 @@ class OpenAndCreateSelfInvoice extends HookWidget {
         extractedData.value = data;
         category.value = data.category;
       }
+
       analyzeTextController.text = '';
-    }
 
-    Future getImageData(Uint8List? fileBytes) async {
-      if (fileBytes != null) {
-        isLoading.value = true;
-
-        var uploadedFileUrl = await filesClass.uploadImageToSupabase(fileBytes);
-
-        if (uploadedFileUrl == null) {
-          return;
-        }
-
-        var data = await filesClass.getReceiptExtractData(uploadedFileUrl);
-
-        isLoading.value = false;
-
-        if (data != null) {
-          originalInvoiceNoController.text =
-              data['veryfi']['extracted_data'][0]['invoice_number'];
-
-          senderNameController.text = data['veryfi']['extracted_data'][0]
-              ['merchant_information']['merchant_name'];
-
-          ibanController.text = '';
-
-          descriptionController.text =
-              data['veryfi']['extracted_data'][0]['category'];
-
-          amountController.text =
-              data['veryfi']['extracted_data'][0]['invoice_total'].toString();
-
-          dueDateController.text = DateFormat('yyyy-MM-dd').format(
-              DateTime.parse(data['veryfi']['extracted_data'][0]['date']));
-
-          referenceNumberController.text = '';
-
-          category.value = data['category'];
-
-          // extractedData.value = data;
-        }
-        analyzeTextController.text = '';
-      }
+      isLoading.value = false;
     }
 
     Future getExtractedDataFromText(String? text) async {
       isLoading.value = true;
       var data = await filesClass.uploadTextToExtractData(text);
 
-      isLoading.value = false;
-
       if (data != null) {
         originalInvoiceNoController.text = data.invoiceNo;
 
         senderNameController.text = data.merchantName;
 
-        ibanController.text = data.iban.first.iban;
+        ibanController.text =
+            IbanExtractor.extractIban(data.iban.first.iban) ?? '-';
 
         descriptionController.text = data.description;
 
@@ -156,6 +117,8 @@ class OpenAndCreateSelfInvoice extends HookWidget {
       }
 
       analyzeTextController.text = '';
+
+      isLoading.value = false;
     }
 
     Future pickFile() async {
@@ -182,32 +145,6 @@ class OpenAndCreateSelfInvoice extends HookWidget {
         }
       } else {
         print('cncelled');
-        isLoading.value = false;
-      }
-    }
-
-    Future pickImage() async {
-      if (kIsWeb) {
-        FilePickerResult? result =
-            await FilePicker.platform.pickFiles(type: FileType.image);
-
-        if (result != null) {
-          getImageData(result.files.first.bytes);
-        } else {
-          print('cncelled');
-          isLoading.value = false;
-        }
-      } else {
-        final image =
-            await ImagePicker().pickImage(source: ImageSource.gallery);
-        if (image == null) return;
-        final imageTemp = File(image.path);
-
-        if (imageTemp != null) {
-          print(imageTemp);
-          var bytes = await File(image.path).readAsBytes();
-          await getImageData(bytes);
-        }
       }
     }
 
@@ -218,7 +155,27 @@ class OpenAndCreateSelfInvoice extends HookWidget {
         await getExtractedDataFromText(analyzeTextController.text);
       } else {
         print('cncelled');
-        isLoading.value = false;
+      }
+    }
+
+    Future<Uint8List?> getFilePath() async {
+      try {
+        final Uint8List? result =
+            await platformPDFBytes.invokeMethod('getPdfBytes');
+        print('FLUTTERBYTES $result');
+
+        if (result != null) {
+          await getFileData(result);
+          return result;
+        } else {
+          return null;
+        }
+      } on PlatformException catch (e) {
+        print("Failed to get file path: '${e.message}'.");
+        return null;
+      } catch (e) {
+        print("Unexpected error: $e");
+        return null;
       }
     }
 
@@ -236,29 +193,38 @@ class OpenAndCreateSelfInvoice extends HookWidget {
       navigationController.changeIndex(0);
     }
 
-    Future<Uint8List?> _getFilePath() async {
-      try {
-        final Uint8List? result =
-            await platformPDFBytes.invokeMethod('getPdfBytes');
-        print('FLUTTERBYTES $result');
-
-        await getFileData(result);
-        return result;
-      } on PlatformException catch (e) {
-        print("Failed to get file path: '${e.message}'.");
-        return null;
-      }
-    }
-
     useEffect(() {
-      if (!kIsWeb) {
-        _getFilePath().then((value) {
-          pdfBytes.value = value;
-        });
-      }
+      late AppLifecycleListener listener;
 
-      return;
-    }, const []);
+      listener = AppLifecycleListener(
+        onResume: () {
+          print('App resumed, checking for new intents');
+          getFilePath().then((value) {
+            if (value != null) {
+              pdfBytes.value = value;
+            }
+          }).catchError((error) {});
+        },
+        onShow: () {
+          print('App shown, checking for new intents');
+
+          getFilePath().then((value) {
+            if (value != null) {
+              pdfBytes.value = value;
+            }
+          }).catchError((error) {});
+        },
+      );
+      getFilePath().then((value) {
+        if (value != null) {
+          pdfBytes.value = value;
+        }
+      }).catchError((error) {});
+
+      return () {
+        listener.dispose();
+      };
+    }, []);
 
     return (Scaffold(
       appBar: CustomAppbar(title: 'hd_CreateASlickbill'.tr, appbarIcon: null),
@@ -412,8 +378,9 @@ class OpenAndCreateSelfInvoice extends HookWidget {
                               onPressed: () {
                                 selectedIbanIndex.value = idx;
 
-                                ibanController.text =
-                                    extractedData.value!.iban[idx].iban;
+                                ibanController.text = IbanExtractor.extractIban(
+                                        extractedData.value!.iban[idx].iban) ??
+                                    '-';
                               },
                               child: Text(
                                 iban.bankName,
@@ -427,7 +394,7 @@ class OpenAndCreateSelfInvoice extends HookWidget {
                                                 .light
                                             : Theme.of(context)
                                                 .colorScheme
-                                                .blue),
+                                                .light),
                               )));
                         }).toList() as List<Widget>,
                       )

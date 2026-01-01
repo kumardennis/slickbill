@@ -1,0 +1,10 @@
+{
+  "buildCommand": "flutter build web --release --dart-define=SUPABASE_ANON_KEY=$SUPABASE_ANON_KEY --dart-define=SUPABASE_ANON_LOCAL_KEY=$SUPABASE_ANON_LOCAL_KEY --dart-define=OPEN_AI_KEY=$OPEN_AI_KEY --dart-define=GOOGLE_WEB_CLIENT_SECRET=$GOOGLE_WEB_CLIENT_SECRET --dart-define=GOOGLE_WEB_CLIENT_ID=$GOOGLE_WEB_CLIENT_ID --dart-define=GOOGLE_ANDROID_CLIENT_ID=$GOOGLE_ANDROID_CLIENT_ID --dart-define=GOOGLE_IOS_CLIENT_ID=$GOOGLE_IOS_CLIENT_ID",
+  "outputDirectory": "build/web",
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
+    }
+  ]
+}

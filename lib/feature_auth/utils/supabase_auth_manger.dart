@@ -1,9 +1,10 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:get/get.dart';
-import 'package:slickbill/feature_navigation/getx_controllers/navigation_controller.dart';
+import 'package:slickbill/feature_auth/services/google_auth_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,6 +17,7 @@ JsonEncoder encoder = const JsonEncoder.withIndent('  ');
 class SupabaseAuthManger {
   final supabseClient = Supabase.instance.client;
   final userController = Get.put(UserController());
+  final GoogleAuthService _googleAuthService = GoogleAuthService();
 
   List<BankAccount>? _parseIbans(dynamic ibansData) {
     if (ibansData == null) return null;
@@ -55,12 +57,17 @@ class SupabaseAuthManger {
         .select('*')
         .eq('authUserId', authUserId);
 
+    if (userRecordResponse.isEmpty) {
+      // Let caller know there is no app user yet
+      throw StateError('USER_NOT_FOUND_IN_PUBLIC_USERS');
+    }
+
     final userProfileClassed = UserModel(
-      userRecordResponse[0]['id'],
-      userRecordResponse[0]['username'],
-      userRecordResponse[0]['email'],
-      userRecordResponse[0]['authUserId'],
-      tokenToUse,
+      id: userRecordResponse[0]['id'],
+      username: userRecordResponse[0]['username'],
+      email: userRecordResponse[0]['email'],
+      authUserId: userRecordResponse[0]['authUserId'],
+      accessToken: tokenToUse,
     );
 
     final privateUserResponse = await supabseClient
@@ -84,35 +91,38 @@ class SupabaseAuthManger {
     final parsedIbans = _parseIbans(ibansData);
 
     final clientUserClassed = ClientUserModel(
-      userRecordResponse[0]['id'],
-      privateUserResponse.length > 0 ? privateUserResponse[0]['id'] : null,
-      businessUserResponse.length > 0 ? businessUserResponse[0]['id'] : null,
-      userRecordResponse[0]['username'],
-      userRecordResponse[0]['email'],
-      userRecordResponse[0]['authUserId'],
-      tokenToUse,
-      privateUserResponse.length > 0
+      id: userRecordResponse[0]['id'],
+      username: userRecordResponse[0]['username'],
+      email: userRecordResponse[0]['email'],
+      authUserId: userRecordResponse[0]['authUserId'],
+      accessToken: tokenToUse,
+      isPrivate: privateUserResponse.length > 0,
+      privateUserId:
+          privateUserResponse.length > 0 ? privateUserResponse[0]['id'] : null,
+      businessUserId: businessUserResponse.length > 0
+          ? businessUserResponse[0]['id']
+          : null,
+      iban: privateUserResponse.length > 0
           ? privateUserResponse[0]['iban']
           : businessUserResponse[0]['iban'],
-      parsedIbans,
-      privateUserResponse.length > 0
+      ibans: parsedIbans,
+      bankAccountName: privateUserResponse.length > 0
           ? privateUserResponse[0]['bankAccountName']
           : businessUserResponse[0]['bankAccountName'],
-      privateUserResponse.length > 0
+      firstName: privateUserResponse.length > 0
           ? privateUserResponse[0]['firstName']
           : null,
-      privateUserResponse.length > 0
+      lastName: privateUserResponse.length > 0
           ? privateUserResponse[0]['lastName']
           : null,
-      businessUserResponse.length > 0
+      fullName: businessUserResponse.length > 0
           ? businessUserResponse[0]['fullName']
           : null,
-      businessUserResponse.length > 0
+      publicName: businessUserResponse.length > 0
           ? businessUserResponse[0]['publicName']
           : null,
-      privateUserResponse.length > 0,
-      privateUserResponse[0]['strigaUserId'],
-      privateUserResponse[0]['strigaWalletId'],
+      strigaUserId: privateUserResponse[0]['strigaUserId'],
+      strigaWalletId: privateUserResponse[0]['strigaWalletId'],
     );
 
     userController.loadUser(clientUserClassed);
@@ -163,6 +173,62 @@ class SupabaseAuthManger {
     }
   }
 
+  Future<bool> signInWithGoogle() async {
+    try {
+      print('Starting Google Sign-In flow...');
+
+      final response = await _googleAuthService.signInWithGoogle();
+
+      if (response == null || response.user == null) {
+        print('Google Sign-In was cancelled or failed');
+        return false;
+      }
+
+      final session = response.session;
+      final user = response.user;
+
+      if (session == null || user == null) {
+        print('No session or user returned from Supabase');
+        return false;
+      }
+
+      try {
+        // Try to load app user (users + private_users + striga stuff)
+        await loadFreshUser(user.id, session.accessToken);
+      } on StateError catch (e) {
+        if (e.message == 'USER_NOT_FOUND_IN_PUBLIC_USERS') {
+          // 1) create users + private_users rows
+          await createUserForAuthUser(user);
+
+          // 2) load again to get the new app user id
+          final userRecordResponse = await supabseClient
+              .from('users')
+              .select('id')
+              .eq('authUserId', user.id);
+
+          if (userRecordResponse.isNotEmpty) {
+            final appUserId = userRecordResponse[0]['id'] as int;
+
+            // 3) call Striga create-user function to enrich
+            await _createStrigaUserFor(appUserId, session.accessToken);
+          }
+
+          // 4) load enriched user into UserController
+          await loadFreshUser(user.id, session.accessToken);
+        } else {
+          rethrow;
+        }
+      }
+
+      Get.toNamed('/home-screen');
+      print('Google Sign-In complete, user saved');
+      return true;
+    } catch (e) {
+      print('Error in Google Sign-In: $e');
+      return false;
+    }
+  }
+
   Future<void> signUp(
       String email,
       String password,
@@ -172,9 +238,11 @@ class SupabaseAuthManger {
       String iban,
       String accountHolder) async {
     try {
+      final _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
       final response = await Supabase.instance.client.functions
           .invoke('auth-and-settings/create-user', headers: {
-        'Authorization': 'Bearer ${dotenv.env['SUPABASE_ANON_KEY']}'
+        'Authorization':
+            'Bearer ${kDebugMode ? dotenv.env['SUPABASE_ANON_KEY'] ?? '' : _supabaseAnonKey}'
       }, body: {
         "email": email,
         "password": password,
@@ -196,6 +264,80 @@ class SupabaseAuthManger {
       }
     } catch (err) {
       print(err);
+    }
+  }
+
+  /// Create a new app user for an existing Supabase auth user (Google, etc.)
+  /// Does NOT sign up with email/password – assumes auth.user already exists.
+  Future<void> createUserForAuthUser(User authUser) async {
+    try {
+      final email = authUser.email ?? '';
+      final fullName = authUser.userMetadata?['full_name']?.toString() ??
+          authUser.userMetadata?['name']?.toString() ??
+          '';
+      String firstName = '';
+      String lastName = '';
+
+      if (fullName.isNotEmpty) {
+        final parts = fullName.split(' ');
+        firstName = parts.first;
+        if (parts.length > 1) {
+          lastName = parts.sublist(1).join(' ');
+        }
+      }
+
+      final username =
+          email.isNotEmpty ? email.split('@').first : 'user_${authUser.id}';
+
+      // 1) insert into public.users
+      final insertedUser = await supabseClient
+          .from('users')
+          .insert(<String, dynamic>{
+            'username': username,
+            'email': email,
+            'authUserId': authUser.id,
+          })
+          .select()
+          .single();
+
+      // 2) create default private_users row for this user
+      await supabseClient.from('private_users').insert(<String, dynamic>{
+        'userId': insertedUser['id'],
+        'firstName': firstName,
+        'lastName': lastName,
+        // other fields (iban, bankAccountName, etc.) can be set later
+      });
+
+      print(
+          'createUserForAuthUser: created users + private_users for authUserId=${authUser.id}');
+    } catch (e) {
+      print('Error in createUserForAuthUser: $e');
+      rethrow;
+    }
+  }
+
+  /// Call the Striga `create-user` Edge Function for a given app user ID
+  Future<void> _createStrigaUserFor(int appUserId, String accessToken) async {
+    try {
+      final response = await Supabase.instance.client.functions.invoke(
+        'striga/create-user',
+        headers: {
+          'Authorization': 'Bearer $accessToken',
+        },
+        body: {
+          'userId': appUserId,
+        },
+      );
+
+      final data = response.data;
+
+      if (data['isRequestSuccessfull'] != true) {
+        print('Striga create-user failed: ${data['error']}');
+      } else {
+        print('Striga user created successfully');
+      }
+    } catch (e) {
+      print('Error calling striga/create-user: $e');
     }
   }
 }

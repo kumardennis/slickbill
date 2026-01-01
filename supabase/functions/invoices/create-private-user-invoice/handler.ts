@@ -103,6 +103,8 @@ export const handler = async (req: Request) => {
           invoiceNo: `${privateUserId}${Date.now()}`,
           referenceNo,
           category,
+          receiverPrivateUserId: receiverUserId,
+          senderPrivateUserId: privateUserId,
         })
         .select();
 

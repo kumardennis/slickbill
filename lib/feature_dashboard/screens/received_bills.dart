@@ -1,10 +1,6 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
-import 'package:intl/intl.dart';
 import 'package:loader_overlay/loader_overlay.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
@@ -15,62 +11,64 @@ import 'package:slickbill/feature_dashboard/utils/striga_class.dart';
 import 'package:slickbill/feature_dashboard/widgets/invoice_card.dart';
 import 'package:slickbill/feature_dashboard/widgets/received_invoice_sheet.dart';
 import 'package:slickbill/feature_dashboard/widgets/statistics_card.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../feature_auth/getx_controllers/user_controller.dart';
-import '../../feature_auth/utils/money_formatter.dart';
 
 class ReceivedBills extends HookWidget {
-  ReceivedInvoicesClass receivedInvoicesClass = ReceivedInvoicesClass();
-  PaymentClass payment = PaymentClass();
-  StrigaClass striga = StrigaClass();
-  final UserController userController = Get.find();
-  bool callInProgress = false;
-  var strigaChallengeId = useState("");
-
-  ReceivedBills({super.key});
+  const ReceivedBills({super.key});
 
   @override
   Widget build(BuildContext context) {
-    var isLoading = useState<bool>(false);
-    var invoices = useState<List<InvoiceModel>?>([]);
+    final receivedInvoicesClass = ReceivedInvoicesClass();
+    final payment = PaymentClass();
+    final striga = StrigaClass();
+    final UserController userController = Get.find();
 
-    var pending = useState<double?>(0.0);
-    var paidThisMonth = useState<double?>(0.0);
+    final supabase = Supabase.instance.client;
 
-    FormatNumber formatNumber = FormatNumber();
+    final isLoading = useState<bool>(false);
+    final invoices = useState<List<InvoiceModel>?>([]);
+    final pending = useState<double?>(0.0);
+    final paidThisMonth = useState<double?>(0.0);
+    final callInProgress = useState<bool>(false);
+    final strigaChallengeId = useState<String>("");
 
-    Future getInvoices() async {
+    Future<void> getInvoices() async {
+      if (!context.mounted) return;
       isLoading.value = true;
 
-      var response = await receivedInvoicesClass.getPrivateReceivedInvoices();
+      final response = await receivedInvoicesClass.getPrivateReceivedInvoices();
+      if (!context.mounted) return;
 
       invoices.value = response;
       isLoading.value = false;
     }
 
-    Future getPendingSum() async {
-      var response = await receivedInvoicesClass.getPendingInvoicesSum();
-
+    Future<void> getPendingSum() async {
+      final response = await receivedInvoicesClass.getPendingInvoicesSum();
+      if (!context.mounted) return;
       pending.value = response;
     }
 
-    Future getRceivedSum() async {
-      var response = await receivedInvoicesClass
+    Future<void> getReceivedSum() async {
+      final response = await receivedInvoicesClass
           .getPaidPaymentsThisMonth(userController.user.value.accessToken);
-
+      if (!context.mounted) return;
       paidThisMonth.value = response;
     }
 
-    Future updateInvoiceStatus(InvoiceModel invoice, isPaid) async {
+    Future<void> updateInvoiceStatus(InvoiceModel invoice, bool isPaid) async {
       await receivedInvoicesClass.updateInvoiceStatus(invoice.id, isPaid);
       await getInvoices();
       await getPendingSum();
-      await getRceivedSum();
-      callInProgress = false;
+      await getReceivedSum();
+      if (!context.mounted) return;
+      callInProgress.value = false;
       Navigator.of(context).pop();
     }
 
-    Future payInvoice(InvoiceModel invoice, bool isPaid) async {
+    Future<void> payInvoice(InvoiceModel invoice, bool isPaid) async {
       final token = await payment.getPaymentToken("LHV");
 
       if (token.isEmpty) {
@@ -87,16 +85,32 @@ class ReceivedBills extends HookWidget {
       await updateInvoiceStatus(invoice, isPaid);
     }
 
-    Future createStrigaTransaction(InvoiceModel invoice, bool isPaid) async {
-      final challengeId = await striga.initiateStrigaTransaction(
-        invoice.senders!.privateUsers!.userId,
-        invoice.description,
-        invoice.amount,
-      );
+    Future<void> createStrigaTransaction(
+        InvoiceModel invoice, bool isPaid) async {
+      context.loaderOverlay.show(
+          widgetBuilder: (_) => Center(
+                  child: Text(
+                'inf_WontBeMoment'.tr,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyLarge
+                    ?.copyWith(color: Theme.of(context).colorScheme.light),
+              )));
+
+      final challengeId = invoice.senderId == null
+          ? await striga.initiateStrigaSepaTransaction(
+              invoice.senderIban!, invoice.description, invoice.amount)
+          : await striga.initiateStrigaTransaction(
+              invoice.senders!.privateUsers!.userId,
+              invoice.description,
+              invoice.amount,
+            );
 
       if (challengeId.isEmpty) {
         return;
       }
+
+      context.loaderOverlay.hide();
 
       strigaChallengeId.value = challengeId;
 
@@ -107,7 +121,7 @@ class ReceivedBills extends HookWidget {
         context.loaderOverlay.show(
             widgetBuilder: (_) => Center(
                     child: Text(
-                  'inf_CreatingTokenAndStartingPayment'.tr,
+                  'inf_WontBeMoment'.tr,
                   style: Theme.of(context)
                       .textTheme
                       .bodyLarge
@@ -128,11 +142,13 @@ class ReceivedBills extends HookWidget {
       }
     }
 
-    Future updateInvoiceObsolete(InvoiceModel invoice, isObsolete) async {
+    Future<void> updateInvoiceObsolete(
+        InvoiceModel invoice, bool isObsolete) async {
       await receivedInvoicesClass.updateInvoiceObsolete(invoice.id, isObsolete);
       await getInvoices();
       await getPendingSum();
-      await getRceivedSum();
+      await getReceivedSum();
+      if (!context.mounted) return;
       Navigator.of(context).pop();
     }
 
@@ -148,10 +164,33 @@ class ReceivedBills extends HookWidget {
     }
 
     useEffect(() {
-      getInvoices();
-      getPendingSum();
-      getRceivedSum();
-    }, [userController.user.value.accessToken]);
+      Future.microtask(() async {
+        await getInvoices();
+        await getPendingSum();
+        await getReceivedSum();
+      });
+
+      final changes = supabase
+          .channel('invoice-updates-received-bills')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.insert,
+            schema: 'public',
+            table: 'digital_invoices',
+            filter: PostgresChangeFilter(
+              type: PostgresChangeFilterType.eq,
+              column: 'receiverPrivateUserId',
+              value: userController.user.value.privateUserId.toString(),
+            ),
+            callback: (payload) => getInvoices(),
+          )
+          .subscribe();
+
+      return () async {
+        try {
+          await supabase.removeChannel(changes);
+        } catch (_) {}
+      };
+    }, [userController.user.value.privateUserId]);
 
     return (SingleChildScrollView(
       child: Padding(

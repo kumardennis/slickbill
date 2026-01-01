@@ -92,8 +92,8 @@ class SendInvoicesClass {
     }
   }
 
-  Future<void> createReceivePrivateQRInvoice(description, dueDate, referenceNo,
-      senderPrivateUserId, receiverUserAmount, category) async {
+  Future<String?> createReceivePrivateQRInvoice(description, dueDate,
+      referenceNo, senderPrivateUserId, receiverUserAmount, category) async {
     try {
       final response = await Supabase.instance.client.functions
           .invoke('invoices/create-private-user-invoice', headers: {
@@ -119,6 +119,7 @@ class SendInvoicesClass {
 
       if (data['isRequestSuccessfull'] == true) {
         Get.snackbar('Success', 'inf_AddedToSlickBill'.tr);
+        return data['data']['digitalInvoiceData']['id'];
       } else {
         debugPrint(data['error'].toString());
         Get.snackbar('Oops..', data['error'].toString());

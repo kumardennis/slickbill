@@ -12,6 +12,7 @@ import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
 import 'package:slickbill/feature_dashboard/utils/sent_invoices_class.dart';
 import 'package:slickbill/feature_dashboard/widgets/invoice_card.dart';
 import 'package:slickbill/feature_dashboard/widgets/statistics_card.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../feature_auth/getx_controllers/user_controller.dart';
 import '../../feature_auth/utils/money_formatter.dart';
@@ -21,6 +22,8 @@ import '../widgets/sent_invoice_sheet.dart';
 class SentBills extends HookWidget {
   SentInvoicesClass sentInvoicesClass = SentInvoicesClass();
   final UserController userController = Get.find();
+
+  final supabase = Supabase.instance.client;
 
   SentBills({super.key});
 
@@ -71,22 +74,29 @@ class SentBills extends HookWidget {
               invoice: invoice, updateInvoiceObsolete: updateInvoiceObsolete));
     }
 
-    useEffect(() {
-      getInvoices();
-    }, [userController.user.value.accessToken]);
+    Future refreshAllData() async {
+      await getInvoices();
+      await getPendingSum();
+      await getRceivedSum();
+    }
 
     useEffect(() {
-      Future getPendingSum() async {
-        var response = await sentInvoicesClass.getPendingInvoicesSum();
+      refreshAllData();
 
-        pending.value = response;
-      }
+      final changes = supabase
+          .channel('invoice-updates-received-bills')
+          .onPostgresChanges(
+              event: PostgresChangeEvent.update,
+              schema: 'public',
+              table: 'digital_invoices',
+              filter: PostgresChangeFilter(
+                  type: PostgresChangeFilterType.eq,
+                  column: 'senderPrivateUserId',
+                  value: userController.user.value.privateUserId.toString()),
+              callback: (payload) => refreshAllData())
+          .subscribe();
 
-      getPendingSum();
-    }, [userController.user.value.accessToken]);
-
-    useEffect(() {
-      getRceivedSum();
+      return () => changes.unsubscribe();
     }, [userController.user.value.accessToken]);
 
     return (SingleChildScrollView(

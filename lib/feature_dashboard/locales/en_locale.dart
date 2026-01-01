@@ -24,7 +24,8 @@ Map<String, String> dashboardLocales_EN = {
   'inf_StatusUpdating': 'Updating status...',
   'lbl_Category': 'Category',
   'inf_WalletFetched': 'Wallet fetched successfully',
-  'lbl_WaitingForPayment': 'Waiting for Payment',
-  'lbl_PendingToPay': 'Pending to Pay',
+  'lbl_WaitingForPayment': 'To receive',
+  'lbl_PendingToPay': 'To Pay',
   'inf_PaymentConfirmed': 'Payment confirmed successfully',
+  'hd_PublicInvoices': 'Links',
 };

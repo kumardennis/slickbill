@@ -51,3 +51,4 @@ app.*.map.json
 /android/build/ios/XCBuildData
 /server/node_modules
 supabase/.env.local
+lib/config/env_config.dart

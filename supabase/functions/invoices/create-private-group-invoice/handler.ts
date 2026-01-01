@@ -2,9 +2,7 @@
 // https://deno.land/manual/getting_started/setup_your_environment
 // This enables autocomplete, go to definition, etc.
 
-import {
-  User,
-} from "https://esm.sh/v96/@supabase/gotrue-js@2.16.0/dist/module/index.d.ts";
+import { User } from "https://esm.sh/v96/@supabase/gotrue-js@2.16.0/dist/module/index.d.ts";
 import {
   confirmedRequiredParams,
   errorResponseData,
@@ -30,8 +28,7 @@ export const handler = async (req: Request) => {
       dueDate,
       referenceNo,
       category,
-    } = await req
-      .json();
+    } = await req.json();
 
     if (
       !confirmedRequiredParams([
@@ -48,13 +45,14 @@ export const handler = async (req: Request) => {
         headers: { "Content-Type": "application/json" },
       });
     }
-    const { data: groupData, error: groupError } = await supabase.from(
-      "private_groups",
-    ).insert({
-      creatorUserId: privateUserId,
-      deadline: dueDate,
-      description,
-    }).select();
+    const { data: groupData, error: groupError } = await supabase
+      .from("private_groups")
+      .insert({
+        creatorUserId: privateUserId,
+        deadline: dueDate,
+        description,
+      })
+      .select();
 
     if (groupError) {
       const responseData = {
@@ -70,11 +68,12 @@ export const handler = async (req: Request) => {
 
     if (groupData != null) {
       for (const receiverUser of receiverUsers) {
-        const { data: senderData, error: senderError } = await supabase.from(
-          "senders",
-        ).insert({
-          privateUserId,
-        }).select();
+        const { data: senderData, error: senderError } = await supabase
+          .from("senders")
+          .insert({
+            privateUserId,
+          })
+          .select();
 
         if (senderError) {
           const responseData = {
@@ -89,11 +88,11 @@ export const handler = async (req: Request) => {
         }
 
         const { data: receiverData, error: receiverError } = await supabase
-          .from(
-            "receivers",
-          ).insert({
+          .from("receivers")
+          .insert({
             privateUserId: receiverUser.receiverUserId,
-          }).select();
+          })
+          .select();
 
         if (receiverError) {
           const responseData = {
@@ -108,20 +107,23 @@ export const handler = async (req: Request) => {
         }
 
         const { data: digitalInvoiceData, error: digitalInvoiceError } =
-          await supabase.from(
-            "digital_invoices",
-          ).insert({
-            senderId: senderData[0].id,
-            receiverId: receiverData[0].id,
-            amount: receiverUser.amount,
-            description,
-            senderName,
-            deadline: dueDate,
-            invoiceNo: `${privateUserId}${Date.now()}`,
-            referenceNo,
-            category,
-            privateGroupId: groupData[0].id,
-          }).select();
+          await supabase
+            .from("digital_invoices")
+            .insert({
+              senderId: senderData[0].id,
+              receiverId: receiverData[0].id,
+              amount: receiverUser.amount,
+              description,
+              senderName,
+              deadline: dueDate,
+              invoiceNo: `${privateUserId}${Date.now()}`,
+              referenceNo,
+              category,
+              receiverPrivateUserId: receiverUser.receiverUserId,
+              privateGroupId: groupData[0].id,
+              senderPrivateUserId: privateUserId,
+            })
+            .select();
 
         if (digitalInvoiceError) {
           const responseData = {

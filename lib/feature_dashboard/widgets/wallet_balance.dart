@@ -19,31 +19,59 @@ class WalletBalance extends HookWidget {
     var isLoading = useState(false);
     var pendingReceived = useState<double?>(0.0);
     var pendingSending = useState<double?>(0.0);
+    final isMounted = useIsMounted();
 
     Future<void> fetchBalance() async {
+      if (!isMounted()) return;
       isLoading.value = true;
-      Map wallet = await strigaClass.getWallet();
-      balance.value = double.parse(wallet['hAmount']) ?? 0.0;
 
-      isLoading.value = false;
+      try {
+        Map wallet = await strigaClass.getWallet();
+        if (isMounted()) {
+          balance.value =
+              double.tryParse(wallet['hAmount']?.toString() ?? '0') ?? 0.0;
+          isLoading.value = false;
+        }
+      } catch (e) {
+        print('Error fetching balance: $e');
+        if (isMounted()) {
+          isLoading.value = false;
+        }
+      }
     }
 
-    Future getPendingSendingSum() async {
-      var response = await sentInvoicesClass.getPendingInvoicesSum();
-
-      pendingSending.value = response;
+    Future<void> getPendingSendingSum() async {
+      try {
+        var response = await sentInvoicesClass.getPendingInvoicesSum();
+        if (isMounted()) {
+          pendingSending.value = response;
+        }
+      } catch (e) {
+        print('Error fetching pending sending: $e');
+      }
     }
 
-    Future getPendingReceivedSum() async {
-      var response = await receivedInvoicesClass.getPendingInvoicesSum();
+    Future<void> getPendingReceivedSum() async {
+      try {
+        var response = await receivedInvoicesClass.getPendingInvoicesSum();
+        if (isMounted()) {
+          pendingReceived.value = response;
+        }
+      } catch (e) {
+        print('Error fetching pending received: $e');
+      }
+    }
 
-      pendingReceived.value = response;
+    String formatAmount(double? amount) {
+      if (amount == null) return '0.00';
+      return amount.toStringAsFixed(2);
     }
 
     useEffect(() {
       fetchBalance();
       getPendingSendingSum();
       getPendingReceivedSum();
+      return null;
     }, []);
 
     return Container(
@@ -87,9 +115,12 @@ class WalletBalance extends HookWidget {
                   ),
                   const SizedBox(height: 4),
                   isLoading.value
-                      ? CircularProgressIndicator()
+                      ? const CircularProgressIndicator(
+                          valueColor:
+                              AlwaysStoppedAnimation<Color>(Colors.white),
+                        )
                       : Text(
-                          '€ ${balance.value}', // Replace with actual balance
+                          '€ ${formatAmount(balance.value)}',
                           style: Theme.of(context)
                               .textTheme
                               .headlineLarge
@@ -107,7 +138,7 @@ class WalletBalance extends HookWidget {
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: Icon(
+                child: const Icon(
                   Icons.account_balance_wallet,
                   color: Colors.white,
                   size: 28,
@@ -151,7 +182,7 @@ class WalletBalance extends HookWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '€ ${pendingSending.value ?? '0.00'}',
+                        '€ ${formatAmount(pendingSending.value)}',
                         style:
                             Theme.of(context).textTheme.titleMedium?.copyWith(
                                   color: Colors.white,
@@ -193,7 +224,7 @@ class WalletBalance extends HookWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '€ ${pendingReceived.value ?? '0.00'}',
+                        '€ ${formatAmount(pendingReceived.value)}',
                         style:
                             Theme.of(context).textTheme.titleMedium?.copyWith(
                                   color: Colors.white,

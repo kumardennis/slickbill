@@ -96,7 +96,7 @@ class ReadQrInvoice extends HookWidget {
     }, []);
 
     return Scaffold(
-      appBar: CustomAppbar(title: 'hd_NfcTransaction'.tr, appbarIcon: null),
+      appBar: CustomAppbar(title: 'hd_QrTransaction'.tr, appbarIcon: null),
       body: SafeArea(
         bottom: true,
         child: Column(

@@ -1,0 +1,53 @@
+<svg viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Gradient for icon -->
+    <linearGradient id="iconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0066FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00A8FF;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Shine effect -->
+    <linearGradient id="shineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0" />
+      <stop offset="50%" style="stop-color:#ffffff;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Centered icon -->
+  <g transform="translate(15, 15)">
+    <!-- Receipt/Bill shape with rounded corners - scaled up -->
+    <path d="M 10 0 L 70 0 L 70 85 L 63 78 L 56 85 L 49 78 L 42 85 L 35 78 L 28 85 L 21 78 L 14 85 L 10 85 Z" 
+          fill="url(#iconGradient)" 
+          stroke="none"/>
+    
+    <!-- Bill lines (invoice details) -->
+    <line x1="20" y1="18" x2="60" y2="18" stroke="white" stroke-width="3" opacity="0.9"/>
+    <line x1="20" y1="32" x2="52" y2="32" stroke="white" stroke-width="2.5" opacity="0.7"/>
+    <line x1="20" y1="46" x2="60" y2="46" stroke="white" stroke-width="2.5" opacity="0.7"/>
+    <line x1="20" y1="60" x2="45" y2="60" stroke="white" stroke-width="2.5" opacity="0.5"/>
+    
+    <!-- NFC/Wireless waves emanating from bill -->
+    <path d="M 75 22 Q 87 28 87 42" 
+          fill="none" 
+          stroke="#00D4FF" 
+          stroke-width="4" 
+          stroke-linecap="round"
+          opacity="0.8"/>
+    <path d="M 82 16 Q 99 28 99 56" 
+          fill="none" 
+          stroke="#00D4FF" 
+          stroke-width="3.5" 
+          stroke-linecap="round"
+          opacity="0.6"/>
+    <path d="M 88 10 Q 110 28 110 68" 
+          fill="none" 
+          stroke="#00D4FF" 
+          stroke-width="3" 
+          stroke-linecap="round"
+          opacity="0.4"/>
+    
+    <!-- Shine effect on bill -->
+    <rect x="10" y="0" width="60" height="85" fill="url(#shineGradient)" opacity="0.3"/>
+  </g>
+</svg>

@@ -1,0 +1,77 @@
+<svg viewBox="0 0 400 120" xmlns="http://www.w3.org/2000/svg">
+  <!-- Dark background -->
+  <rect width="400" height="120" fill="#0a0a0a"/>
+  
+  <defs>
+    <!-- Gradient for icon - brighter for dark mode -->
+    <linearGradient id="iconGradientDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#2E8BFF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00D4FF;stop-opacity:1" />
+    </linearGradient>
+    
+    <!-- Shine effect -->
+    <linearGradient id="shineGradientDark" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0" />
+      <stop offset="50%" style="stop-color:#ffffff;stop-opacity:0.4" />
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Icon: Stylized bill/receipt with NFC waves -->
+  <g transform="translate(20, 20)">
+    <!-- Receipt/Bill shape with rounded corners -->
+    <path d="M 10 0 L 60 0 L 60 70 L 55 65 L 50 70 L 45 65 L 40 70 L 35 65 L 30 70 L 25 65 L 20 70 L 15 65 L 10 70 Z" 
+          fill="url(#iconGradientDark)" 
+          stroke="none"/>
+    
+    <!-- Bill lines (invoice details) - white for contrast -->
+    <line x1="18" y1="15" x2="52" y2="15" stroke="white" stroke-width="2" opacity="1"/>
+    <line x1="18" y1="25" x2="45" y2="25" stroke="white" stroke-width="2" opacity="0.8"/>
+    <line x1="18" y1="35" x2="52" y2="35" stroke="white" stroke-width="2" opacity="0.8"/>
+    <line x1="18" y1="45" x2="38" y2="45" stroke="white" stroke-width="2" opacity="0.6"/>
+    
+    <!-- NFC/Wireless waves - brighter cyan -->
+    <path d="M 65 20 Q 75 25 75 35" 
+          fill="none" 
+          stroke="#00F0FF" 
+          stroke-width="3" 
+          stroke-linecap="round"
+          opacity="0.9"/>
+    <path d="M 70 15 Q 85 25 85 45" 
+          fill="none" 
+          stroke="#00F0FF" 
+          stroke-width="2.5" 
+          stroke-linecap="round"
+          opacity="0.7"/>
+    <path d="M 75 10 Q 95 25 95 55" 
+          fill="none" 
+          stroke="#00F0FF" 
+          stroke-width="2" 
+          stroke-linecap="round"
+          opacity="0.5"/>
+    
+    <!-- Shine effect on bill -->
+    <rect x="10" y="0" width="50" height="70" fill="url(#shineGradientDark)" opacity="0.3"/>
+  </g>
+  
+  <!-- Text: SlickBills -->
+  <g transform="translate(130, 60)">
+    <!-- "Slick" in white -->
+    <text x="0" y="0" font-family="Arial, sans-serif" font-size="42" font-weight="700" fill="#ffffff">
+      Slick
+    </text>
+    
+    <!-- "Bills" in bright blue -->
+    <text x="95" y="0" font-family="Arial, sans-serif" font-size="42" font-weight="500" fill="#2E8BFF">
+      Bills
+    </text>
+  </g>
+  
+  <!-- Tagline - lighter gray for dark background -->
+  <text x="132" y="85" font-family="Arial, sans-serif" font-size="13" font-weight="400" fill="#b0b0b0" letter-spacing="0.5">
+    Pay Your Way. Now or Later.
+  </text>
+  
+  <!-- Small accent dot - brighter -->
+  <circle cx="360" cy="48" r="3" fill="#00F0FF"/>
+</svg>

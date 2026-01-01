@@ -46,7 +46,7 @@ class SentInvoiceSheet extends HookWidget {
       child: Padding(
         padding: const EdgeInsets.all(20.0),
         child: SingleChildScrollView(
-          child: Column(children: [
+          child: Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -62,8 +62,10 @@ class SentInvoiceSheet extends HookWidget {
                           ?.copyWith(fontWeight: FontWeight.w600),
                     ),
                     Text(
-                        DateFormat('EEE, dd MMM yyyy')
-                            .format(DateTime.parse(invoice.createdAt!)),
+                        invoice.createdAt != ''
+                            ? DateFormat('EEE, dd MMM yyyy')
+                                .format(DateTime.parse(invoice.createdAt!))
+                            : '-',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Theme.of(context).colorScheme.gray)),
                     Text(
@@ -161,17 +163,22 @@ class SentInvoiceSheet extends HookWidget {
                   ],
                 ),
                 Text(
-                    invoice.paidOnDate != null
+                    (invoice.paidOnDate != null &&
+                            invoice.paidOnDate!.isNotEmpty)
                         ? 'lbl_PaidOn'.trParams({
-                            'date':
-                                '${DateFormat('EEE, dd MMM yyyy').format(DateTime.parse(invoice.paidOnDate!))}'
+                            'date': DateFormat('EEE, dd MMM yyyy')
+                                .format(DateTime.parse(invoice.paidOnDate!))
                           })
-                        : 'lbl_Due'.trParams({
-                            'date':
-                                '${DateFormat('EEE, dd MMM yyyy').format(DateTime.parse(invoice.deadline!))}'
-                          }),
+                        : (invoice.deadline != null &&
+                                invoice.deadline!.isNotEmpty)
+                            ? 'lbl_Due'.trParams({
+                                'date': DateFormat('EEE, dd MMM yyyy')
+                                    .format(DateTime.parse(invoice.deadline!))
+                              })
+                            : 'lbl_Due'.trParams({'date': '-'}),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: invoice.paidOnDate != null
+                        color: (invoice.paidOnDate != null &&
+                                invoice.paidOnDate!.isNotEmpty)
                             ? Theme.of(context).colorScheme.green
                             : dateIsPassed
                                 ? Theme.of(context).colorScheme.red

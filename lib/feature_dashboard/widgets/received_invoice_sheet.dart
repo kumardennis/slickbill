@@ -380,25 +380,9 @@ class ReceivedInvoiceSheet extends HookWidget {
                       style: ElevatedButton.styleFrom(
                           backgroundColor: Theme.of(context).colorScheme.green),
                       onPressed: () async {
-                        // context.loaderOverlay.show(
-                        //     widgetBuilder: (_) => Center(
-                        //             child: Text(
-                        //           'inf_CreatingTokenAndStartingPayment'.tr,
-                        //           style: Theme.of(context)
-                        //               .textTheme
-                        //               .bodyLarge
-                        //               ?.copyWith(
-                        //                   color: Theme.of(context)
-                        //                       .colorScheme
-                        //                       .light),
-                        //         )));
-
                         paymentStarted.value = true;
                         await createStrigaPayment(invoice, true);
                         paymentStarted.value = false;
-
-                        // context.loaderOverlay.hide();
-                        // await openInvoice(invoice);
                       },
                       child: Padding(
                         padding: const EdgeInsets.all(15.0),
