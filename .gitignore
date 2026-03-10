@@ -52,3 +52,9 @@ app.*.map.json
 /server/node_modules
 supabase/.env.local
 lib/config/env_config.dart
+android/app/google-services.json
+android/app/service_account.json
+cdp_api_key.json
+cdp_api_key2.json
+cdp_wallet_secret (1).txt
+cdp_wallet_secret.txt

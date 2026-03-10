@@ -68,10 +68,37 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>GIDClientID</key>
+	<string>285202567016-b0qbj3mm9d9rhmf6g73jv177oh1uqecr.apps.googleusercontent.com</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>vercel.app</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<false/>
+				<key>NSExceptionRequiresForwardSecrecy</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+	<key>NSFaceIDUsageDescription</key>
+	<string>We need Face ID to authenticate payments securely</string>
+	<key>NSCameraUsageDescription</key>
+	<string>We need camera access to scan QR codes and receive slickbills</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -115,7 +142,5 @@
 			</dict>
 		</dict>
 	</array>
-	<key>GIDClientID</key>
-	<string>285202567016-b0qbj3mm9d9rhmf6g73jv177oh1uqecr.apps.googleusercontent.com</string>
 </dict>
 </plist>

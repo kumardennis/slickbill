@@ -2,9 +2,7 @@
 // https://deno.land/manual/getting_started/setup_your_environment
 // This enables autocomplete, go to definition, etc.
 
-import {
-  User,
-} from "https://esm.sh/v96/@supabase/gotrue-js@2.16.0/dist/module/index.d.ts";
+import { User } from "https://esm.sh/v96/@supabase/gotrue-js@2.16.0/dist/module/index.d.ts";
 import {
   confirmedRequiredParams,
   errorResponseData,
@@ -16,43 +14,33 @@ export const handler = async (req: Request) => {
   const supabase = createSupabase(req);
 
   try {
-    const {
-      privateUserId,
-      status,
-      paidOnDateRange,
-    } = await req
-      .json();
+    const { privateUserId, status, paidOnDateRange } = await req.json();
 
-    if (
-      !confirmedRequiredParams([
-        privateUserId,
-      ])
-    ) {
+    if (!confirmedRequiredParams([privateUserId])) {
       return new Response(JSON.stringify(errorResponseData), {
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    const query = supabase.from(
-      "private_groups",
-    ).select(
-      "digital_invoices!inner(*, senders(* , private_users(*)), receivers(* , private_users(*), business_users(*)))",
-    ).eq(
-      "creatorUserId",
-      privateUserId,
-    ).eq("digital_invoices.isObsolete", false).order("created_at", {
-      ascending: false,
-    });
+    const query = supabase
+      .from("private_groups")
+      .select(
+        "digital_invoices!inner(*, senders(* , private_users(*, users(*))), receivers(* , private_users(*, users(*)), business_users(*)))"
+      )
+      .eq("creatorUserId", privateUserId)
+      .eq("digital_invoices.isObsolete", false)
+      .order("created_at", {
+        ascending: false,
+      });
 
     if (status) {
       query.eq("digital_invoices.status", status);
     }
 
     if (paidOnDateRange) {
-      query.gte("digital_invoices.paidOnDate", paidOnDateRange[0]).lte(
-        "paidOnDate",
-        paidOnDateRange[1],
-      );
+      query
+        .gte("digital_invoices.paidOnDate", paidOnDateRange[0])
+        .lte("paidOnDate", paidOnDateRange[1]);
     }
 
     const { data: digitalInvoiceData, error: digitalInvoiceError } =

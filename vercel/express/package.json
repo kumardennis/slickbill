@@ -2,13 +2,23 @@
   "name": "express",
   "type": "module",
   "dependencies": {
+    "@coinbase/cdp-sdk": "^1.43.1",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
     "express": "5.1.0",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "viem": "^2.44.4"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts"
   },
   "devDependencies": {
     "@types/express": "5.0.0",
     "@types/node": "20.11.17",
+    "tsx": "^4.21.0",
     "typescript": "5.8.3"
   }
 }

@@ -70,25 +70,34 @@ class GoogleAuthService {
   Future<void> signInWithGoogleWeb() async {
     if (kIsWeb) {
       try {
-        // IMPORTANT: Don't use hash routing for OAuth redirect
-        // Supabase needs the query parameters, not hash fragments
-        final currentHost = Uri.base.origin;
+        final currentUri = Uri.base;
+        final path = currentUri.path;
 
-        String redirectUrl;
-        if (currentHost.contains('localhost')) {
-          // For localhost, use the port from current URL
-          redirectUrl = currentHost;
+        // Extract invoice token from /bill/<token> or /sign-in?invoice_token=...
+        String? invoiceToken;
+        if (path.startsWith('/bill/')) {
+          invoiceToken = path.replaceFirst('/bill/', '');
         } else {
-          // For production, use your actual domain WITHOUT hash
-          redirectUrl = 'https://slickbills.com';
+          invoiceToken = currentUri.queryParameters['invoice_token'];
         }
 
-        print('🔵 Starting OAuth with redirect: $redirectUrl');
-        print('🔵 Current host: $currentHost');
+        String redirectUrl;
+        if (currentUri.host.contains('localhost')) {
+          redirectUrl = invoiceToken != null && invoiceToken.isNotEmpty
+              ? 'http://localhost:3000/sign-in?invoice_token=$invoiceToken'
+              : 'http://localhost:3000/sign-in';
+        } else {
+          redirectUrl = invoiceToken != null && invoiceToken.isNotEmpty
+              ? 'https://app.slickbills.com/sign-in?invoice_token=$invoiceToken'
+              : 'https://app.slickbills.com/sign-in';
+        }
 
-        await Supabase.instance.client.auth.signInWithOAuth(
+        print('🔵 OAuth redirect URL: $redirectUrl');
+        print('🔵 Preserving invoice token: $invoiceToken');
+
+        await supabase.auth.signInWithOAuth(
           OAuthProvider.google,
-          redirectTo: redirectUrl, // Remove /#/ from redirect
+          redirectTo: redirectUrl,
           authScreenLaunchMode: LaunchMode.platformDefault,
         );
       } catch (e) {
@@ -96,8 +105,8 @@ class GoogleAuthService {
         Get.snackbar(
           'Sign In Failed',
           'Could not sign in with Google. Please try again.',
-          backgroundColor: Colors.red.withOpacity(0.1),
-          colorText: Colors.red,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
         );
         rethrow;
       }
@@ -139,6 +148,9 @@ class GoogleAuthService {
           firstName: (existingUser['firstName'] ?? '') as String? ?? '',
           lastName: (existingUser['lastName'] ?? '') as String? ?? '',
           isPrivate: true,
+          strigaUserId: (existingUser['strigaUserId'] ?? '') as String? ?? '',
+          strigaWalletId:
+              (existingUser['strigaWalletId'] ?? '') as String? ?? '',
         );
       }
 

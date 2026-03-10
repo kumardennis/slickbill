@@ -6,6 +6,7 @@ import {
 import { corsHeaders } from "../_shared/cors.ts";
 
 import { handler as create_user } from "./create-user/handler.ts";
+import { handler as update_user } from "./update-user/handler.ts";
 import { handler as start_kyc } from "./start-kyc/handler.ts";
 import { handler as get_wallets } from "./get-wallets/handler.ts";
 import { handler as enrich_account } from "./enrich-account/handler.ts";
@@ -19,6 +20,7 @@ console.log("Setting up localdev");
 
 const handlers = {
   "create-user": create_user,
+  "update-user": update_user,
   "start-kyc": start_kyc,
   "get-wallets": get_wallets,
   "enrich-account": enrich_account,

@@ -2,9 +2,7 @@
 // https://deno.land/manual/getting_started/setup_your_environment
 // This enables autocomplete, go to definition, etc.
 
-import {
-  User,
-} from "https://esm.sh/v96/@supabase/gotrue-js@2.16.0/dist/module/index.d.ts";
+import { User } from "https://esm.sh/v96/@supabase/gotrue-js@2.16.0/dist/module/index.d.ts";
 import {
   confirmedRequiredParams,
   errorResponseData,
@@ -12,35 +10,32 @@ import {
 import { corsHeaders } from "../../_shared/cors.ts";
 import { createSupabase } from "../../_shared/supabaseClient.ts";
 import dayjs from "https://deno.land/x/deno_dayjs@v0.5.0/mod.ts";
+import { sendOneSignalPush } from "../../_shared/oneSignal.ts";
 
 export const handler = async (req: Request) => {
   const supabase = createSupabase(req);
 
   try {
-    const {
-      invoiceId,
-      isPaid,
-    } = await req
-      .json();
+    const { invoiceId, isPaid } = await req.json();
 
-    if (
-      !confirmedRequiredParams([
-        invoiceId,
-        isPaid,
-      ])
-    ) {
+    if (!confirmedRequiredParams([invoiceId, isPaid])) {
       return new Response(JSON.stringify(errorResponseData), {
         headers: { "Content-Type": "application/json" },
       });
     }
 
     const { data: digitalInvoiceData, error: digitalInvoiceError } =
-      await supabase.from(
-        "digital_invoices",
-      ).update({
-        status: isPaid ? "PAID" : "UNPAID",
-        paidOnDate: isPaid ? dayjs().format("YYYY-MM-DD") : null,
-      }).match({ id: invoiceId }).select();
+      await supabase
+        .from("digital_invoices")
+        .update({
+          status: isPaid ? "PAID" : "UNPAID",
+          paidOnDate: isPaid ? dayjs().format("YYYY-MM-DD") : null,
+        })
+        .match({ id: invoiceId })
+        .select(
+          "*, sender:senders (*, private_users (firstName)), receiver:receivers (*, private_users (firstName))",
+        )
+        .single();
 
     if (digitalInvoiceError) {
       const responseData = {
@@ -59,6 +54,13 @@ export const handler = async (req: Request) => {
       data: digitalInvoiceData,
       error: digitalInvoiceError,
     };
+
+    await sendOneSignalPush({
+      externalUserId: digitalInvoiceData.sender.private_users.userId.toString(),
+      heading: "Slickbill Paid",
+      content: `${digitalInvoiceData.receiver.private_users.firstName} paid your slickbill`,
+      data: { type: "SLICKBILL_PAID", invoiceId: digitalInvoiceData.id },
+    });
 
     return new Response(JSON.stringify(responseData), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

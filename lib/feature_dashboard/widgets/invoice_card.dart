@@ -43,11 +43,12 @@ class InvoiceCard extends HookWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            Theme.of(context).colorScheme.darkerBlue,
-            Theme.of(context).colorScheme.lighterBlue.withAlpha(100),
-            Theme.of(context).colorScheme.darkerBlue.withOpacity(0.3),
+            Theme.of(context).colorScheme.lighterBlue.withAlpha(200),
+            Theme.of(context).colorScheme.blue.withAlpha(200),
+            Theme.of(context).colorScheme.darkerBlue.withAlpha(255),
+            Theme.of(context).colorScheme.lighterBlue.withOpacity(0.5),
           ],
-          stops: const [0.0, 0.4, 8.0],
+          stops: const [0.0, 0.1, 0.6, 0.99],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

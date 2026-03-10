@@ -9,7 +9,7 @@ import '../../feature_auth/getx_controllers/user_controller.dart';
 import '../models/receiver_user_model.dart';
 
 class SendInvoicesClass {
-  final UserController userController = Get.find();
+  final UserController userController = Get.find<UserController>();
   CurrentBankController currentBankController = Get.find();
 
   Future<void> createSendPrivateInvoice(originalInvoiceNo, description, dueDate,
@@ -25,7 +25,8 @@ class SendInvoicesClass {
 
         "senderIban": currentBankController.current.value.iban,
 
-        "receiverUserId": receiverUsers.first.id,
+        "receiverUserId": receiverUsers.first.userId,
+        "receiverPrivateUserId": receiverUsers.first.id,
         "receiverIsPrivate": true,
         // "originalInvoiceNo": originalInvoiceNo,
         "amount": receiverUsers.first.amount,
@@ -66,7 +67,10 @@ class SendInvoicesClass {
         "senderName":
             '${userController.user.value.firstName} ${userController.user.value.lastName?[0].toUpperCase()}',
 
-        "senderIban": currentBankController.current.value.iban,
+        "senderIban":
+            currentBankController.current.value.iban?.isNotEmpty == true
+                ? currentBankController.current.value.iban
+                : userController.user.value.iban,
         "receiverUserId": receiverUserId,
         "receiverIsPrivate": true,
         // "originalInvoiceNo": originalInvoiceNo,
@@ -92,20 +96,25 @@ class SendInvoicesClass {
     }
   }
 
-  Future<String?> createReceivePrivateQRInvoice(description, dueDate,
-      referenceNo, senderPrivateUserId, receiverUserAmount, category) async {
+  Future<String?> createReceivePrivateQRInvoice(
+      description,
+      dueDate,
+      referenceNo,
+      senderPrivateUserId,
+      senderName,
+      receiverUserAmount,
+      category) async {
     try {
       final response = await Supabase.instance.client.functions
           .invoke('invoices/create-private-user-invoice', headers: {
         'Authorization': 'Bearer ${userController.user.value.accessToken}'
       }, body: {
         "privateUserId": senderPrivateUserId,
-        "senderName":
-            '${userController.user.value.firstName} ${userController.user.value.lastName?[0].toUpperCase()}',
+        "senderName": senderName,
 
         "senderIban": currentBankController.current.value.iban,
-
-        "receiverUserId": userController.user.value.privateUserId,
+        "receiverUserId": userController.user.value.id,
+        "receiverPrivateUserId": userController.user.value.privateUserId,
         "receiverIsPrivate": true,
         // "originalInvoiceNo": originalInvoiceNo,
         "amount": receiverUserAmount,
@@ -136,7 +145,11 @@ class SendInvoicesClass {
     List<Map<String, dynamic>> receivers = [];
 
     for (var element in receiverUsers) {
-      receivers.add({'receiverUserId': element.id, 'amount': element.amount});
+      receivers.add({
+        'receiverUserId': element.userId,
+        'receiverPrivateUserId': element.id,
+        'amount': element.amount
+      });
     }
 
     try {

@@ -23,13 +23,17 @@ export const handler = async (req: Request) => {
       });
     }
 
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
     const query = supabase
       .from("digital_invoices")
       .select(
-        "*, senders(* , private_users(*)), receivers!inner(* , private_users(*), business_users(*))"
+        "*, senders(* , private_users(*, users(*))), receivers!inner(* , private_users(*, users(*)), business_users(*))",
       )
       .eq("receivers.privateUserId", privateUserId)
       .eq("isObsolete", false)
+      .gte("created_at", oneYearAgo.toISOString())
       .order("created_at", { ascending: false });
 
     if (status) {

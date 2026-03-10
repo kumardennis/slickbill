@@ -39,6 +39,20 @@
   </script>
   <!-- This script adds the flutter initialization JS code -->
   <script src="flutter.js" defer></script>
+
+   <script async defer crossorigin="anonymous" 
+    src="https://connect.facebook.net/en_US/sdk.js"></script>
+  
+  <script>
+    window.fbAsyncInit = function() {
+      FB.init({
+        appId      : '765613359179996',
+        cookie     : true,
+        xfbml      : true,
+        version    : 'v18.0'
+      });
+    };
+  </script>
 </head>
 <body>
   <script>

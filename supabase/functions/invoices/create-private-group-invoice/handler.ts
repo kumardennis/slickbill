@@ -9,6 +9,7 @@ import {
 } from "../../_shared/confirmedRequiredParams.ts";
 import { corsHeaders } from "../../_shared/cors.ts";
 import { createSupabase } from "../../_shared/supabaseClient.ts";
+import { sendOneSignalPush } from "../../_shared/oneSignal.ts";
 
 type ReceiverUser = {
   receiverUserId: number;
@@ -67,6 +68,12 @@ export const handler = async (req: Request) => {
     }
 
     if (groupData != null) {
+      const { data: sender, error: senderError2 } = await supabase
+        .from("private_users")
+        .select("firstName, lastName")
+        .eq("id", privateUserId)
+        .single();
+
       for (const receiverUser of receiverUsers) {
         const { data: senderData, error: senderError } = await supabase
           .from("senders")
@@ -90,7 +97,7 @@ export const handler = async (req: Request) => {
         const { data: receiverData, error: receiverError } = await supabase
           .from("receivers")
           .insert({
-            privateUserId: receiverUser.receiverUserId,
+            privateUserId: receiverUser.receiverPrivateUserId,
           })
           .select();
 
@@ -119,7 +126,7 @@ export const handler = async (req: Request) => {
               invoiceNo: `${privateUserId}${Date.now()}`,
               referenceNo,
               category,
-              receiverPrivateUserId: receiverUser.receiverUserId,
+              receiverPrivateUserId: receiverUser.receiverPrivateUserId,
               privateGroupId: groupData[0].id,
               senderPrivateUserId: privateUserId,
             })
@@ -136,6 +143,15 @@ export const handler = async (req: Request) => {
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           });
         }
+
+        await sendOneSignalPush({
+          externalUserId: receiverUser.receiverUserId.toString(), // map from private_users.userId
+          heading: "New Slickbill!",
+          content: Boolean(sender?.firstName)
+            ? `${sender?.firstName} sent you a slickbill!`
+            : "You received a new slickbill!",
+          data: { type: "NEW_SLICKBILL", invoiceId: digitalInvoiceData[0].id },
+        });
       }
     }
 

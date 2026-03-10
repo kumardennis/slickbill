@@ -58,13 +58,13 @@ export const handler = async (req: Request) => {
     const { data: usernameData, error: usernameError } = await supabase
       .from("users")
       .select()
-      .match({ username: "kumardennis" });
+      .match({ username: username });
 
     console.log("ASSSS", usernameData, usernameError);
 
     if (usernameData?.length > 0 || usernameError !== null) {
       const responseData: CreateUserStudentResponseModel = {
-        isRequestSuccessfull: !Boolean(usernameError),
+        isRequestSuccessfull: false,
         data: Boolean(usernameError) ? null : usernameData,
         error: usernameError ?? "username already taken :(",
       };

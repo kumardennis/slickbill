@@ -45,12 +45,21 @@ export const handler = async (req: Request) => {
     }
 
     const body = {
-      firstName: userData?.[0]?.private_users.first_name,
-      lastName: userData?.[0]?.private_users.last_name,
+      firstName: userData?.[0]?.private_users?.[0]?.firstName,
+      lastName: userData?.[0]?.private_users?.[0]?.lastName,
       email: userData?.[0]?.email,
       mobile: {
-        countryCode: userData?.[0]?.phone_country_code,
-        number: userData?.[0]?.phone_number,
+        countryCode: userData?.[0]?.phoneCountryCode,
+        number: userData?.[0]?.phoneNumber.toString(),
+      },
+      dateOfBirth: { year: 0, month: 0, day: 0 },
+      address: {
+        addressLine1: "string",
+        addressLine2: "string",
+        city: "string",
+        postalCode: "string",
+        state: "string",
+        country: "string",
       },
     };
 
@@ -71,6 +80,20 @@ export const handler = async (req: Request) => {
 
     const strigaResponseBody = await strigaResponse.json();
 
+    console.log("strigaResponseBody:", strigaResponseBody);
+
+    if (!strigaResponse.ok) {
+      const responseData = {
+        isRequestSuccessfull: false,
+        data: { strigaFetchOption, userData },
+        error: strigaResponseBody,
+      };
+
+      return new Response(JSON.stringify(responseData), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const { data, error } = await supabase
       .from("users")
       .update({ strigaUserId: strigaResponseBody.userId })
@@ -82,6 +105,8 @@ export const handler = async (req: Request) => {
         data: null,
         error: error,
       };
+
+      console.log("Supabase update error:", data, error);
 
       return new Response(JSON.stringify(responseData), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },

@@ -30,7 +30,7 @@ class BigInputAmount extends HookWidget {
         controller: amountController,
         onChanged: (value) {
           if (value.isNotEmpty) {
-            changeReceiverAmount(double.parse(value));
+            changeReceiverAmount(double.tryParse(value));
           }
         },
         decoration: InputDecoration(

@@ -29,8 +29,7 @@ class OpenAndCreateSelfInvoice extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final NavigationController navigationController =
-        Get.find(); // Initialize controller
+    final NavigationController navigationController = Get.find();
 
     FilesClass filesClass = FilesClass();
     SharedFilesClass sharedFilesClass = SharedFilesClass();
@@ -91,20 +90,13 @@ class OpenAndCreateSelfInvoice extends HookWidget {
 
       if (data != null) {
         originalInvoiceNoController.text = data.invoiceNo;
-
         senderNameController.text = data.merchantName;
-
         ibanController.text =
             IbanExtractor.extractIban(data.iban.first.iban) ?? '-';
-
         descriptionController.text = data.description;
-
         amountController.text = data.totalAmount.toString();
-
         dueDateController.text = data.dueDate;
-
         referenceNumberController.text = data.referenceNumber;
-
         extractedData.value = data;
 
         if (data.dueDate == '') {
@@ -129,32 +121,24 @@ class OpenAndCreateSelfInvoice extends HookWidget {
 
         if (kIsWeb) {
           pdfBytes.value = result.files.single.bytes;
-
           await getFileData(result.files.single.bytes);
         } else {
           pdfPath.value = result.files.single.path;
           var bytes = await File(result.files.single.path!).readAsBytes();
-
-          // final text = await platformPDFExtract.invokeMethod(
-          //     'extractTextFromPdf', {'pdfBytes': result.files.single.bytes});
-
-          // print(text);
-
           pdfBytes.value = bytes;
           await getFileData(bytes);
         }
       } else {
-        print('cncelled');
+        print('cancelled');
       }
     }
 
     Future analyzeText() async {
       if (analyzeTextController.text != '') {
         print(analyzeTextController.text);
-
         await getExtractedDataFromText(analyzeTextController.text);
       } else {
-        print('cncelled');
+        print('cancelled');
       }
     }
 
@@ -207,7 +191,6 @@ class OpenAndCreateSelfInvoice extends HookWidget {
         },
         onShow: () {
           print('App shown, checking for new intents');
-
           getFilePath().then((value) {
             if (value != null) {
               pdfBytes.value = value;
@@ -226,255 +209,415 @@ class OpenAndCreateSelfInvoice extends HookWidget {
       };
     }, []);
 
-    return (Scaffold(
+    return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.light,
       appBar: CustomAppbar(title: 'hd_CreateASlickbill'.tr, appbarIcon: null),
       body: SingleChildScrollView(
         child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(10.0),
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                        padding: EdgeInsets.all(20),
+            // ✅ Upload Section - Modern Card Design
+            Container(
+              margin: EdgeInsets.all(20),
+              padding: EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [
+                  BoxShadow(
+                    color: Theme.of(context).colorScheme.blue.withOpacity(0.1),
+                    blurRadius: 20,
+                    offset: Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  // Upload PDF Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: OutlinedButton.icon(
+                      onPressed: pickFile,
+                      icon: FaIcon(FontAwesomeIcons.filePdf, size: 20),
+                      label: Text(
+                        'btn_UploadPDF'.tr,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.blue,
                         side: BorderSide(
-                            color: Theme.of(context).colorScheme.blue)),
-                    onPressed: pickFile,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'btn_UploadPDF'.tr,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyLarge
-                              ?.copyWith(
-                                  color: Theme.of(context).colorScheme.blue),
+                          color: Theme.of(context).colorScheme.blue,
+                          width: 2,
                         ),
-                        const SizedBox(
-                          width: 10,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
                         ),
-                        FaIcon(FontAwesomeIcons.upload,
-                            color: Theme.of(context).colorScheme.blue)
-                      ],
+                      ),
                     ),
                   ),
-                ),
-                Text(
-                  'OR',
-                  style: TextStyle(color: Theme.of(context).colorScheme.gray),
-                ),
-                const SizedBox(
-                  height: 10,
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(10.0),
-                  child: Column(
+
+                  SizedBox(height: 20),
+
+                  // OR Divider
+                  Row(
                     children: [
-                      SizedBox(
-                        child: TextField(
-                          decoration: InputDecoration(
-                              filled: true,
-                              hintText: 'lbl_PasteText'.tr,
-                              hintStyle: TextStyle(
-                                  color: Theme.of(context).colorScheme.gray),
-                              fillColor: Theme.of(context).colorScheme.light),
-                          controller: analyzeTextController,
-                          keyboardType: TextInputType.multiline,
-                          minLines: 3,
-                          maxLines: 3,
+                      Expanded(
+                        child: Divider(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .gray
+                              .withOpacity(0.3),
                         ),
                       ),
-                      const SizedBox(
-                        height: 10,
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          'OR',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.darkGray,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
                       ),
-                      OutlinedButton(
-                        style: OutlinedButton.styleFrom(
-                            padding: EdgeInsets.all(20),
-                            side: BorderSide(
-                                color: Theme.of(context).colorScheme.blue)),
-                        onPressed: analyzeText,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'btn_AnalyzeText'.tr,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyLarge
-                                  ?.copyWith(
-                                      color:
-                                          Theme.of(context).colorScheme.blue),
-                            ),
-                            const SizedBox(
-                              width: 10,
-                            ),
-                            FaIcon(FontAwesomeIcons.pencil,
-                                color: Theme.of(context).colorScheme.blue)
-                          ],
+                      Expanded(
+                        child: Divider(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .gray
+                              .withOpacity(0.3),
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
-            ),
-            pdfBytes.value != null
-                ? Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Container(
-                      height: 300,
-                      width: 250,
-                      color: Colors.blue,
-                      child: SfPdfViewer.memory(
-                        pdfBytes.value!,
+
+                  SizedBox(height: 20),
+
+                  // Paste Text Field
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.light,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color:
+                            Theme.of(context).colorScheme.gray.withOpacity(0.3),
                       ),
                     ),
-                  )
-                : const SizedBox(),
-            isLoading.value
-                ? Padding(
-                    padding: const EdgeInsets.all(20.0),
-                    child: Center(
-                        child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        const CircularProgressIndicator(),
-                        Text('inf_AnalyzingPDF'.tr)
-                      ],
-                    )),
-                  )
-                : const SizedBox(),
-            InputField(
-              controller: originalInvoiceNoController,
-              label: 'lbl_OriginalInvoiceNo'.tr,
-            ),
-            InputField(
-              controller: senderNameController,
-              label: 'lbl_SenderName'.tr,
-            ),
-            Column(
-              children: [
-                InputField(
-                  controller: ibanController,
-                  label: 'lbl_SenderIban'.tr,
-                ),
-                extractedData.value != null &&
-                        extractedData.value?.iban != null &&
-                        extractedData.value?.iban.first.bankName != ''
-                    ? Wrap(
-                        children: extractedData.value?.iban.map((iban) {
-                          int idx = extractedData.value!.iban.indexOf(iban);
-                          return (TextButton(
-                              style: TextButton.styleFrom(
-                                  backgroundColor:
-                                      idx == selectedIbanIndex.value
-                                          ? Theme.of(context).colorScheme.blue
-                                          : Theme.of(context).colorScheme.dark),
-                              onPressed: () {
-                                selectedIbanIndex.value = idx;
+                    child: TextField(
+                      controller: analyzeTextController,
+                      maxLines: 4,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.dark,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'lbl_PasteText'.tr,
+                        hintStyle: TextStyle(
+                          color: Theme.of(context).colorScheme.gray,
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: EdgeInsets.all(16),
+                      ),
+                    ),
+                  ),
 
-                                ibanController.text = IbanExtractor.extractIban(
-                                        extractedData.value!.iban[idx].iban) ??
-                                    '-';
-                              },
-                              child: Text(
-                                iban.bankName,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(
-                                        color: idx == selectedIbanIndex.value
-                                            ? Theme.of(context)
-                                                .colorScheme
-                                                .light
-                                            : Theme.of(context)
-                                                .colorScheme
-                                                .light),
-                              )));
-                        }).toList() as List<Widget>,
-                      )
-                    : const SizedBox()
-              ],
-            ),
-            InputField(
-              controller: amountController,
-              label: 'lbl_Amount'.tr,
-            ),
-            InputField(
-              controller: descriptionController,
-              label: 'lbl_Description'.tr,
-            ),
-            InputField(
-              controller: dueDateController,
-              label: 'lbl_DueDate'.tr,
-            ),
-            InputField(
-              controller: referenceNumberController,
-              label: 'lbl_ReferenceNumber'.tr,
-            ),
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Wrap(
-                spacing: 5.0,
-                runSpacing: 5.0,
-                children: Constants().categories.map(
-                  (item) {
-                    return ChoiceChip(
-                      backgroundColor: Theme.of(context).colorScheme.gray,
-                      selectedColor: Theme.of(context).colorScheme.blue,
+                  SizedBox(height: 16),
+
+                  // Analyze Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton.icon(
+                      onPressed: isLoading.value ? null : analyzeText,
+                      icon: isLoading.value
+                          ? SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : FaIcon(FontAwesomeIcons.wandMagicSparkles,
+                              size: 18),
                       label: Text(
-                        item,
-                        style: Theme.of(context).textTheme.bodyMedium,
+                        isLoading.value
+                            ? 'inf_AnalyzingPDF'.tr
+                            : 'btn_AnalyzeText'.tr,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
-                      selected: category.value == item,
-                      onSelected: (bool selected) {
-                        category.value = item;
-                      },
-                    );
-                  },
-                ).toList(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.blue,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 40),
-            Center(
-              child: SizedBox(
-                width: MediaQuery.of(context).size.width - 100,
-                child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.blue),
-                    onPressed: createInvoice,
-                    child: Padding(
-                      padding: const EdgeInsets.all(15.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'btn_AddSlickBill'.tr,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyLarge
-                                ?.copyWith(
-                                    color: Theme.of(context).colorScheme.light),
-                          ),
-                          const SizedBox(width: 10),
-                          FaIcon(
-                            FontAwesomeIcons.squarePlus,
-                            color: Theme.of(context).colorScheme.light,
-                          )
-                        ],
+
+            // ✅ PDF Preview (if available)
+            if (pdfBytes.value != null)
+              Container(
+                margin: EdgeInsets.symmetric(horizontal: 20),
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color:
+                          Theme.of(context).colorScheme.gray.withOpacity(0.1),
+                      blurRadius: 10,
+                      offset: Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.picture_as_pdf,
+                            color: Theme.of(context).colorScheme.blue),
+                        SizedBox(width: 8),
+                        Text(
+                          'PDF Preview',
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                        ),
+                      ],
+                    ),
+                    SizedBox(height: 12),
+                    Container(
+                      height: 300,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .gray
+                              .withOpacity(0.3),
+                        ),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    )),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: SfPdfViewer.memory(pdfBytes.value!),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            )
+
+            if (pdfBytes.value != null) SizedBox(height: 20),
+
+            // ✅ Form Section
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Section Header
+                  Text(
+                    'Invoice Details',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.dark,
+                        ),
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Fill in the invoice information below',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.darkGray,
+                      fontSize: 14,
+                    ),
+                  ),
+                  SizedBox(height: 20),
+
+                  // Form Fields
+                  InputField(
+                    icon: Icons.numbers,
+                    label: 'lbl_OriginalInvoiceNo'.tr,
+                    controller: originalInvoiceNoController,
+                  ),
+
+                  InputField(
+                    icon: Icons.person_outline,
+                    label: 'lbl_SenderName'.tr,
+                    controller: senderNameController,
+                  ),
+
+                  // IBAN Field with Bank Chips
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      InputField(
+                        icon: Icons.account_balance,
+                        label: 'lbl_SenderIban'.tr,
+                        controller: ibanController,
+                      ),
+                      if (extractedData.value != null &&
+                          extractedData.value?.iban != null &&
+                          extractedData.value?.iban.first.bankName != '')
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 8),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: extractedData.value!.iban.map((iban) {
+                              int idx = extractedData.value!.iban.indexOf(iban);
+                              bool isSelected = idx == selectedIbanIndex.value;
+                              return ActionChip(
+                                label: Text(
+                                  iban.bankName,
+                                  style: TextStyle(
+                                    color: isSelected
+                                        ? Colors.white
+                                        : Theme.of(context).colorScheme.dark,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                backgroundColor: isSelected
+                                    ? Theme.of(context).colorScheme.blue
+                                    : Theme.of(context).colorScheme.light,
+                                side: BorderSide(
+                                  color: isSelected
+                                      ? Theme.of(context).colorScheme.blue
+                                      : Theme.of(context)
+                                          .colorScheme
+                                          .gray
+                                          .withOpacity(0.3),
+                                ),
+                                onPressed: () {
+                                  selectedIbanIndex.value = idx;
+                                  ibanController.text =
+                                      IbanExtractor.extractIban(extractedData
+                                              .value!.iban[idx].iban) ??
+                                          '-';
+                                },
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                    ],
+                  ),
+
+                  InputField(
+                    icon: Icons.euro,
+                    label: 'lbl_Amount'.tr,
+                    controller: amountController,
+                    type: TextInputType.numberWithOptions(decimal: true),
+                  ),
+
+                  InputField(
+                    icon: Icons.description,
+                    label: 'lbl_Description'.tr,
+                    controller: descriptionController,
+                  ),
+
+                  InputField(
+                    icon: Icons.calendar_today,
+                    label: 'lbl_DueDate'.tr,
+                    controller: dueDateController,
+                    type: TextInputType.datetime,
+                  ),
+
+                  InputField(
+                    icon: Icons.tag,
+                    label: 'lbl_ReferenceNumber'.tr,
+                    controller: referenceNumberController,
+                  ),
+
+                  SizedBox(height: 24),
+
+                  // Category Section
+                  Text(
+                    'Category',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.dark,
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: Constants().categories.map((item) {
+                      bool isSelected = category.value == item;
+                      return ChoiceChip(
+                        label: Text(
+                          item,
+                          style: TextStyle(
+                            color: isSelected
+                                ? Colors.white
+                                : Theme.of(context).colorScheme.dark,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        selected: isSelected,
+                        selectedColor: Theme.of(context).colorScheme.blue,
+                        backgroundColor: Theme.of(context).colorScheme.light,
+                        side: BorderSide(
+                          color: isSelected
+                              ? Theme.of(context).colorScheme.blue
+                              : Theme.of(context)
+                                  .colorScheme
+                                  .gray
+                                  .withOpacity(0.3),
+                        ),
+                        onSelected: (bool selected) {
+                          category.value = item;
+                        },
+                      );
+                    }).toList(),
+                  ),
+
+                  SizedBox(height: 40),
+
+                  // Create Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 56,
+                    child: ElevatedButton.icon(
+                      onPressed: createInvoice,
+                      icon: FaIcon(FontAwesomeIcons.plus, size: 18),
+                      label: Text(
+                        'btn_AddSlickBill'.tr,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.blue,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 2,
+                      ),
+                    ),
+                  ),
+
+                  SizedBox(height: 40),
+                ],
+              ),
+            ),
           ],
         ),
       ),
-    ));
+    );
   }
 }

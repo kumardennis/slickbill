@@ -6,6 +6,8 @@
 <uses-permission android:name="android.permission.CAMERA" />
 <uses-feature android:name="android.hardware.nfc" android:required="false" />
 <uses-feature android:name="android.hardware.nfc.hce" android:required="false" />
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:label="slickbills"
         android:name="${applicationName}"
@@ -26,6 +28,15 @@
               android:name="io.flutter.embedding.android.NormalTheme"
               android:resource="@style/NormalTheme"
               />
+
+                 <meta-data
+            android:name="onesignal_app_id"
+            android:value="9bb11f0f-ab79-480b-b752-a25e8443df8e" />
+
+               <meta-data
+              android:name="flutter_deeplinking_enabled"
+              android:value="true"
+              />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -36,7 +47,7 @@
     <category android:name="android.intent.category.DEFAULT" />
     <category android:name="android.intent.category.BROWSABLE" />
     <!-- <data android:scheme="file" /> -->
-    <data android:host="*" />
+   
     <!-- <data android:pathPattern=".*\\.pdf" /> -->
     <data android:mimeType="application/pdf" />
 </intent-filter>
@@ -64,22 +75,48 @@
     </intent-filter>
 
 <meta-data
-    android:name="android.nfc.action.TECH_DISCOVERED"
+    android:name="android.nfc.action.TECH_DISCOVERED"   
     android:resource="@xml/nfc_tech_filter" />
 
+        <meta-data 
+            android:name="com.facebook.sdk.ApplicationId" 
+            android:value="@string/facebook_app_id"/>
+
 <intent-filter android:autoVerify="true">
+ <data android:scheme="https" android:host="slickbills.com" />
     <action android:name="android.intent.action.VIEW" />
     <category android:name="android.intent.category.DEFAULT" />
     <category android:name="android.intent.category.BROWSABLE" />
     
     <!-- Deep link scheme -->
-    <data android:scheme="slickbill" android:host="bill" />
+   
     
     <!-- Universal link -->
-    <data android:scheme="https" android:host="slickbill.app" android:pathPrefix="/bill" />
+    <!-- <data android:scheme="https" android:host="slickbills.com" android:pathPrefix="/bill" /> -->
+</intent-filter>
+
+<intent-filter android:autoVerify="true">
+ <data android:scheme="slickbills" android:host="bill" />
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+ 
+</intent-filter>
+
+<intent-filter android:autoVerify="true">
+ <data android:scheme="slickbills" android:host="home-screen" />
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+ 
 </intent-filter>
 
         </activity>
+
+              <activity 
+            android:name="com.facebook.FacebookActivity"
+            android:configChanges="keyboard|keyboardHidden|screenLayout|screenSize|orientation"
+            android:label="@string/app_name" />
 
            <service android:name="com.novice.flutter_nfc_hce.KHostApduService"
               android:exported="true"

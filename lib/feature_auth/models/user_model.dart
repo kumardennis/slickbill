@@ -114,6 +114,7 @@ class ClientUserModel {
   final bool isPrivate;
   final String? strigaUserId;
   final String? strigaWalletId;
+  final String? cdpWalletId;
 
   ClientUserModel({
     required this.id,
@@ -133,6 +134,7 @@ class ClientUserModel {
     required this.isPrivate,
     this.strigaUserId,
     this.strigaWalletId,
+    this.cdpWalletId,
   });
 
   ClientUserModel.empty()
@@ -152,7 +154,8 @@ class ClientUserModel {
         publicName = null,
         isPrivate = true,
         strigaUserId = null,
-        strigaWalletId = null;
+        strigaWalletId = null,
+        cdpWalletId = null;
 
   factory ClientUserModel.fromJson(Map<String, dynamic> json) {
     return ClientUserModel(
@@ -177,6 +180,7 @@ class ClientUserModel {
       isPrivate: json['isPrivate'] as bool,
       strigaUserId: json['strigaUserId'] as String?,
       strigaWalletId: json['strigaWalletId'] as String?,
+      cdpWalletId: json['cdpWalletId'] as String?,
     );
   }
 
@@ -220,6 +224,7 @@ class ClientUserModel {
     bool? isPrivate,
     String? strigaUserId,
     String? sringaWalletId,
+    String? cdpWalletId,
   }) {
     return ClientUserModel(
       id: id ?? this.id,
@@ -238,7 +243,64 @@ class ClientUserModel {
       publicName: publicName ?? this.publicName,
       isPrivate: isPrivate ?? this.isPrivate,
       strigaUserId: strigaUserId ?? this.strigaUserId,
-      strigaWalletId: sringaWalletId ?? this.strigaWalletId,
+      strigaWalletId: strigaWalletId ?? this.strigaWalletId,
+      cdpWalletId: cdpWalletId ?? this.cdpWalletId,
     );
+  }
+}
+
+class SupabaseUserModel {
+  final int id;
+  final String email;
+  final String username;
+  final String authUserId;
+  final String createdAt;
+  final int? phoneNumber;
+  final String? strigaUserId;
+  final String? strigaWalletId;
+  final String? phoneCountryCode;
+  final String? cdpWalletId;
+
+  SupabaseUserModel({
+    required this.id,
+    required this.email,
+    required this.username,
+    required this.authUserId,
+    required this.createdAt,
+    this.phoneNumber,
+    this.strigaUserId,
+    this.strigaWalletId,
+    this.cdpWalletId,
+    this.phoneCountryCode,
+  });
+
+  factory SupabaseUserModel.fromJson(Map<String, dynamic> json) {
+    return SupabaseUserModel(
+      id: json['id'] as int,
+      email: json['email'] as String,
+      username: json['username'] as String,
+      authUserId: json['authUserId'] as String,
+      createdAt: json['created_at'] as String,
+      phoneNumber: json['phoneNumber'] as int?,
+      strigaUserId: json['strigaUserId'] as String?,
+      strigaWalletId: json['strigaWalletId'] as String?,
+      phoneCountryCode: json['phoneCountryCode'] as String?,
+      cdpWalletId: json['cdpWalletId'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'email': email,
+      'username': username,
+      'authUserId': authUserId,
+      'created_at': createdAt,
+      'phoneNumber': phoneNumber,
+      'strigaUserId': strigaUserId,
+      'strigaWalletId': strigaWalletId,
+      'phoneCountryCode': phoneCountryCode,
+      'cdpWalletId': cdpWalletId,
+    };
   }
 }

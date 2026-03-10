@@ -1,3 +1,5 @@
+import 'package:slickbill/feature_auth/models/user_model.dart';
+
 class InvoiceModel {
   InvoiceModel({
     required this.id,
@@ -15,11 +17,13 @@ class InvoiceModel {
     required this.deadline,
     required this.invoiceNo,
     this.originalInvoiceNo,
+    this.privateGroupId, // add
     required this.isSeen,
     this.referenceNo,
     required this.receivers,
     required this.senders,
     required this.category,
+    required this.txHash,
   });
   late final int id;
   late final String createdAt;
@@ -37,11 +41,13 @@ class InvoiceModel {
   late final String? paidOnDate;
   late final String invoiceNo;
   late final String? originalInvoiceNo;
+  late final int? privateGroupId; // add
   late final bool isSeen;
   late final String? referenceNo;
   late final Receivers receivers;
   late final Senders? senders;
   late final String? category;
+  late final String? txHash;
 
   InvoiceModel.fromJson(Map<String, dynamic> json) {
     id = json['id'];
@@ -56,16 +62,18 @@ class InvoiceModel {
     description = json['description'] ?? "";
     rawInvoiceId = json['rawInvoiceId'];
     senderName = json['senderName'] ?? "";
-    senderIban = json['senderIban'] ?? "";
+    senderIban = json['senderIban'];
     deadline = json['deadline'] ?? "";
     paidOnDate = json['paidOnDate'];
     invoiceNo = json['invoiceNo'] ?? "";
     originalInvoiceNo = json['originalInvoiceNo'];
+    privateGroupId = json['privateGroupId']; // add
     isSeen = json['isSeen'] ?? false;
     referenceNo = json['referenceNo'] ?? "-";
     receivers = Receivers.fromJson(json['receivers']);
     senders =
         json['senders'] != null ? Senders.fromJson(json['senders']) : null;
+    txHash = json['txHash'];
   }
 
   Map<String, dynamic> toJson() {
@@ -84,10 +92,12 @@ class InvoiceModel {
     _data['deadline'] = deadline;
     _data['invoiceNo'] = invoiceNo;
     _data['originalInvoiceNo'] = originalInvoiceNo;
+    _data['privateGroupId'] = privateGroupId; // add
     _data['isSeen'] = isSeen;
     _data['referenceNo'] = referenceNo;
     _data['receivers'] = receivers.toJson();
     _data['senders'] = senders?.toJson();
+    _data['txHash'] = txHash;
     return _data;
   }
 }
@@ -138,14 +148,16 @@ class PrivateUsers {
     required this.userId,
     required this.iban,
     required this.bankAccountName,
+    this.users,
   });
   late final int id;
   late final String createdAt;
   late final String firstName;
   late final String lastName;
   late final int userId;
-  late final String iban;
+  late final String? iban;
   late final String bankAccountName;
+  late final SupabaseUserModel? users;
 
   PrivateUsers.fromJson(Map<String, dynamic> json) {
     id = json['id'];
@@ -153,8 +165,11 @@ class PrivateUsers {
     firstName = json['firstName'] ?? "";
     lastName = json['lastName'] ?? "";
     userId = json['userId'] ?? 0;
-    iban = json['iban'] ?? "";
+    iban = json['iban'];
     bankAccountName = json['bankAccountName'] ?? "";
+    users = json['users'] != null
+        ? SupabaseUserModel.fromJson(json['users'])
+        : null;
   }
 
   Map<String, dynamic> toJson() {
@@ -166,6 +181,7 @@ class PrivateUsers {
     _data['userId'] = userId;
     _data['iban'] = iban;
     _data['bankAccountName'] = bankAccountName;
+    _data['users'] = users?.toJson();
     return _data;
   }
 }
@@ -194,7 +210,7 @@ class BusinessUsers {
     fullName = json['fullName'] ?? "";
     publicName = json['publicName'] ?? "";
     userId = json['userId'] ?? 0;
-    iban = json['iban'] ?? "";
+    iban = json['iban'];
     bankAccountName = json['bankAccountName'] ?? "";
   }
 

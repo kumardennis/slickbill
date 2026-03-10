@@ -6,6 +6,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:liquid_pull_to_refresh/liquid_pull_to_refresh.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
 import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
@@ -18,6 +19,7 @@ import '../../feature_auth/getx_controllers/user_controller.dart';
 import '../../feature_auth/utils/money_formatter.dart';
 import '../widgets/received_invoice_sheet.dart';
 import '../widgets/sent_invoice_sheet.dart';
+import '../widgets/grouped_invoice_card.dart';
 
 class SentBills extends HookWidget {
   SentInvoicesClass sentInvoicesClass = SentInvoicesClass();
@@ -93,61 +95,95 @@ class SentBills extends HookWidget {
                   type: PostgresChangeFilterType.eq,
                   column: 'senderPrivateUserId',
                   value: userController.user.value.privateUserId.toString()),
-              callback: (payload) => refreshAllData())
+              callback: (payload) {
+                if (Get.isSnackbarOpen) {
+                  Get.closeCurrentSnackbar();
+                }
+
+                Get.snackbar(
+                  'A SlickBill has been updated',
+                  'Tap refresh to load latest data',
+                  snackPosition: SnackPosition.TOP,
+                  duration: const Duration(seconds: 5),
+                  mainButton: TextButton(
+                    onPressed: () async {
+                      if (Get.isSnackbarOpen) {
+                        Get.closeCurrentSnackbar();
+                      }
+                      await refreshAllData();
+                    },
+                    child: const Text('Refresh'),
+                  ),
+                );
+              })
           .subscribe();
 
       return () => changes.unsubscribe();
     }, [userController.user.value.accessToken]);
 
-    return (SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(0.0, 20.0, 20.0, 20.0),
-        child: isLoading.value
-            ? const Center(
-                child: CircularProgressIndicator(),
-              )
-            : invoices.value == null
-                ? Text('lbl_NoInvoices'.tr)
-                : Column(
-                    children: [
-                      StatisticsCard(
-                        pendingAmount: pending.value,
-                        paidAmount: receivedThisMonth.value,
-                        pendingLabel: 'lbl_Pending'.tr,
-                        paidLabel: 'lbl_ReceivedThisMonth'.tr,
+    String groupKey(InvoiceModel i) {
+      if (i.privateGroupId != null) {
+        return 'group_${i.privateGroupId}';
+      }
+      return 'single_${i.invoiceNo}';
+    }
+
+    return RefreshIndicator(
+        onRefresh: refreshAllData,
+        color: Theme.of(context).colorScheme.light,
+        backgroundColor: Theme.of(context).colorScheme.blue,
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(0.0, 20.0, 20.0, 20.0),
+            child: isLoading.value
+                ? const Center(
+                    child: CircularProgressIndicator(),
+                  )
+                : invoices.value == null || invoices.value!.isEmpty
+                    ? Text('lbl_NoInvoices'.tr)
+                    : Column(
+                        children: [
+                          StatisticsCard(
+                            pendingAmount: pending.value,
+                            paidAmount: receivedThisMonth.value,
+                            pendingLabel: 'lbl_Pending'.tr,
+                            paidLabel: 'lbl_ReceivedThisMonth'.tr,
+                          ),
+                          const SizedBox(height: 20),
+
+                          // grouped render
+                          Builder(
+                            builder: (context) {
+                              final grouped = <String, List<InvoiceModel>>{};
+                              for (final i in invoices.value!) {
+                                grouped
+                                    .putIfAbsent(groupKey(i), () => [])
+                                    .add(i);
+                              }
+
+                              final groups = grouped.values.toList()
+                                ..sort((a, b) => b.first.createdAt
+                                    .compareTo(a.first.createdAt));
+
+                              return Column(
+                                children: groups
+                                    .map(
+                                      (groupInvoices) => Padding(
+                                        padding:
+                                            const EdgeInsets.only(top: 20.0),
+                                        child: GroupedInvoiceCard(
+                                          invoices: groupInvoices,
+                                          onTapInvoice: openInvoice,
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                              );
+                            },
+                          ),
+                        ],
                       ),
-                      const SizedBox(
-                        height: 20,
-                      ),
-                      Column(
-                        children: invoices.value!
-                            .map((invoice) => GestureDetector(
-                                  onTap: () async {
-                                    await openInvoice(invoice);
-                                  },
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(top: 20.0),
-                                    child: InvoiceCard(
-                                        amount: invoice.amount,
-                                        invoiceNo: invoice.invoiceNo,
-                                        date: invoice.createdAt,
-                                        dueDate: invoice.deadline,
-                                        paidOnDate: invoice.paidOnDate,
-                                        description: invoice.description,
-                                        senderOrReeceiverName: invoice
-                                                    .receivers.businessUsers !=
-                                                null
-                                            ? '${invoice.receivers.businessUsers?.publicName}'
-                                            : '${invoice.receivers.privateUsers?.firstName} ${invoice.receivers.privateUsers?.lastName}',
-                                        status: invoice.status,
-                                        isSeen: invoice.isSeen),
-                                  ),
-                                ))
-                            .toList(),
-                      ),
-                    ],
-                  ),
-      ),
-    ));
+          ),
+        ));
   }
 }

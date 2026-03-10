@@ -46,6 +46,13 @@ export const handler = async (req: Request) => {
 
     const body = {
       userId: userData?.[0]?.strigaUserId,
+      tier: 1,
+      // dateOfBirth: "25-01-1997",
+      // address: {
+      //   street: "123 Main St",
+      //   city: "Anytown",
+      //   country: "USA",
+      // },
     };
 
     const strigaFetchOption = {

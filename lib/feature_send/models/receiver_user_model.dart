@@ -1,6 +1,7 @@
 class ReceiverUserModel {
   int id;
   int userId;
+  String username;
   String firstName;
   String lastName;
   double amount;
@@ -10,11 +11,12 @@ class ReceiverUserModel {
       required this.userId,
       required this.firstName,
       required this.lastName,
+      required this.username,
       required this.amount});
 
   // Overriding toString method for better debugging
   @override
   String toString() {
-    return 'User(id: $id, firstName: $firstName, lastName: $lastName)';
+    return 'User(id: $id, firstName: $firstName, lastName: $lastName, username: $username)';
   }
 }

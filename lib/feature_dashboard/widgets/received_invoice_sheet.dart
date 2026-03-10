@@ -7,6 +7,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:loader_overlay/loader_overlay.dart';
 import 'package:slickbill/color_scheme.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../feature_auth/utils/money_formatter.dart';
 import '../models/invoice_model.dart';
@@ -16,14 +17,49 @@ class ReceivedInvoiceSheet extends HookWidget {
   final Function payInvoice;
   final Function updateInvoiceStatus;
   final Function updateInvoiceObsolete;
-  final Function createStrigaPayment;
+  final Function createCoinbaseTransaction;
+  final Function createCDPEmbeddedTransaction;
+
   const ReceivedInvoiceSheet(
       {super.key,
       required this.invoice,
       required this.payInvoice,
       required this.updateInvoiceStatus,
       required this.updateInvoiceObsolete,
-      required this.createStrigaPayment});
+      required this.createCoinbaseTransaction,
+      required this.createCDPEmbeddedTransaction});
+
+  List<String> _extractUrls(String text) {
+    final urlPattern = RegExp(
+      r'(https?:\/\/[^\s]+)|(www\.[^\s]+)|([a-zA-Z0-9-]+\.(com|net|org|io|me|app|co)[^\s]*)',
+      caseSensitive: false,
+    );
+    final matches = urlPattern.allMatches(text);
+    return matches.map((match) => match.group(0)!).toList();
+  }
+
+  String? buildTxUrl(String? txHash) {
+    if (txHash == null) return null;
+    final trimmed = txHash.trim();
+    if (trimmed.isEmpty) return null;
+    if (!trimmed.startsWith('0x')) return null;
+    return 'https://basescan.org/tx/$trimmed';
+  }
+
+  Future<void> openTxInExplorer(String txHash) async {
+    final url = buildTxUrl(txHash);
+    if (url == null) {
+      Get.snackbar('Error', 'Invalid transaction hash');
+      return;
+    }
+
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      Get.snackbar('Error', 'Could not open explorer link');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +70,9 @@ class ReceivedInvoiceSheet extends HookWidget {
 
     bool dateIsPassed =
         DateTime.now().isAfter(DateTime.parse(invoice.deadline));
+
+    print("Sender IBAN: ${invoice.toJson()}");
+    print("TXHASH: ${invoice.txHash}");
 
     return Container(
       decoration: BoxDecoration(
@@ -80,7 +119,8 @@ class ReceivedInvoiceSheet extends HookWidget {
                             color: Theme.of(context).colorScheme.gray)),
                     SizedBox(
                       width: MediaQuery.of(context).size.width - 150,
-                      child: Text(invoice.senderName,
+                      child: Text(
+                          '${invoice.senders?.privateUsers?.firstName} ${invoice.senders?.privateUsers?.lastName ?? ''}',
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.displayMedium),
                     ),
@@ -204,7 +244,7 @@ class ReceivedInvoiceSheet extends HookWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${invoice.senderIban ?? invoice.senders?.privateUsers?.iban}',
+                      '${invoice.senders?.privateUsers?.iban ?? "-"}',
                       style: Theme.of(context)
                           .textTheme
                           .displayMedium
@@ -218,14 +258,9 @@ class ReceivedInvoiceSheet extends HookWidget {
                 GestureDetector(
                   onTap: () async {
                     await Clipboard.setData(ClipboardData(
-                        text: invoice.senderIban ??
-                            invoice.senders?.privateUsers?.iban ??
-                            ''));
-                    Get.snackbar(
-                        'inf_Copied'.tr,
-                        invoice.senderIban ??
-                            invoice.senders?.privateUsers?.iban ??
-                            '');
+                        text: invoice.senders?.privateUsers?.iban ?? "-"));
+                    Get.snackbar('inf_Copied'.tr,
+                        invoice.senders?.privateUsers?.iban ?? "-");
                   },
                   child: FaIcon(
                     FontAwesomeIcons.copy,
@@ -248,7 +283,8 @@ class ReceivedInvoiceSheet extends HookWidget {
                       width: MediaQuery.of(context).size.width - 150,
                       child: Text(
                           invoice.senders?.privateUsers?.bankAccountName ??
-                              invoice.senderName,
+                              invoice.senderName ??
+                              '-',
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context)
                               .textTheme
@@ -262,9 +298,15 @@ class ReceivedInvoiceSheet extends HookWidget {
                 ),
                 GestureDetector(
                   onTap: () async {
-                    await Clipboard.setData(
-                        ClipboardData(text: invoice.senderName));
-                    Get.snackbar('inf_Copied'.tr, invoice.senderName);
+                    await Clipboard.setData(ClipboardData(
+                        text: invoice.senders?.privateUsers?.bankAccountName ??
+                            invoice.senderName ??
+                            '-'));
+                    Get.snackbar(
+                        'inf_Copied'.tr,
+                        invoice.senders?.privateUsers?.bankAccountName ??
+                            invoice.senderName ??
+                            '-');
                   },
                   child: FaIcon(
                     FontAwesomeIcons.copy,
@@ -276,40 +318,339 @@ class ReceivedInvoiceSheet extends HookWidget {
             const SizedBox(
               height: 30,
             ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width - 70,
-                      child: Wrap(
-                        children: [
-                          Text(invoice.description,
-                              style: Theme.of(context).textTheme.displayMedium),
-                        ],
-                      ),
-                    ),
-                    Text('lbl_Description'.tr,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.gray)),
-                  ],
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.light.withOpacity(0.3),
+                  width: 1,
                 ),
-                GestureDetector(
-                  onTap: () async {
-                    await Clipboard.setData(
-                        ClipboardData(text: invoice.description));
-                    Get.snackbar('inf_Copied'.tr, invoice.description);
-                  },
-                  child: FaIcon(
-                    FontAwesomeIcons.copy,
-                    color: Theme.of(context).colorScheme.gray,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'lbl_Description'.tr,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context).colorScheme.gray,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                      GestureDetector(
+                        onTap: () async {
+                          await Clipboard.setData(
+                              ClipboardData(text: invoice.description));
+                          Get.snackbar('inf_Copied'.tr, invoice.description);
+                        },
+                        child: FaIcon(
+                          FontAwesomeIcons.copy,
+                          color: Theme.of(context).colorScheme.light,
+                          size: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    invoice.description,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.light,
+                          height: 1.5,
+                        ),
+                  ),
+                  // Payment Links
+                  if (invoice.description.isNotEmpty) ...[
+                    Builder(
+                      builder: (context) {
+                        final urls = _extractUrls(invoice.description);
+                        if (urls.isEmpty) return SizedBox.shrink();
+
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 16),
+                            Divider(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .light
+                                  .withOpacity(0.3),
+                              height: 1,
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              'Payment Links',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .bodyMedium
+                                  ?.copyWith(
+                                    color: Theme.of(context).colorScheme.light,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                            const SizedBox(height: 8),
+                            ...urls.map((url) {
+                              return Padding(
+                                padding: const EdgeInsets.only(bottom: 8.0),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: GestureDetector(
+                                        onTap: () async {
+                                          String urlToOpen = url;
+                                          if (!url.startsWith('http://') &&
+                                              !url.startsWith('https://')) {
+                                            urlToOpen = 'https://$url';
+                                          }
+
+                                          final uri = Uri.parse(urlToOpen);
+                                          if (await canLaunchUrl(uri)) {
+                                            await launchUrl(uri,
+                                                mode: LaunchMode
+                                                    .externalApplication);
+                                          } else {
+                                            Get.snackbar(
+                                                'Error', 'Could not open link');
+                                          }
+                                        },
+                                        child: Container(
+                                          padding: EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color:
+                                                Colors.white.withOpacity(0.15),
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                            border: Border.all(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .light
+                                                  .withOpacity(0.5),
+                                              width: 1.5,
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Icon(
+                                                Icons.link,
+                                                size: 16,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .light,
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  url,
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .bodyMedium
+                                                      ?.copyWith(
+                                                        color: Theme.of(context)
+                                                            .colorScheme
+                                                            .light,
+                                                        decoration:
+                                                            TextDecoration
+                                                                .underline,
+                                                        decorationColor:
+                                                            Theme.of(context)
+                                                                .colorScheme
+                                                                .light,
+                                                      ),
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    GestureDetector(
+                                      onTap: () async {
+                                        await Clipboard.setData(
+                                            ClipboardData(text: url));
+                                        Get.snackbar(
+                                          'Copied',
+                                          'Link copied to clipboard',
+                                          backgroundColor: Theme.of(context)
+                                              .colorScheme
+                                              .green
+                                              .withOpacity(0.2),
+                                          colorText: Theme.of(context)
+                                              .colorScheme
+                                              .light,
+                                          duration: Duration(seconds: 1),
+                                        );
+                                      },
+                                      child: Container(
+                                        padding: EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          color: Colors.white.withOpacity(0.15),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                          border: Border.all(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .light
+                                                .withOpacity(0.3),
+                                            width: 1,
+                                          ),
+                                        ),
+                                        child: Icon(
+                                          Icons.copy,
+                                          size: 16,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .light,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 30),
+            if (invoice.status == 'PAID' &&
+                invoice.txHash != null &&
+                (invoice.txHash?.isNotEmpty ?? false)) ...[
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.light.withOpacity(0.3),
+                    width: 1,
                   ),
                 ),
-              ],
-            ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Transaction',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.gray,
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            invoice.txHash!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.light,
+                                  decoration: TextDecoration.underline,
+                                  decorationColor:
+                                      Theme.of(context).colorScheme.light,
+                                ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        GestureDetector(
+                          onTap: () async {
+                            await Clipboard.setData(
+                              ClipboardData(text: invoice.txHash!),
+                            );
+                            Get.snackbar(
+                              'Copied',
+                              'Transaction hash copied',
+                              backgroundColor: Theme.of(context)
+                                  .colorScheme
+                                  .green
+                                  .withOpacity(0.2),
+                              colorText: Theme.of(context).colorScheme.light,
+                              duration: const Duration(seconds: 1),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .light
+                                    .withOpacity(0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.copy,
+                              size: 16,
+                              color: Theme.of(context).colorScheme.light,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        GestureDetector(
+                          onTap: () async => openTxInExplorer(invoice.txHash!),
+                          child: Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .light
+                                    .withOpacity(0.3),
+                                width: 1,
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.open_in_new,
+                              size: 16,
+                              color: Theme.of(context).colorScheme.light,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Builder(
+                      builder: (_) {
+                        final link = buildTxUrl(invoice.txHash);
+                        if (link == null) return const SizedBox.shrink();
+                        return Text(
+                          link,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: Theme.of(context).colorScheme.gray,
+                                  ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(
               height: 30,
             ),
@@ -381,7 +722,7 @@ class ReceivedInvoiceSheet extends HookWidget {
                           backgroundColor: Theme.of(context).colorScheme.green),
                       onPressed: () async {
                         paymentStarted.value = true;
-                        await createStrigaPayment(invoice, true);
+                        await createCDPEmbeddedTransaction(invoice);
                         paymentStarted.value = false;
                       },
                       child: Padding(

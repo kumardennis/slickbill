@@ -1,0 +1,12 @@
+
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "YOUR_TEAM_ID.com.slickbill.app",
+        "paths": [ "/bill/*" ]
+      }
+    ]
+  }
+}

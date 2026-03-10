@@ -189,8 +189,8 @@ class SendInvoice extends HookWidget {
                   Get.snackbar(
                     'Error',
                     'Please enter a valid amount',
-                    backgroundColor: Colors.red.withOpacity(0.1),
-                    colorText: Colors.red,
+                    backgroundColor: Theme.of(context).colorScheme.red,
+                    colorText: Colors.white,
                   );
                 }
               },
@@ -259,7 +259,7 @@ class SendInvoice extends HookWidget {
 
         if (publicInvoice != null) {
           final shareableUrl =
-              'https://slickbills.com/#/bill/${publicInvoice.publicToken}';
+              'https://app.slickbills.com/bill/${publicInvoice.publicToken}';
 
           // Copy to clipboard
           await Clipboard.setData(ClipboardData(text: shareableUrl));
@@ -290,186 +290,405 @@ class SendInvoice extends HookWidget {
           amount;
     }
 
-    return (Scaffold(
-      appBar: CustomAppbar(title: 'hd_SendASlickbill'.tr, appbarIcon: null),
+    return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.light,
+      // appBar: CustomAppbar(title: 'Send Slickbill'.tr, appbarIcon: null),
       body: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            TypeAheadField<UsersByUsername>(
-              builder: (context, controller, focusNode) {
-                return TextField(
-                    controller: controller,
-                    focusNode: focusNode,
-                    autofocus: false,
-                    style: Theme.of(context)
-                        .textTheme
-                        .bodyMedium
-                        ?.copyWith(color: Theme.of(context).colorScheme.dark),
-                    decoration: InputDecoration(
-                        counterStyle: Theme.of(context).textTheme.bodyMedium,
-                        labelText: 'lbl_SearchUsers'.tr,
-                        fillColor: Theme.of(context).colorScheme.gray));
-              },
-              suggestionsCallback: (pattern) => getOptions(pattern),
-              itemBuilder: (context, UsersByUsername suggestion) {
-                return ListTile(
-                    leading: const FaIcon(FontAwesomeIcons.user),
-                    title: Text(
-                      suggestion.users.username,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodyMedium
-                          ?.copyWith(color: Theme.of(context).colorScheme.dark),
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Modern Card for User Search
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
                     ),
-                    subtitle: Text(
-                      '${suggestion.firstName} ${suggestion.lastName}',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.darkGray),
-                    ));
-              },
-              onSelected: (suggestion) {
-                receiverUserId.value = suggestion.id;
-                receiverUsers.value.add(ReceiverUserModel(
-                    userId: suggestion.users.id,
-                    amount: 0.0,
-                    firstName: suggestion.firstName,
-                    lastName: suggestion.lastName,
-                    id: suggestion.id));
-              },
-            ),
-            Wrap(
-              children: receiverUsers.value
-                  .map((receiverUser) => Padding(
-                        padding: const EdgeInsets.all(10.0),
-                        child: Container(
-                          width: MediaQuery.of(context).size.width / 3,
-                          decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.darkGray,
-                              borderRadius: BorderRadius.circular(10.0)),
-                          child: Padding(
-                            padding: const EdgeInsets.all(10.0),
-                            child: Column(children: [
-                              GestureDetector(
-                                  onTap: () {
-                                    receiverUsers.value = receiverUsers.value
-                                        .where((element) =>
-                                            element.id != receiverUser.id)
-                                        .toList();
-                                  },
-                                  child: Text(receiverUser.firstName)),
-                              InputFieldAmount(
-                                  receiverUser: receiverUser,
-                                  changeReceiverAmount: changeReceiverAmount),
-                            ]),
-                          ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Send to',
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.dark,
+                                ),
+                      ),
+                      const SizedBox(height: 12),
+                      TypeAheadField<UsersByUsername>(
+                        builder: (context, controller, focusNode) {
+                          return TextField(
+                            controller: controller,
+                            focusNode: focusNode,
+                            autofocus: false,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(context).colorScheme.dark,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                            decoration: InputDecoration(
+                              hintText: 'Search users by name...',
+                              hintStyle: TextStyle(
+                                color: Theme.of(context).colorScheme.darkGray,
+                              ),
+                              prefixIcon: Icon(
+                                Icons.search,
+                                color: Theme.of(context).colorScheme.blue,
+                              ),
+                              filled: true,
+                              fillColor: Theme.of(context)
+                                  .colorScheme
+                                  .gray
+                                  .withOpacity(0.3),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide.none,
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(
+                                  color: Theme.of(context).colorScheme.blue,
+                                  width: 2,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                        suggestionsCallback: (pattern) => getOptions(pattern),
+                        itemBuilder: (context, UsersByUsername suggestion) {
+                          return Container(
+                            color: Colors.white,
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: Theme.of(context)
+                                    .colorScheme
+                                    .blue
+                                    .withOpacity(0.1),
+                                child: FaIcon(
+                                  FontAwesomeIcons.user,
+                                  size: 16,
+                                  color: Theme.of(context).colorScheme.blue,
+                                ),
+                              ),
+                              title: Text(
+                                suggestion.users.username,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context).colorScheme.dark,
+                                    ),
+                              ),
+                              subtitle: Text(
+                                '${suggestion.firstName} ${suggestion.lastName}',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .darkGray,
+                                    ),
+                              ),
+                            ),
+                          );
+                        },
+                        onSelected: (suggestion) {
+                          receiverUserId.value = suggestion.id;
+                          receiverUsers.value.add(ReceiverUserModel(
+                            userId: suggestion.users.id,
+                            amount: 0.0,
+                            username: suggestion.users.username,
+                            firstName: suggestion.firstName,
+                            lastName: suggestion.lastName,
+                            id: suggestion.id,
+                          ));
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Selected Users Chips
+              if (receiverUsers.value.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: receiverUsers.value.map((receiverUser) {
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors
+                            .white, // ✅ White background instead of transparent blue
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.blue,
+                          width: 2,
                         ),
-                      ))
-                  .toList(),
-            ),
-            InputField(
-              controller: descriptionController,
-              label: 'lbl_Description'.tr,
-            ),
-            InputField(
-              controller: dueDateController,
-              label: 'lbl_DueDate'.tr,
-            ),
-            InputField(
-              controller: referenceNumberController,
-              label: 'lbl_ReferenceNumber'.tr,
-            ),
-            const SizedBox(height: 20),
-            Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Wrap(
-                spacing: 5.0,
-                runSpacing: 5.0,
-                children: Constants().categories.map(
-                  (item) {
-                    return ChoiceChip(
-                      backgroundColor: Theme.of(context).colorScheme.gray,
-                      selectedColor: Theme.of(context).colorScheme.blue,
-                      label: Text(
-                        item,
-                        style: Theme.of(context).textTheme.bodyMedium,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.05),
+                            blurRadius: 8,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
                       ),
-                      selected: category.value == item,
-                      onSelected: (bool selected) {
-                        category.value = item;
-                      },
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.person,
+                                size: 16,
+                                color: Theme.of(context).colorScheme.blue,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                '${receiverUser.firstName} ${receiverUser.lastName}',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .dark, // ✅ Dark text
+                                    ),
+                              ),
+                              const SizedBox(width: 8),
+                              GestureDetector(
+                                onTap: () {
+                                  receiverUsers.value = receiverUsers.value
+                                      .where((element) =>
+                                          element.id != receiverUser.id)
+                                      .toList();
+                                },
+                                child: Container(
+                                  padding: EdgeInsets.all(4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.red.withOpacity(0.1),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 16,
+                                    color: Colors.red,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: 120,
+                            child: InputFieldAmount(
+                              receiverUser: receiverUser,
+                              changeReceiverAmount: changeReceiverAmount,
+                            ),
+                          ),
+                        ],
+                      ),
                     );
-                  },
-                ).toList(),
-              ),
-            ),
-            const SizedBox(height: 40),
-            Center(
-              child: SizedBox(
-                width: MediaQuery.of(context).size.width - 100,
-                child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.blue),
-                    onPressed: createShareableInvoiceLink,
-                    child: Padding(
-                      padding: const EdgeInsets.all(15.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'Share Link',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyLarge
-                                ?.copyWith(
-                                    color: Theme.of(context).colorScheme.light),
-                          ),
-                          const SizedBox(width: 10),
-                          FaIcon(
-                            FontAwesomeIcons.link,
-                            color: Theme.of(context).colorScheme.light,
-                          )
-                        ],
+                  }).toList(),
+                ),
+              ],
+
+              const SizedBox(height: 24),
+
+              // Bill Details Card
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Bill Details',
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.dark,
+                                ),
                       ),
-                    )),
-              ),
-            ),
-            const SizedBox(height: 40),
-            Center(
-              child: SizedBox(
-                width: MediaQuery.of(context).size.width - 100,
-                child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.blue),
-                    onPressed: createInvoice,
-                    child: Padding(
-                      padding: const EdgeInsets.all(15.0),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            'btn_Send'.tr,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyLarge
-                                ?.copyWith(
-                                    color: Theme.of(context).colorScheme.light),
-                          ),
-                          const SizedBox(width: 10),
-                          FaIcon(
-                            FontAwesomeIcons.rocket,
-                            color: Theme.of(context).colorScheme.light,
-                          )
-                        ],
+                      const SizedBox(height: 16),
+                      InputField(
+                        icon: Icons.description,
+                        label: 'Description',
+                        controller: descriptionController,
                       ),
-                    )),
+                      SizedBox(height: 16),
+                      InputField(
+                        icon: Icons.calendar_today,
+                        label: 'Due Date',
+                        controller: dueDateController,
+                        type: TextInputType.datetime,
+                      ),
+                      SizedBox(height: 16),
+                      InputField(
+                        icon: Icons.numbers,
+                        label: 'Reference Number',
+                        controller: referenceNumberController,
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 40),
-          ],
+
+              const SizedBox(height: 24),
+
+              // Category Selection
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Category',
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.dark,
+                                ),
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8.0,
+                        runSpacing: 8.0,
+                        children: Constants().categories.map((item) {
+                          final isSelected = category.value == item;
+                          return GestureDetector(
+                            onTap: () => category.value = item,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isSelected
+                                    ? Theme.of(context).colorScheme.blue
+                                    : Theme.of(context)
+                                        .colorScheme
+                                        .gray
+                                        .withOpacity(0.3),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: isSelected
+                                      ? Theme.of(context).colorScheme.blue
+                                      : Colors.transparent,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Text(
+                                item,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                      color: isSelected
+                                          ? Colors.white
+                                          : Theme.of(context).colorScheme.dark,
+                                      fontWeight: isSelected
+                                          ? FontWeight.w600
+                                          : FontWeight.normal,
+                                    ),
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 32),
+
+              // Action Buttons
+              // Share Link Button
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Theme.of(context).colorScheme.blue,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    elevation: 0,
+                  ),
+                  onPressed: receiverUsers.value.isEmpty ? null : createInvoice,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      FaIcon(
+                        FontAwesomeIcons.paperPlane,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Send To Users',
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 40),
+            ],
+          ),
         ),
       ),
-    ));
+    );
   }
 }

@@ -9,6 +9,7 @@ import {
 } from "../../_shared/confirmedRequiredParams.ts";
 import { corsHeaders } from "../../_shared/cors.ts";
 import { createSupabase } from "../../_shared/supabaseClient.ts";
+import { sendOneSignalPush } from "../../_shared/oneSignal.ts";
 
 export const handler = async (req: Request) => {
   const supabase = createSupabase(req);
@@ -18,6 +19,7 @@ export const handler = async (req: Request) => {
       privateUserId,
       senderName,
       senderIban,
+      receiverPrivateUserId,
       receiverUserId,
       receiverIsPrivate,
       amount,
@@ -31,6 +33,7 @@ export const handler = async (req: Request) => {
       !confirmedRequiredParams([
         privateUserId,
         senderName,
+        receiverPrivateUserId,
         receiverUserId,
         receiverIsPrivate,
         senderIban,
@@ -69,11 +72,11 @@ export const handler = async (req: Request) => {
       .insert(
         receiverIsPrivate
           ? {
-              privateUserId: receiverUserId,
+              privateUserId: receiverPrivateUserId,
             }
           : {
-              businessUserId: receiverUserId,
-            }
+              businessUserId: receiverPrivateUserId,
+            },
       )
       .select();
 
@@ -103,7 +106,7 @@ export const handler = async (req: Request) => {
           invoiceNo: `${privateUserId}${Date.now()}`,
           referenceNo,
           category,
-          receiverPrivateUserId: receiverUserId,
+          receiverPrivateUserId: receiverPrivateUserId,
           senderPrivateUserId: privateUserId,
         })
         .select();
@@ -125,6 +128,21 @@ export const handler = async (req: Request) => {
       data: digitalInvoiceData,
       error: digitalInvoiceError,
     };
+
+    const { data: sender, error: senderError2 } = await supabase
+      .from("private_users")
+      .select("firstName, lastName")
+      .eq("id", privateUserId)
+      .single();
+
+    await sendOneSignalPush({
+      externalUserId: receiverUserId.toString(), // map from private_users.userId
+      heading: "New Slickbill!",
+      content: Boolean(sender?.firstName)
+        ? `${sender?.firstName} sent you a slickbill!`
+        : "You received a new slickbill!",
+      data: { type: "NEW_SLICKBILL", invoiceId: digitalInvoiceData[0].id },
+    });
 
     return new Response(JSON.stringify(responseData), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

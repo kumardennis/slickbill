@@ -11,6 +11,7 @@ import 'package:slickbill/feature_dashboard/screens/public_invoices.dart';
 import 'package:slickbill/feature_dashboard/screens/received_bills.dart';
 import 'package:slickbill/feature_dashboard/screens/sent_bills.dart';
 import 'package:slickbill/feature_navigation/getx_controllers/navigation_controller.dart';
+import 'package:slickbill/feature_trashboard/screens/all_trash_bills.dart';
 import 'package:slickbill/shared_widgets/custom_appbar.dart';
 
 import '../getx_controllers/intent_controller.dart';
@@ -31,7 +32,15 @@ class AllBills extends HookWidget {
       appBar: CustomAppbar(
         title:
             '${'hd_YourSlickBills'.tr} @${userController.user.value.username}',
-        appbarIcon: null,
+        appbarIcon: IconButton(
+          icon: FaIcon(
+            FontAwesomeIcons.trash,
+            size: 20,
+            color: Theme.of(context).colorScheme.blue,
+          ),
+          onPressed: () => Get.to(() => AllTrashBills()),
+          tooltip: 'Trash',
+        ),
         showSettings: true,
         tabBar: TabBar(
             indicatorColor: Theme.of(context).colorScheme.blue,
@@ -55,7 +64,7 @@ class AllBills extends HookWidget {
                                   : Theme.of(context).colorScheme.gray),
                     ),
                     const SizedBox(
-                      width: 5,
+                      width: 4,
                     ),
                     FaIcon(FontAwesomeIcons.squareCaretDown,
                         size: 20,

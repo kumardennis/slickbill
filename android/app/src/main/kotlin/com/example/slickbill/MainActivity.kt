@@ -3,11 +3,11 @@ package com.example.slickbill
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-class MainActivity: FlutterActivity() {
+class MainActivity: FlutterFragmentActivity() {
     private val CHANNEL_PDF_BYTES = "com.example.slickbill/getPdfBytes"
     private val CHANNEL_EXTRACT_TEXT = "com.example.slickbill/extractText"
     private val CHANNEL_NFC = "com.example.slickbill/nfc"

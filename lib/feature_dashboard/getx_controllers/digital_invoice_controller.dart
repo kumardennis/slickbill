@@ -1,4 +1,7 @@
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:slickbill/core/services/push_notification_service.dart';
+import 'package:slickbill/core/services/view_tracking_service.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
 import 'package:slickbill/feature_public/models/public_invoice_model.dart';
 import 'package:slickbill/feature_dashboard/models/public_invoice_claim_model.dart';
@@ -6,6 +9,8 @@ import 'package:slickbill/feature_dashboard/repos/digital_invoices_repo.dart';
 
 class DigitalInvoiceController extends GetxController {
   final DigitalInvoiceRepository _repository = DigitalInvoiceRepository();
+
+  final ViewTrackingService _viewTracker = ViewTrackingService();
 
   // ==================== OBSERVABLES ====================
 
@@ -93,6 +98,27 @@ class DigitalInvoiceController extends GetxController {
       Get.snackbar('Error', 'Failed to load invoice: $e');
       print('Error loading invoice: $e');
       return null;
+    }
+  }
+
+  /// Update the transaction hash for an invoice
+  Future<InvoiceModel?> updateTxHashForInvoice(
+      int invoiceId, String txHash) async {
+    try {
+      isLoading.value = true;
+      final updatedInvoice =
+          await _repository.updateTxHashForInvoiceById(invoiceId, txHash);
+      if (updatedInvoice != null) {
+        Get.snackbar('Success', 'Transaction hash updated successfully!');
+        return updatedInvoice;
+      }
+      debugPrint('Error: Failed to update transaction hash');
+      return null;
+    } catch (e) {
+      debugPrint('Error updating transaction hash: $e');
+      return null;
+    } finally {
+      isLoading.value = false;
     }
   }
 
@@ -255,6 +281,7 @@ class DigitalInvoiceController extends GetxController {
       await loadReceivedInvoices(claimerPrivateUserId);
 
       Get.snackbar('Success', 'Invoice added to your account!');
+
       return invoice;
     } catch (e) {
       Get.snackbar('Error', 'Failed to claim invoice: $e');
@@ -301,6 +328,29 @@ class DigitalInvoiceController extends GetxController {
       Get.snackbar('Error', 'Failed to load claimers: $e');
       print('Error loading claimers: $e');
       return [];
+    }
+  }
+
+  Future<void> trackPublicInvoiceView(String publicToken) async {
+    try {
+      // Check if should track (not viewed in last 30 days)
+      final shouldTrack = await _viewTracker.shouldTrackView(publicToken);
+
+      if (!shouldTrack) {
+        print('Skipping view tracking - already counted');
+        return;
+      }
+
+      // Increment in database
+      await _repository.incrementPublicInvoiceViewCount(publicToken);
+
+      // Mark as viewed locally
+      await _viewTracker.markAsViewed(publicToken);
+
+      print('✅ View tracked successfully');
+    } catch (e) {
+      print('Error tracking view: $e');
+      // Silent fail - don't break UX
     }
   }
 

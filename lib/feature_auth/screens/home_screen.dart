@@ -17,6 +17,7 @@ import 'package:slickbill/feature_tickets/screens/tickets_folder_list.dart';
 import 'package:slickbill/shared_screens/received_invoice.dart';
 import 'package:slickbill/shared_widgets/global_invoice_receiver.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart' as launcher;
 
 import '../../feature_dashboard/screens/all_bills.dart';
 import '../../feature_navigation/getx_controllers/navigation_controller.dart';
@@ -35,12 +36,9 @@ class HomeScreen extends HookWidget {
       Get.put(NavigationController()); // Initialize controller
 
   final List<Widget> _pages = [
-    // List of your page widgets
-    AllBills(),
-    const SendInvoice(),
-    const OpenAndCreateSelfInvoice(),
-    const SendNfcInvoice(),
-    const AllTrashBills()
+    AllBills(), // 0 - Bills list
+    const SendNfcInvoice(), // 2 - QR/NFC Exchange (CENTER - Main action)
+    const OpenAndCreateSelfInvoice(), // 1 - Upload invoice
   ];
 
   @override
@@ -171,8 +169,7 @@ class HomeScreen extends HookWidget {
     }
 
     return Scaffold(
-      body: Obx(() =>
-          _pages[navigationController.currentIndex.value]), // Current page
+      body: Obx(() => _pages[navigationController.currentIndex.value]),
       bottomNavigationBar: Obx(
         () => BottomNavigationBar(
           type: BottomNavigationBarType.fixed,
@@ -180,56 +177,62 @@ class HomeScreen extends HookWidget {
           onTap: (index) => navigationController.changeIndex(index),
           backgroundColor: Theme.of(context).colorScheme.blue,
           selectedItemColor: Theme.of(context).colorScheme.light,
-          unselectedItemColor: Theme.of(context).colorScheme.gray,
+          unselectedItemColor:
+              Theme.of(context).colorScheme.gray.withOpacity(0.6),
+          selectedFontSize: 11,
+          unselectedFontSize: 10,
           items: const [
+            // ✅ 0 - Bills
             BottomNavigationBarItem(
-                icon: FaIcon(FontAwesomeIcons.list), label: ''),
+              icon: FaIcon(FontAwesomeIcons.list, size: 20),
+              label: 'Bills',
+            ),
+
             BottomNavigationBarItem(
-              icon: FaIcon(FontAwesomeIcons.rocket),
-              label: '',
+              icon: FaIcon(FontAwesomeIcons.qrcode, size: 28),
+              label: 'Exchange',
             ),
             BottomNavigationBarItem(
-              icon: FaIcon(FontAwesomeIcons.squarePlus),
-              label: '',
-            ),
-            BottomNavigationBarItem(
-              icon: FaIcon(FontAwesomeIcons.nfcSymbol),
-              label: '',
-            ),
-            BottomNavigationBarItem(
-              icon: FaIcon(FontAwesomeIcons.trash),
-              label: '',
+              icon: FaIcon(FontAwesomeIcons.fileArrowUp, size: 20),
+              label: 'Upload',
             ),
           ],
         ),
       ),
-      floatingActionButton: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Theme.of(context).colorScheme.darkerBlue,
-              Theme.of(context).colorScheme.blue,
-            ],
-          ),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Theme.of(context).colorScheme.darkerBlue.withOpacity(0.3),
-              blurRadius: 15,
-              offset: const Offset(0, 6),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Theme.of(context).colorScheme.darkerBlue,
+                  Theme.of(context).colorScheme.blue,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color:
+                      Theme.of(context).colorScheme.darkerBlue.withOpacity(0.3),
+                  blurRadius: 15,
+                  offset: const Offset(0, 6),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: FloatingActionButton(
-          onPressed: () => GlobalReceiveService.showReceiveOptions(context),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          child: const FaIcon(
-            FontAwesomeIcons.download,
-            color: Colors.white,
-            size: 24,
+            child: FloatingActionButton(
+              heroTag: 'receive',
+              onPressed: () => GlobalReceiveService.showReceiveOptions(context),
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              child: const FaIcon(
+                FontAwesomeIcons.download,
+                color: Colors.white,
+                size: 24,
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

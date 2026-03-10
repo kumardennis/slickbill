@@ -2,14 +2,17 @@ import 'dart:convert';
 
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:slickbill/core/services/push_notification_service.dart';
 import 'package:slickbill/feature_auth/screens/sign_in.dart';
 import 'package:slickbill/feature_auth/services/google_auth_service.dart';
+import 'package:slickbill/feature_dashboard/repos/user_repo.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/user_model.dart';
 
 class UserController extends GetxController {
   final supabase = Supabase.instance.client;
+  final UserRepo _userRepo = UserRepo();
   var user = ClientUserModel(
     id: 0,
     username: '',
@@ -19,6 +22,7 @@ class UserController extends GetxController {
     isPrivate: true,
     firstName: '',
     lastName: '',
+    cdpWalletId: null,
   ).obs;
 
   var _isRefreshing = false;
@@ -47,6 +51,7 @@ class UserController extends GetxController {
           // Update the access token in user model
           user.value = user.value.copyWith(
             accessToken: response.session!.accessToken,
+            cdpWalletId: user.value.cdpWalletId,
           );
           await saveUserData();
           print('Session refreshed successfully');
@@ -104,6 +109,51 @@ class UserController extends GetxController {
     }
   }
 
+  Future<bool> updateCdpWalletAddress(
+      String walletAddress, String cdpUserId) async {
+    try {
+      print(
+          'Updating CDP wallet address: $walletAddress $cdpUserId for user ID: ${user.value.id}');
+
+      final response = await _userRepo.updateCdpWalletId(
+        userId: user.value.id,
+        cdpWalletId: walletAddress,
+        cdpUserId: cdpUserId,
+      );
+
+      if (response != null) {
+        // Update local user model
+        user.value = user.value.copyWith(cdpWalletId: walletAddress);
+        await saveUserData();
+
+        print('✅ CDP wallet address updated successfully');
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      print('❌ Error updating CDP wallet address: $e');
+      return false;
+    }
+  }
+
+  Future<String?> getCdpWalletAddress() async {
+    try {
+      final walletId = await _userRepo.getCdpWalletId(user.value.id);
+
+      if (walletId != null) {
+        // Update local user model
+        user.value = user.value.copyWith(cdpWalletId: walletId);
+        await saveUserData();
+      }
+
+      return walletId;
+    } catch (e) {
+      print('❌ Error fetching CDP wallet address: $e');
+      return null;
+    }
+  }
+
   Future<void> clearUserData() async {
     try {
       await _googleAuthService.signOut();
@@ -127,6 +177,7 @@ class UserController extends GetxController {
 
   Future<void> forceLogout() async {
     try {
+      await PushNotificationService.logoutUser();
       await supabase.auth.signOut();
       await clearUserData();
       Get.offAll(() => SignIn());

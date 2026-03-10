@@ -12,11 +12,21 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:universal_html/html.dart' as html;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class PublicInvoiceLanding extends HookWidget {
   final String token;
 
   const PublicInvoiceLanding({super.key, required this.token});
+
+  List<String> _extractUrls(String text) {
+    final urlPattern = RegExp(
+      r'(https?:\/\/[^\s]+)|(www\.[^\s]+)|([a-zA-Z0-9-]+\.(com|net|org|io|me|app|co)[^\s]*)',
+      caseSensitive: false,
+    );
+    final matches = urlPattern.allMatches(text);
+    return matches.map((match) => match.group(0)!).toList();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +49,7 @@ class PublicInvoiceLanding extends HookWidget {
 
         if (error != null) {
           print('❌ OAuth error in URL: $error - $errorDescription');
-          await Future.delayed(Duration(milliseconds: 100));
+          await Future.delayed(const Duration(milliseconds: 100));
         }
       }
 
@@ -74,12 +84,12 @@ class PublicInvoiceLanding extends HookWidget {
               await Supabase.instance.client.auth.signOut();
               Get.offAllNamed('/sign-in');
 
-              Future.delayed(Duration(milliseconds: 300), () {
+              Future.delayed(const Duration(milliseconds: 300), () {
                 Get.snackbar(
                   'Error',
                   'Failed to load user profile. Please sign in again.',
-                  backgroundColor: Colors.red.withOpacity(0.1),
-                  colorText: Colors.red,
+                  backgroundColor: Theme.of(context).colorScheme.red,
+                  colorText: Colors.white,
                 );
               });
             }
@@ -88,12 +98,12 @@ class PublicInvoiceLanding extends HookWidget {
             await Supabase.instance.client.auth.signOut();
             Get.offAllNamed('/sign-in');
 
-            Future.delayed(Duration(milliseconds: 300), () {
+            Future.delayed(const Duration(milliseconds: 300), () {
               Get.snackbar(
                 'Error',
                 'Error loading user: ${e.toString()}',
-                backgroundColor: Colors.red.withOpacity(0.1),
-                colorText: Colors.red,
+                backgroundColor: Theme.of(context).colorScheme.red,
+                colorText: Colors.white,
               );
             });
           }
@@ -107,30 +117,48 @@ class PublicInvoiceLanding extends HookWidget {
         try {
           final loadedInvoice =
               await invoiceController.getPublicInvoiceByToken(token);
+
+          // ✅ Check if widget is still mounted before updating state
+          if (!context.mounted) return;
+
           invoice.value = loadedInvoice;
+
+          await invoiceController.trackPublicInvoiceView(token);
 
           await _checkAuth();
 
           // If on web, try to open in app
           if (kIsWeb && !hasCheckedDeepLink.value) {
             hasCheckedDeepLink.value = true;
-            _tryOpenInApp(token, context);
           }
         } catch (e) {
+          // ✅ Check if widget is still mounted before showing snackbar
+          if (!context.mounted) return;
+
           Get.snackbar('Error', 'Failed to load invoice: $e');
+
+          print('❌ Error loading public invoice: $token $e');
         } finally {
-          isLoading.value = false;
+          // ✅ Only update if widget is still mounted
+          if (context.mounted) {
+            isLoading.value = false;
+          }
         }
       }
 
       initialize();
-      return null;
-    }, []);
+
+      // ✅ Add cleanup function
+      return () {
+        // Cleanup when widget is disposed
+        print('🧹 PublicInvoiceLanding disposed');
+      };
+    }, []); // Keep empty dependency array
 
     // If on mobile/app, go directly to the full view
-    if (!kIsWeb) {
-      return PublicInvoiceView(token: token);
-    }
+    // if (!kIsWeb) {
+    //   return PublicInvoiceView(token: token);
+    // }
 
     // Web view with app detection
     return Scaffold(
@@ -151,54 +179,39 @@ class PublicInvoiceLanding extends HookWidget {
     );
   }
 
-  void _tryOpenInApp(String token, BuildContext context) {
-    // Try to open in app
-    final deepLink = 'slickbill://bill/$token';
-    final webFallback = 'https://slickbills-app.vercel.app/#/bill/$token';
+  void _showAppInstallDialog(BuildContext context, String token) {
+    // With Universal Links, you use the standard HTTPS URL.
+    // The OS will open the app if it's installed, or the website if it's not.
+    final universalLink = 'slickbills://bill/$token';
 
-    // Attempt deep link
-    html.window.location.href = deepLink;
-
-    // Show dialog after short delay
-    Future.delayed(Duration(milliseconds: 500), () {
-      // ... rest of dialog code
-    });
-  }
-
-  void _showAppInstallDialog(
-      BuildContext context, String appStoreLink, String playStoreLink) {
     Get.dialog(
       AlertDialog(
         title: Text(
-          'Open in SlickBills App?',
+          'Open in SlickBill App?',
           style: TextStyle(color: Theme.of(context).colorScheme.dark),
         ),
         content: Text(
-          'For the best experience, open this invoice in the SlickBills mobile app.',
+          'You will be redirected. If the app is installed, it will open automatically.',
           style: TextStyle(color: Theme.of(context).colorScheme.darkGray),
         ),
         actions: [
           TextButton(
             onPressed: () => Get.back(),
-            child: Text('Continue on Web'),
+            child: Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () {
-              // Detect platform and open appropriate store
-              final userAgent = html.window.navigator.userAgent.toLowerCase();
-              if (userAgent.contains('iphone') || userAgent.contains('ipad')) {
-                html.window.open(appStoreLink, '_blank');
-              } else {
-                html.window.open(playStoreLink, '_blank');
-              }
+              // Navigate to the standard web URL. The OS handles the redirection.
+              html.window.open(universalLink, '_self');
+              Get.back();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Theme.of(context).colorScheme.blue,
             ),
-            child: Text('Download App',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.light,
-                )),
+            child: Text(
+              'Open in App',
+              style: TextStyle(color: Theme.of(context).colorScheme.light),
+            ),
           ),
         ],
       ),
@@ -215,7 +228,7 @@ class PublicInvoiceLanding extends HookWidget {
             size: 64,
             color: Theme.of(context).colorScheme.red,
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           Text(
             'Invoice Not Found',
             style: Theme.of(context).textTheme.headlineMedium?.copyWith(
@@ -223,7 +236,7 @@ class PublicInvoiceLanding extends HookWidget {
                   fontWeight: FontWeight.bold,
                 ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
             'This invoice link may be invalid or expired',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -243,349 +256,581 @@ class PublicInvoiceLanding extends HookWidget {
 
     final _digitalInvoiceController = Get.find<DigitalInvoiceController>();
 
-    return Container(
-      height: MediaQuery.of(context).size.height,
-      width: MediaQuery.of(context).size.width,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Theme.of(context).colorScheme.darkerBlue,
-            Theme.of(context).colorScheme.blue,
-            Theme.of(context).colorScheme.turqouise,
-            Theme.of(context).colorScheme.darkerBlue,
-          ],
-          stops: const [0.0, 0.2, 0.7, 0.85],
-          transform: GradientRotation(3.14 / 4),
-          tileMode: TileMode.clamp,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      child: SafeArea(
-        child: SingleChildScrollView(
-          child: Center(
-            child: Container(
-              constraints: BoxConstraints(maxWidth: 600),
-              padding: EdgeInsets.all(24),
-              // Add min height to ensure content fills screen
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minHeight: MediaQuery.of(context).size.height -
-                      MediaQuery.of(context).padding.top -
-                      MediaQuery.of(context).padding.bottom -
-                      48,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Header with Status and Amount
-                    Container(
-                      padding: EdgeInsets.all(28),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.95),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 20,
-                            offset: Offset(0, 10),
-                          ),
-                        ],
+    return Column(
+      children: [
+        if (kIsWeb) ...[
+          Container(
+            color: Colors.grey[200],
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text("Have the app?"),
+                SizedBox(width: 8),
+                TextButton(
+                  onPressed: () => _showAppInstallDialog(context, token),
+                  child: Text("Open in App"),
+                )
+              ],
+            ),
+          )
+        ],
+        Expanded(
+          child: Container(
+            height: MediaQuery.of(context).size.height,
+            width: MediaQuery.of(context).size.width,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Theme.of(context).colorScheme.darkerBlue,
+                  Theme.of(context).colorScheme.blue,
+                  Theme.of(context).colorScheme.turqouise,
+                  Theme.of(context).colorScheme.darkerBlue,
+                ],
+                stops: const [0.0, 0.2, 0.7, 0.85],
+                transform: const GradientRotation(3.14 / 4),
+                tileMode: TileMode.clamp,
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: SafeArea(
+              child: SingleChildScrollView(
+                child: Center(
+                  child: Container(
+                    constraints: const BoxConstraints(maxWidth: 600),
+                    padding: const EdgeInsets.all(24),
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        minHeight: MediaQuery.of(context).size.height -
+                            MediaQuery.of(context).padding.top -
+                            MediaQuery.of(context).padding.bottom -
+                            48,
                       ),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Invoice',
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.dark,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
+                          Container(
+                            padding: const EdgeInsets.all(28),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.95),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 10),
                                 ),
-                              ),
-                              Container(
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: invoice.status == 'PAID'
-                                      ? Theme.of(context)
-                                          .colorScheme
-                                          .green
-                                          .withOpacity(0.15)
-                                      : dateIsPassed
-                                          ? Theme.of(context)
-                                              .colorScheme
-                                              .red
-                                              .withOpacity(0.15)
-                                          : Theme.of(context)
-                                              .colorScheme
-                                              .yellow
-                                              .withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(25),
-                                ),
-                                child: Text(
-                                  invoice.status == 'PAID' ? 'PAID' : 'UNPAID',
-                                  style: TextStyle(
-                                    color: invoice.status == 'PAID'
-                                        ? Theme.of(context).colorScheme.green
-                                        : dateIsPassed
-                                            ? Theme.of(context).colorScheme.red
-                                            : Theme.of(context)
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Invoice',
+                                      style: TextStyle(
+                                        color:
+                                            Theme.of(context).colorScheme.dark,
+                                        fontSize: 24,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                        vertical: 8,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: invoice.status == 'PAID'
+                                            ? Theme.of(context)
                                                 .colorScheme
-                                                .yellow,
+                                                .green
+                                                .withOpacity(0.15)
+                                            : dateIsPassed
+                                                ? Theme.of(context)
+                                                    .colorScheme
+                                                    .red
+                                                    .withOpacity(0.15)
+                                                : Theme.of(context)
+                                                    .colorScheme
+                                                    .yellow
+                                                    .withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(25),
+                                      ),
+                                      child: Text(
+                                        invoice.status == 'PAID'
+                                            ? 'PAID'
+                                            : 'UNPAID',
+                                        style: TextStyle(
+                                          color: invoice.status == 'PAID'
+                                              ? Theme.of(context)
+                                                  .colorScheme
+                                                  .green
+                                              : dateIsPassed
+                                                  ? Theme.of(context)
+                                                      .colorScheme
+                                                      .red
+                                                  : Theme.of(context)
+                                                      .colorScheme
+                                                      .yellow,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 20),
+                                Text(
+                                  '€${invoice.amount.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.blue,
+                                    fontSize: 48,
                                     fontWeight: FontWeight.bold,
-                                    fontSize: 13,
+                                    height: 1.1,
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          SizedBox(height: 20),
-                          Text(
-                            '€${invoice.amount.toStringAsFixed(2)}',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.blue,
-                              fontSize: 48,
-                              fontWeight: FontWeight.bold,
-                              height: 1.1,
+                                if (invoice.description != null) ...[
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    invoice.description!,
+                                    style: TextStyle(
+                                      color: Theme.of(context).colorScheme.dark,
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w500,
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                  if (invoice.description!.isNotEmpty) ...[
+                                    Builder(
+                                      builder: (context) {
+                                        final urls =
+                                            _extractUrls(invoice.description!);
+                                        if (urls.isEmpty)
+                                          return SizedBox.shrink();
+
+                                        return Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            const SizedBox(height: 16),
+                                            Divider(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .gray
+                                                  .withOpacity(0.3),
+                                              height: 1,
+                                            ),
+                                            const SizedBox(height: 12),
+                                            Text(
+                                              'Payment Links',
+                                              style: TextStyle(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .dark,
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 8),
+                                            ...urls.map((url) {
+                                              return Padding(
+                                                padding: const EdgeInsets.only(
+                                                    bottom: 8.0),
+                                                child: Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: GestureDetector(
+                                                        onTap: () async {
+                                                          String urlToOpen =
+                                                              url;
+                                                          if (!url.startsWith(
+                                                                  'http://') &&
+                                                              !url.startsWith(
+                                                                  'https://')) {
+                                                            urlToOpen =
+                                                                'https://$url';
+                                                          }
+
+                                                          final uri = Uri.parse(
+                                                              urlToOpen);
+                                                          if (await canLaunchUrl(
+                                                              uri)) {
+                                                            await launchUrl(uri,
+                                                                mode: LaunchMode
+                                                                    .externalApplication);
+                                                          } else {
+                                                            Get.snackbar(
+                                                                'Error',
+                                                                'Could not open link');
+                                                          }
+                                                        },
+                                                        child: Container(
+                                                          padding:
+                                                              EdgeInsets.all(
+                                                                  12),
+                                                          decoration:
+                                                              BoxDecoration(
+                                                            color: Theme.of(
+                                                                    context)
+                                                                .colorScheme
+                                                                .blue
+                                                                .withOpacity(
+                                                                    0.1),
+                                                            borderRadius:
+                                                                BorderRadius
+                                                                    .circular(
+                                                                        8),
+                                                            border: Border.all(
+                                                              color: Theme.of(
+                                                                      context)
+                                                                  .colorScheme
+                                                                  .blue
+                                                                  .withOpacity(
+                                                                      0.3),
+                                                              width: 1.5,
+                                                            ),
+                                                          ),
+                                                          child: Row(
+                                                            children: [
+                                                              Icon(
+                                                                Icons.link,
+                                                                size: 16,
+                                                                color: Theme.of(
+                                                                        context)
+                                                                    .colorScheme
+                                                                    .blue,
+                                                              ),
+                                                              const SizedBox(
+                                                                  width: 8),
+                                                              Expanded(
+                                                                child: Text(
+                                                                  url,
+                                                                  style:
+                                                                      TextStyle(
+                                                                    color: Theme.of(
+                                                                            context)
+                                                                        .colorScheme
+                                                                        .blue,
+                                                                    fontSize:
+                                                                        14,
+                                                                    decoration:
+                                                                        TextDecoration
+                                                                            .underline,
+                                                                    fontWeight:
+                                                                        FontWeight
+                                                                            .w500,
+                                                                  ),
+                                                                  maxLines: 1,
+                                                                  overflow:
+                                                                      TextOverflow
+                                                                          .ellipsis,
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 8),
+                                                    GestureDetector(
+                                                      onTap: () async {
+                                                        await Clipboard.setData(
+                                                            ClipboardData(
+                                                                text: url));
+                                                        Get.snackbar(
+                                                          'Copied',
+                                                          'Link copied to clipboard',
+                                                          backgroundColor:
+                                                              Theme.of(context)
+                                                                  .colorScheme
+                                                                  .green
+                                                                  .withOpacity(
+                                                                      0.2),
+                                                          colorText:
+                                                              Theme.of(context)
+                                                                  .colorScheme
+                                                                  .green,
+                                                          duration: Duration(
+                                                              seconds: 1),
+                                                        );
+                                                      },
+                                                      child: Container(
+                                                        padding:
+                                                            EdgeInsets.all(10),
+                                                        decoration:
+                                                            BoxDecoration(
+                                                          color: Theme.of(
+                                                                  context)
+                                                              .colorScheme
+                                                              .green
+                                                              .withOpacity(0.1),
+                                                          borderRadius:
+                                                              BorderRadius
+                                                                  .circular(8),
+                                                          border: Border.all(
+                                                            color: Theme.of(
+                                                                    context)
+                                                                .colorScheme
+                                                                .green
+                                                                .withOpacity(
+                                                                    0.3),
+                                                            width: 1,
+                                                          ),
+                                                        ),
+                                                        child: Icon(
+                                                          Icons.copy,
+                                                          size: 16,
+                                                          color:
+                                                              Theme.of(context)
+                                                                  .colorScheme
+                                                                  .green,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            }).toList(),
+                                          ],
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ],
+                              ],
                             ),
                           ),
-                          if (invoice.description != null) ...[
-                            SizedBox(height: 12),
-                            Text(
-                              invoice.description!,
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.dark,
-                                fontSize: 18,
-                                fontWeight: FontWeight.w500,
+                          const SizedBox(height: 20),
+                          Container(
+                            padding: const EdgeInsets.all(24),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.95),
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 10),
+                                ),
+                              ],
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Invoice Details',
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.dark,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                if (invoice.senderName != null)
+                                  _buildDetailRow(
+                                    context,
+                                    'From',
+                                    invoice.senderName!,
+                                    copyable: true,
+                                  ),
+                                if (invoice.senderIban != null)
+                                  _buildDetailRow(
+                                    context,
+                                    'IBAN',
+                                    invoice.senderIban!,
+                                    copyable: true,
+                                  ),
+                                if (invoice.category != null)
+                                  _buildDetailRow(
+                                    context,
+                                    'Category',
+                                    invoice.category!,
+                                  ),
+                                if (invoice.referenceNo != null &&
+                                    invoice.referenceNo!.isNotEmpty)
+                                  _buildDetailRow(
+                                    context,
+                                    'Reference',
+                                    invoice.referenceNo!,
+                                    copyable: true,
+                                  ),
+                                if (invoice.deadline != null)
+                                  _buildDetailRow(
+                                    context,
+                                    'Due Date',
+                                    DateFormat('EEE, dd MMM yyyy').format(
+                                      DateTime.parse(invoice.deadline!),
+                                    ),
+                                    highlight: dateIsPassed,
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 32),
+                          if (isLoggedIn) ...[
+                            ElevatedButton(
+                              onPressed: () async {
+                                try {
+                                  final claimedInvoice =
+                                      await _digitalInvoiceController
+                                          .claimPublicInvoice(
+                                    token: token,
+                                    claimerUserId:
+                                        userController.user.value.id!,
+                                    claimerPrivateUserId: userController
+                                        .user.value.privateUserId!,
+                                  );
+
+                                  if (claimedInvoice != null) {
+                                    Get.snackbar(
+                                      'Success',
+                                      'Invoice claimed successfully!',
+                                      backgroundColor: Theme.of(context)
+                                          .colorScheme
+                                          .green
+                                          .withOpacity(0.2),
+                                      colorText:
+                                          Theme.of(context).colorScheme.green,
+                                    );
+
+                                    Future.delayed(const Duration(seconds: 1),
+                                        () {
+                                      Get.offAllNamed('/home-screen');
+                                    });
+                                  }
+                                } catch (e) {
+                                  Get.snackbar(
+                                    'Error',
+                                    e.toString(),
+                                    backgroundColor: Theme.of(context)
+                                        .colorScheme
+                                        .red
+                                        .withOpacity(0.2),
+                                    colorText:
+                                        Theme.of(context).colorScheme.red,
+                                  );
+                                }
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    Theme.of(context).colorScheme.blue,
+                                foregroundColor: Colors.white,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 18),
+                                elevation: 8,
+                                shadowColor: Theme.of(context)
+                                    .colorScheme
+                                    .blue
+                                    .withOpacity(0.5),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: const Text(
+                                'Claim This Invoice',
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            OutlinedButton(
+                              onPressed: () {
+                                Get.to(() => PublicInvoiceView(token: token));
+                              },
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(
+                                    color: Colors.white, width: 2),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 18),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: const Text(
+                                'View Full Details',
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                          ] else ...[
+                            ElevatedButton(
+                              onPressed: () {
+                                Get.toNamed(
+                                  '/sign-in',
+                                  parameters: {'invoice_token': token},
+                                );
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    Theme.of(context).colorScheme.blue,
+                                foregroundColor: Colors.white,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 18),
+                                elevation: 8,
+                                shadowColor: Theme.of(context)
+                                    .colorScheme
+                                    .blue
+                                    .withOpacity(0.5),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: const Text(
+                                'Sign Up to Claim Invoice',
+                                style: TextStyle(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 14),
+                            TextButton(
+                              onPressed: () {
+                                Get.toNamed(
+                                  '/sign-in',
+                                  parameters: {'invoice_token': token},
+                                );
+                              },
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                              child: const Text(
+                                'Already have an account? Sign In',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.underline,
+                                  decorationColor: Colors.white,
+                                ),
                               ),
                             ),
                           ],
+                          const SizedBox(height: 40),
                         ],
                       ),
                     ),
-
-                    SizedBox(height: 20),
-
-                    // Invoice Details Card
-                    Container(
-                      padding: EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.95),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.1),
-                            blurRadius: 20,
-                            offset: Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Invoice Details',
-                            style: TextStyle(
-                              color: Theme.of(context).colorScheme.dark,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(height: 20),
-                          if (invoice.senderName != null)
-                            _buildDetailRow(
-                              context,
-                              'From',
-                              invoice.senderName!,
-                              copyable: true, // Enable copy
-                            ),
-                          if (invoice.senderIban != null)
-                            _buildDetailRow(
-                              context,
-                              'IBAN',
-                              invoice.senderIban!,
-                              copyable: true, // Enable copy
-                            ),
-                          if (invoice.category != null)
-                            _buildDetailRow(
-                              context,
-                              'Category',
-                              invoice.category!,
-                            ),
-                          if (invoice.referenceNo != null &&
-                              invoice.referenceNo!.isNotEmpty)
-                            _buildDetailRow(
-                              context,
-                              'Reference',
-                              invoice.referenceNo!,
-                              copyable: true, // Enable copy
-                            ),
-                          if (invoice.deadline != null)
-                            _buildDetailRow(
-                              context,
-                              'Due Date',
-                              DateFormat('EEE, dd MMM yyyy').format(
-                                DateTime.parse(invoice.deadline!),
-                              ),
-                              highlight: dateIsPassed,
-                            ),
-                        ],
-                      ),
-                    ),
-
-                    SizedBox(height: 32),
-
-                    // Action Buttons
-                    if (isLoggedIn) ...[
-                      // User is logged in - show Claim button
-                      ElevatedButton(
-                        onPressed: () async {
-                          try {
-                            final claimedInvoice =
-                                await _digitalInvoiceController
-                                    .claimPublicInvoice(
-                              token: token,
-                              claimerUserId: userController.user.value.id!,
-                              claimerPrivateUserId:
-                                  userController.user.value.privateUserId!,
-                            );
-
-                            if (claimedInvoice != null) {
-                              Get.snackbar(
-                                'Success',
-                                'Invoice claimed successfully!',
-                                backgroundColor: Theme.of(context)
-                                    .colorScheme
-                                    .green
-                                    .withOpacity(0.2),
-                                colorText: Theme.of(context).colorScheme.green,
-                              );
-
-                              Future.delayed(Duration(seconds: 1), () {
-                                Get.offAllNamed('/home-screen');
-                              });
-                            }
-                          } catch (e) {
-                            Get.snackbar(
-                              'Error',
-                              e.toString(),
-                              backgroundColor: Theme.of(context)
-                                  .colorScheme
-                                  .red
-                                  .withOpacity(0.2),
-                              colorText: Theme.of(context).colorScheme.red,
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.blue,
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(vertical: 18),
-                          elevation: 8,
-                          shadowColor: Theme.of(context)
-                              .colorScheme
-                              .blue
-                              .withOpacity(0.5),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'Claim This Invoice',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 14),
-                      OutlinedButton(
-                        onPressed: () {
-                          Get.to(() => PublicInvoiceView(token: token));
-                        },
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          side: BorderSide(color: Colors.white, width: 2),
-                          padding: EdgeInsets.symmetric(vertical: 18),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'View Full Details',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                    ] else ...[
-                      // User is not logged in - show Sign Up buttons
-                      ElevatedButton(
-                        onPressed: () {
-                          Get.toNamed('/sign-up');
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.blue,
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(vertical: 18),
-                          elevation: 8,
-                          shadowColor: Theme.of(context)
-                              .colorScheme
-                              .blue
-                              .withOpacity(0.5),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                        child: Text(
-                          'Sign Up to Claim Invoice',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 14),
-                      TextButton(
-                        onPressed: () {
-                          // Save the current route to return after sign in
-                          Get.toNamed('/sign-in',
-                              arguments: {'returnUrl': '/bill/$token'});
-                        },
-                        style: TextButton.styleFrom(
-                          foregroundColor: Colors.white,
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        child: Text(
-                          'Already have an account? Sign In',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            decoration: TextDecoration.underline,
-                            decorationColor: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ],
-
-                    SizedBox(height: 40),
-                  ],
+                  ),
                 ),
               ),
             ),
           ),
         ),
-      ),
+      ],
     );
   }
 
@@ -597,7 +842,7 @@ class PublicInvoiceLanding extends HookWidget {
     bool copyable = false,
   }) {
     return Padding(
-      padding: EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -610,7 +855,7 @@ class PublicInvoiceLanding extends HookWidget {
               fontWeight: FontWeight.w500,
             ),
           ),
-          SizedBox(width: 16),
+          const SizedBox(width: 16),
           Expanded(
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
@@ -629,7 +874,7 @@ class PublicInvoiceLanding extends HookWidget {
                   ),
                 ),
                 if (copyable) ...[
-                  SizedBox(width: 8),
+                  const SizedBox(width: 8),
                   GestureDetector(
                     onTap: () async {
                       await Clipboard.setData(ClipboardData(text: value));
@@ -639,13 +884,13 @@ class PublicInvoiceLanding extends HookWidget {
                         backgroundColor:
                             Theme.of(context).colorScheme.blue.withOpacity(0.2),
                         colorText: Theme.of(context).colorScheme.blue,
-                        duration: Duration(seconds: 2),
+                        duration: const Duration(seconds: 2),
                         snackPosition: SnackPosition.BOTTOM,
-                        margin: EdgeInsets.all(16),
+                        margin: const EdgeInsets.all(16),
                       );
                     },
                     child: Container(
-                      padding: EdgeInsets.all(6),
+                      padding: const EdgeInsets.all(6),
                       decoration: BoxDecoration(
                         color:
                             Theme.of(context).colorScheme.blue.withOpacity(0.1),

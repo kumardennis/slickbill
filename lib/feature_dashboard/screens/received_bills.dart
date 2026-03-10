@@ -1,16 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:get/get.dart';
+import 'package:liquid_pull_to_refresh/liquid_pull_to_refresh.dart';
 import 'package:loader_overlay/loader_overlay.dart';
 import 'package:slickbill/color_scheme.dart';
+import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
 import 'package:slickbill/feature_dashboard/utils/payment_class.dart';
 import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
 import 'package:slickbill/feature_dashboard/utils/show_verification_dialog.dart';
-import 'package:slickbill/feature_dashboard/utils/striga_class.dart';
 import 'package:slickbill/feature_dashboard/widgets/invoice_card.dart';
 import 'package:slickbill/feature_dashboard/widgets/received_invoice_sheet.dart';
 import 'package:slickbill/feature_dashboard/widgets/statistics_card.dart';
+import 'package:slickbill/services/biometric_auth_service.dart';
+import 'package:slickbill/services/coinbase/coinbase_service.dart';
+import 'package:slickbill/shared_widgets/cdp_webview.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../feature_auth/getx_controllers/user_controller.dart';
@@ -22,8 +26,10 @@ class ReceivedBills extends HookWidget {
   Widget build(BuildContext context) {
     final receivedInvoicesClass = ReceivedInvoicesClass();
     final payment = PaymentClass();
-    final striga = StrigaClass();
+    final biometricAuth = BiometricAuthService();
     final UserController userController = Get.find();
+    final DigitalInvoiceController invoiceController =
+        Get.find<DigitalInvoiceController>();
 
     final supabase = Supabase.instance.client;
 
@@ -42,6 +48,7 @@ class ReceivedBills extends HookWidget {
       if (!context.mounted) return;
 
       invoices.value = response;
+
       isLoading.value = false;
     }
 
@@ -85,61 +92,118 @@ class ReceivedBills extends HookWidget {
       await updateInvoiceStatus(invoice, isPaid);
     }
 
-    Future<void> createStrigaTransaction(
+    Future<void> createCoinbaseTransaction(
         InvoiceModel invoice, bool isPaid) async {
-      context.loaderOverlay.show(
-          widgetBuilder: (_) => Center(
-                  child: Text(
-                'inf_WontBeMoment'.tr,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyLarge
-                    ?.copyWith(color: Theme.of(context).colorScheme.light),
-              )));
+      final authenticated = await biometricAuth.authenticateWithBiometrics(
+        reason:
+            'Authenticate to confirm payment of €${invoice.amount.toStringAsFixed(2)}',
+      );
 
-      final challengeId = invoice.senderId == null
-          ? await striga.initiateStrigaSepaTransaction(
-              invoice.senderIban!, invoice.description, invoice.amount)
-          : await striga.initiateStrigaTransaction(
-              invoice.senders!.privateUsers!.userId,
-              invoice.description,
-              invoice.amount,
-            );
-
-      if (challengeId.isEmpty) {
+      if (!authenticated) {
+        Get.snackbar(
+          'Authentication Failed',
+          'Biometric authentication is required to make payments.',
+          backgroundColor: Theme.of(context).colorScheme.red,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 3),
+        );
         return;
       }
 
-      context.loaderOverlay.hide();
-
-      strigaChallengeId.value = challengeId;
-
-      final verificationCode =
-          await showVerificationDialog(context, challengeId);
-
-      if (verificationCode != null && verificationCode.isNotEmpty) {
-        context.loaderOverlay.show(
-            widgetBuilder: (_) => Center(
-                    child: Text(
-                  'inf_WontBeMoment'.tr,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyLarge
-                      ?.copyWith(color: Theme.of(context).colorScheme.light),
-                )));
-
-        final confirmSuccess = await striga.confirmStrigaTransaction(
-            challengeId, verificationCode);
-
-        if (confirmSuccess) {
-          await updateInvoiceStatus(invoice, isPaid);
-          Get.snackbar('Success', 'inf_PaymentConfirmed'.tr);
-        } else {
-          Get.snackbar('Error', 'Transaction confirmation failed');
-        }
-
-        context.loaderOverlay.hide();
+      print('Creating Coinbase transaction...');
+      print(invoice.senders?.privateUsers?.users);
+      if (invoice.senders == null ||
+          invoice.senders!.privateUsers!.users == null ||
+          invoice.senders!.privateUsers!.users!.username.isEmpty) {
+        Get.snackbar(
+          'Error',
+          'Sender Coinbase account information is missing.',
+          backgroundColor: Theme.of(context).colorScheme.red,
+          colorText: Colors.white,
+        );
+        return;
       }
+      final payment = await CoinbaseService.transferEURC(
+        fromAccountName: userController.user.value.username,
+        toAccountName: invoice.senders!.privateUsers!.users!.username ?? "",
+        amount: invoice.amount,
+      );
+
+      if (!payment.containsKey('userOpHash')) {
+        Get.snackbar(
+          'Error',
+          'Coinbase transaction failed.',
+          backgroundColor: Theme.of(context).colorScheme.red,
+          colorText: Colors.white,
+        );
+
+        return;
+      }
+
+      await updateInvoiceStatus(invoice, isPaid);
+    }
+
+    Future<void> createCDPEmbeddedTransaction(InvoiceModel invoice) async {
+      final walletAddress = userController.user.value.cdpWalletId;
+      if (walletAddress == null || walletAddress.isEmpty) {
+        Get.snackbar(
+          'Wallet not connected',
+          'Please connect your wallet before paying.',
+          backgroundColor: Theme.of(context).colorScheme.red,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 3),
+        );
+        return;
+      }
+
+      // Open embedded wallet pay page; auto-close when txHash is available
+      const baseUrl = 'https://slickbills-wallet-client.vercel.app';
+      final result = await Get.to(() => CdpWebView(
+            url:
+                '$baseUrl/wallet/pay?to=${invoice.senders!.privateUsers!.users!.cdpWalletId}&amount=${invoice.amount}&description=${Uri.encodeComponent(invoice.description)}&receiver=${invoice.senders!.privateUsers!.firstName}',
+            title: 'Send Payment',
+            accessToken: userController.user.value.accessToken,
+            autoCloseMode: CdpAutoCloseMode.pay,
+          ));
+
+      if (result == null) {
+        Get.snackbar(
+          'Payment Cancelled',
+          'You cancelled the payment.',
+          backgroundColor: Theme.of(context).colorScheme.red,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 3),
+        );
+
+        return;
+      }
+
+      // If the WebView returns a txHash, consider it success and update invoice status
+      final txHash = result['txHash'];
+      if (txHash == null ||
+          txHash == 'null' ||
+          (txHash is String && txHash.isEmpty)) {
+        Get.snackbar(
+          'Error',
+          'Payment was not completed.',
+          backgroundColor: Theme.of(context).colorScheme.red,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 3),
+        );
+        return;
+      }
+
+      Get.snackbar(
+        'Success',
+        'Transaction: $txHash',
+        backgroundColor: Theme.of(context).colorScheme.green,
+        colorText: Colors.white,
+        duration: const Duration(seconds: 3),
+      );
+
+      await invoiceController.updateTxHashForInvoice(invoice.id, txHash);
+
+      await updateInvoiceStatus(invoice, true);
     }
 
     Future<void> updateInvoiceObsolete(
@@ -159,7 +223,8 @@ class ReceivedBills extends HookWidget {
               invoice: invoice,
               payInvoice: payInvoice,
               updateInvoiceStatus: updateInvoiceStatus,
-              createStrigaPayment: createStrigaTransaction,
+              createCoinbaseTransaction: createCoinbaseTransaction,
+              createCDPEmbeddedTransaction: createCDPEmbeddedTransaction,
               updateInvoiceObsolete: updateInvoiceObsolete));
     }
 
@@ -192,52 +257,60 @@ class ReceivedBills extends HookWidget {
       };
     }, [userController.user.value.privateUserId]);
 
-    return (SingleChildScrollView(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(0.0, 20.0, 20.0, 20.0),
-        child: isLoading.value
-            ? const Center(
-                child: CircularProgressIndicator(),
-              )
-            : invoices.value == null
-                ? Text('lbl_NoInvoices'.tr)
-                : Column(
-                    children: [
-                      StatisticsCard(
-                        pendingAmount: pending.value,
-                        paidAmount: paidThisMonth.value,
-                        pendingLabel: 'lbl_Pending'.tr,
-                        paidLabel: 'lbl_PaidThisMonth'.tr,
+    return RefreshIndicator(
+        color: Theme.of(context).colorScheme.light,
+        backgroundColor: Theme.of(context).colorScheme.blue,
+        onRefresh: () async {
+          await getInvoices();
+          await getPendingSum();
+          await getReceivedSum();
+        },
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(0.0, 20.0, 20.0, 20.0),
+            child: isLoading.value
+                ? const Center(
+                    child: CircularProgressIndicator(),
+                  )
+                : invoices.value == null
+                    ? Text('lbl_NoInvoices'.tr)
+                    : Column(
+                        children: [
+                          StatisticsCard(
+                            pendingAmount: pending.value,
+                            paidAmount: paidThisMonth.value,
+                            pendingLabel: 'lbl_Pending'.tr,
+                            paidLabel: 'lbl_PaidThisMonth'.tr,
+                          ),
+                          const SizedBox(
+                            height: 20,
+                          ),
+                          Column(
+                            children: invoices.value!
+                                .map((invoice) => Padding(
+                                      padding: const EdgeInsets.only(top: 20.0),
+                                      child: GestureDetector(
+                                        onTap: () async {
+                                          await openInvoice(invoice);
+                                        },
+                                        child: InvoiceCard(
+                                            amount: invoice.amount,
+                                            invoiceNo: invoice.invoiceNo,
+                                            date: invoice.createdAt,
+                                            dueDate: invoice.deadline,
+                                            paidOnDate: invoice.paidOnDate,
+                                            description: invoice.description,
+                                            senderOrReeceiverName:
+                                                '${invoice.senders?.privateUsers?.firstName} ${invoice.senders?.privateUsers?.lastName ?? ''}',
+                                            status: invoice.status,
+                                            isSeen: invoice.isSeen),
+                                      ),
+                                    ))
+                                .toList(),
+                          ),
+                        ],
                       ),
-                      const SizedBox(
-                        height: 20,
-                      ),
-                      Column(
-                        children: invoices.value!
-                            .map((invoice) => Padding(
-                                  padding: const EdgeInsets.only(top: 20.0),
-                                  child: GestureDetector(
-                                    onTap: () async {
-                                      await openInvoice(invoice);
-                                    },
-                                    child: InvoiceCard(
-                                        amount: invoice.amount,
-                                        invoiceNo: invoice.invoiceNo,
-                                        date: invoice.createdAt,
-                                        dueDate: invoice.deadline,
-                                        paidOnDate: invoice.paidOnDate,
-                                        description: invoice.description,
-                                        senderOrReeceiverName:
-                                            invoice.senderName,
-                                        status: invoice.status,
-                                        isSeen: invoice.isSeen),
-                                  ),
-                                ))
-                            .toList(),
-                      ),
-                    ],
-                  ),
-      ),
-    ));
+          ),
+        ));
   }
 }

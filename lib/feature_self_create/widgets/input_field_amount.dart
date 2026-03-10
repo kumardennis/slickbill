@@ -33,7 +33,8 @@ class InputFieldAmount extends HookWidget {
         keyboardType: TextInputType.number,
         controller: amountController,
         onChanged: (value) {
-          changeReceiverAmount(receiverUser.id, double.parse(value));
+          final parsed = double.tryParse(value) ?? 0.0;
+          changeReceiverAmount(receiverUser.id, parsed);
         },
         decoration: InputDecoration(
           labelText: 'lbl_Amount'.tr,
@@ -61,7 +62,7 @@ class InputFieldAmount extends HookWidget {
           ),
         ),
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Theme.of(context).colorScheme.light,
+              color: Theme.of(context).colorScheme.dark,
             ),
         textAlign: TextAlign.center,
       ),

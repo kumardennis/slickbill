@@ -13,7 +13,12 @@ class PublicInvoiceModel {
   final String? referenceNo;
   final String? originalInvoiceNo;
   final int? senderPrivateUserId;
+
+  // ✅ these match your Supabase select aliases
+  final PrivateUsers? sender;
   final int? receiverPrivateUserId;
+  final PrivateUsers? receiver;
+
   final int viewCount;
   final int claimCount;
   final dynamic data;
@@ -36,7 +41,9 @@ class PublicInvoiceModel {
     this.referenceNo,
     this.originalInvoiceNo,
     this.senderPrivateUserId,
+    this.sender,
     this.receiverPrivateUserId,
+    this.receiver,
     required this.viewCount,
     required this.claimCount,
     this.data,
@@ -48,104 +55,94 @@ class PublicInvoiceModel {
   });
 
   factory PublicInvoiceModel.fromJson(Map<String, dynamic> json) {
-    print('🔵 [PublicInvoiceModel] Starting parse...');
-    print('🔵 [PublicInvoiceModel] JSON keys: ${json.keys}');
+    final id = json['id'] as int;
 
-    try {
-      print('🔵 [PublicInvoiceModel] Parsing id: ${json['id']}');
-      final id = json['id'];
+    final publicToken =
+        (json['publicToken'] ?? json['public_token']) as String?;
+    final amount = (json['amount'] ?? 0).toDouble();
 
-      print(
-          '🔵 [PublicInvoiceModel] Parsing publicToken: ${json['publicToken']} or ${json['public_token']}');
-      final publicToken = json['publicToken'] ?? json['public_token'] ?? '';
+    final description = json['description'] as String?;
+    final category = json['category'] as String?;
+    final status = (json['status'] ?? 'UNPAID') as String;
+    final deadline = json['deadline'] as String?;
 
-      print('🔵 [PublicInvoiceModel] Parsing amount: ${json['amount']}');
-      final amount = (json['amount'] ?? 0).toDouble();
+    final senderIban = json['senderIban'] ?? json['sender_iban'];
+    final senderName = json['senderName'] ?? json['sender_name'];
+    final referenceNo = json['referenceNo'] ?? json['reference_no'];
+    final originalInvoiceNo =
+        json['originalInvoiceNo'] ?? json['original_invoice_no'];
 
-      print('🔵 [PublicInvoiceModel] Parsing basic fields...');
-      final description = json['description'];
-      final category = json['category'];
-      final status = json['status'] ?? 'UNPAID';
-      final deadline = json['deadline'];
+    final senderPrivateUserId =
+        json['senderPrivateUserId'] ?? json['sender_private_user_id'];
+    final receiverPrivateUserId =
+        json['receiverPrivateUserId'] ?? json['receiver_private_user_id'];
 
-      print('🔵 [PublicInvoiceModel] Parsing sender fields...');
-      final senderIban = json['senderIban'] ?? json['sender_iban'];
-      final senderName = json['senderName'] ?? json['sender_name'];
-      final referenceNo = json['referenceNo'] ?? json['reference_no'];
-      final originalInvoiceNo =
-          json['originalInvoiceNo'] ?? json['original_invoice_no'];
+    final viewCount = json['viewCount'] ?? json['view_count'] ?? 0;
+    final claimCount = json['claimCount'] ?? json['claim_count'] ?? 0;
 
-      print('🔵 [PublicInvoiceModel] Parsing user IDs...');
-      final senderPrivateUserId =
-          json['senderPrivateUserId'] ?? json['sender_private_user_id'];
-      final receiverPrivateUserId =
-          json['receiverPrivateUserId'] ?? json['receiver_private_user_id'];
+    final data = json['data'];
 
-      print('🔵 [PublicInvoiceModel] Parsing counts...');
-      final viewCount = json['viewCount'] ?? json['view_count'] ?? 0;
-      final claimCount = json['claimCount'] ?? json['claim_count'] ?? 0;
+    final createdAt = json['created_at'] != null
+        ? DateTime.parse(json['created_at'])
+        : (json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'])
+            : DateTime.now());
 
-      print('🔵 [PublicInvoiceModel] Parsing data...');
-      final data = json['data'];
+    final updatedAt = json['updated_at'] != null
+        ? DateTime.parse(json['updated_at'])
+        : (json['updatedAt'] != null
+            ? DateTime.parse(json['updatedAt'])
+            : DateTime.now());
 
-      print('🔵 [PublicInvoiceModel] Parsing dates...');
-      final createdAt = json['created_at'] != null
-          ? DateTime.parse(json['created_at'])
-          : (json['createdAt'] != null
-              ? DateTime.parse(json['createdAt'])
-              : DateTime.now());
+    final isObsolete = json['isObsolete'] ?? json['is_obsolete'] ?? false;
+    final paidOnDate = json['paidOnDate'] ?? json['paid_on_date'];
 
-      final updatedAt = json['updated_at'] != null
-          ? DateTime.parse(json['updated_at'])
-          : (json['updatedAt'] != null
-              ? DateTime.parse(json['updatedAt'])
-              : DateTime.now());
+    // ✅ parse sender/receiver objects returned by the query aliases
+    final senderJson = json['sender'];
+    final receiverJson = json['receiver'];
 
-      print('🔵 [PublicInvoiceModel] Parsing flags...');
-      final isObsolete = json['isObsolete'] ?? json['is_obsolete'] ?? false;
-      final paidOnDate = json['paidOnDate'] ?? json['paid_on_date'];
+    final sender = senderJson is Map<String, dynamic>
+        ? PrivateUsers.fromJson(senderJson)
+        : null;
 
-      print('🔵 [PublicInvoiceModel] Parsing claimed_invoices...');
-      List<ClaimedInvoice>? claimedInvoices;
-      if (json['claimed_invoices'] != null) {
-        print(
-            '🔵 [PublicInvoiceModel] Found ${(json['claimed_invoices'] as List).length} claimed invoices');
-        claimedInvoices = (json['claimed_invoices'] as List).map((e) {
-          print(
-              '🔵 [PublicInvoiceModel] Parsing claimed invoice: ${e['digital_invoice_id']}');
-          return ClaimedInvoice.fromJson(e);
-        }).toList();
-      }
+    final receiver = receiverJson is Map<String, dynamic>
+        ? PrivateUsers.fromJson(receiverJson)
+        : null;
 
-      print('🔵 [PublicInvoiceModel] Creating object...');
-      return PublicInvoiceModel(
-        id: id,
-        publicToken: publicToken,
-        amount: amount,
-        description: description,
-        category: category,
-        status: status,
-        deadline: deadline,
-        senderIban: senderIban,
-        senderName: senderName,
-        referenceNo: referenceNo,
-        originalInvoiceNo: originalInvoiceNo,
-        senderPrivateUserId: senderPrivateUserId,
-        receiverPrivateUserId: receiverPrivateUserId,
-        viewCount: viewCount,
-        claimCount: claimCount,
-        data: data,
-        createdAt: createdAt,
-        updatedAt: updatedAt,
-        isObsolete: isObsolete,
-        paidOnDate: paidOnDate,
-        claimedInvoices: claimedInvoices,
-      );
-    } catch (e, stackTrace) {
-      print('🔴 [PublicInvoiceModel] ERROR: $e');
-      print('🔴 [PublicInvoiceModel] Stack: $stackTrace');
-      rethrow;
+    // (optional) claimed invoices if you ever select them
+    List<ClaimedInvoice>? claimedInvoices;
+    if (json['claimed_invoices'] is List) {
+      claimedInvoices = (json['claimed_invoices'] as List)
+          .whereType<Map<String, dynamic>>()
+          .map(ClaimedInvoice.fromJson)
+          .toList();
     }
+
+    return PublicInvoiceModel(
+      id: id,
+      publicToken: publicToken,
+      amount: amount,
+      description: description,
+      category: category,
+      status: status,
+      deadline: deadline,
+      senderIban: senderIban,
+      senderName: senderName,
+      referenceNo: referenceNo,
+      originalInvoiceNo: originalInvoiceNo,
+      senderPrivateUserId: senderPrivateUserId,
+      sender: sender,
+      receiverPrivateUserId: receiverPrivateUserId,
+      receiver: receiver,
+      viewCount: viewCount,
+      claimCount: claimCount,
+      data: data,
+      createdAt: createdAt,
+      updatedAt: updatedAt,
+      isObsolete: isObsolete,
+      paidOnDate: paidOnDate,
+      claimedInvoices: claimedInvoices,
+    );
   }
 
   Map<String, dynamic> toJson() {
@@ -170,6 +167,9 @@ class PublicInvoiceModel {
       'updatedAt': updatedAt.toIso8601String(),
       'isObsolete': isObsolete,
       'paidOnDate': paidOnDate,
+      // include joined objects if you want
+      'sender': sender?.toJson(),
+      'receiver': receiver?.toJson(),
     };
   }
 }

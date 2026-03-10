@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:get/get.dart';
+import 'package:slickbill/color_scheme.dart';
+import 'package:slickbill/feature_auth/services/facebook_auth_service.dart';
 import 'package:slickbill/feature_auth/services/google_auth_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -18,6 +20,7 @@ class SupabaseAuthManger {
   final supabseClient = Supabase.instance.client;
   final userController = Get.put(UserController());
   final GoogleAuthService _googleAuthService = GoogleAuthService();
+  final FacebookAuthService _facebookAuthService = FacebookAuthService();
 
   List<BankAccount>? _parseIbans(dynamic ibansData) {
     if (ibansData == null) return null;
@@ -47,7 +50,7 @@ class SupabaseAuthManger {
     }
   }
 
-  Future<void> loadFreshUser(authUserId, accessToken) async {
+  Future<bool> loadFreshUser(authUserId, accessToken) async {
     final tokenToUse = accessToken;
 
     print('TOKEN IN USE: $tokenToUse');
@@ -59,7 +62,8 @@ class SupabaseAuthManger {
 
     if (userRecordResponse.isEmpty) {
       // Let caller know there is no app user yet
-      throw StateError('USER_NOT_FOUND_IN_PUBLIC_USERS');
+      // throw StateError('USER_NOT_FOUND_IN_PUBLIC_USERS');
+      return false;
     }
 
     final userProfileClassed = UserModel(
@@ -121,11 +125,13 @@ class SupabaseAuthManger {
       publicName: businessUserResponse.length > 0
           ? businessUserResponse[0]['publicName']
           : null,
-      strigaUserId: privateUserResponse[0]['strigaUserId'],
-      strigaWalletId: privateUserResponse[0]['strigaWalletId'],
+      strigaUserId: userRecordResponse[0]['strigaUserId'],
+      strigaWalletId: userRecordResponse[0]['strigaWalletId'],
+      cdpWalletId: userRecordResponse[0]['cdpWalletId'],
     );
 
     userController.loadUser(clientUserClassed);
+    return true;
   }
 
   Future<void> signOut(String email, String password) async {
@@ -158,6 +164,10 @@ class SupabaseAuthManger {
       print('TEEST ');
       print(session?.accessToken);
 
+      if (session == null || user == null) {
+        throw Exception('No session or user returned from Supabase');
+      }
+
       if (session != null) {
         await loadFreshUser(user!.id, session.accessToken);
 
@@ -169,84 +179,48 @@ class SupabaseAuthManger {
         // final userRecord = userRecordResponse
       }
     } catch (err) {
-      debugPrint(err.toString());
+      rethrow;
     }
   }
 
   Future<bool> signInWithGoogle() async {
-    try {
-      print('Starting Google Sign-In flow...');
+    return _handleOAuthSignIn(
+      authProvider: () => _googleAuthService.signInWithGoogle(),
+      providerName: 'Google',
+    );
+  }
 
-      final response = await _googleAuthService.signInWithGoogle();
-
-      if (response == null || response.user == null) {
-        print('Google Sign-In was cancelled or failed');
-        return false;
-      }
-
-      final session = response.session;
-      final user = response.user;
-
-      if (session == null || user == null) {
-        print('No session or user returned from Supabase');
-        return false;
-      }
-
-      try {
-        // Try to load app user (users + private_users + striga stuff)
-        await loadFreshUser(user.id, session.accessToken);
-      } on StateError catch (e) {
-        if (e.message == 'USER_NOT_FOUND_IN_PUBLIC_USERS') {
-          // 1) create users + private_users rows
-          await createUserForAuthUser(user);
-
-          // 2) load again to get the new app user id
-          final userRecordResponse = await supabseClient
-              .from('users')
-              .select('id')
-              .eq('authUserId', user.id);
-
-          if (userRecordResponse.isNotEmpty) {
-            final appUserId = userRecordResponse[0]['id'] as int;
-
-            // 3) call Striga create-user function to enrich
-            await _createStrigaUserFor(appUserId, session.accessToken);
-          }
-
-          // 4) load enriched user into UserController
-          await loadFreshUser(user.id, session.accessToken);
-        } else {
-          rethrow;
-        }
-      }
-
-      Get.toNamed('/home-screen');
-      print('Google Sign-In complete, user saved');
-      return true;
-    } catch (e) {
-      print('Error in Google Sign-In: $e');
-      return false;
-    }
+  Future<bool> signInWithFacebook() async {
+    return _handleOAuthSignIn(
+      authProvider: () => _facebookAuthService.signInWithFacebook(),
+      providerName: 'Facebook',
+    );
   }
 
   Future<void> signUp(
       String email,
       String password,
-      String firstNanme,
+      String firstName,
       String lastName,
       String username,
       String iban,
       String accountHolder) async {
     try {
-      final _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+      print('🔄 Starting signup process for: $email');
+
+      const _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
+      final key =
+          kDebugMode ? dotenv.env['SUPABASE_ANON_KEY'] ?? '' : _supabaseAnonKey;
+
+      print('🔑 Using key: ${key.isNotEmpty ? "Key found" : "KEY MISSING!"}');
+
       final response = await Supabase.instance.client.functions
           .invoke('auth-and-settings/create-user', headers: {
-        'Authorization':
-            'Bearer ${kDebugMode ? dotenv.env['SUPABASE_ANON_KEY'] ?? '' : _supabaseAnonKey}'
+        'Authorization': 'Bearer $key'
       }, body: {
         "email": email,
         "password": password,
-        "firstName": firstNanme,
+        "firstName": firstName,
         "lastName": lastName,
         "username": username,
         "iban": iban,
@@ -254,16 +228,53 @@ class SupabaseAuthManger {
         "isPrivateUser": true
       });
 
-      final data = await response.data;
+      print('📦 Response status: ${response.status}');
+      print('📦 Response data: ${response.data}');
+
+      final data = response.data;
+
+      if (data == null) {
+        print('❌ Response data is null');
+        throw Exception('No response data from server');
+      }
 
       if (data['isRequestSuccessfull'] == true) {
-        Get.snackbar('Success..', 'User created!');
-        Get.toNamed('/sign-in');
+        print('✅ User created successfully');
+        Get.snackbar(
+          'Success',
+          'Account created! Please check your email to verify.',
+          backgroundColor: Colors.green,
+          colorText: Colors.white,
+          duration: Duration(seconds: 3),
+        );
+
+        // Wait a bit before navigating
+        await Future.delayed(Duration(seconds: 1));
+        Get.offAllNamed('/sign-in');
       } else {
-        Get.snackbar('Oops..', data['error'].toString());
+        print('❌ Signup failed: ${data['error']}');
+        Get.snackbar(
+          'Oops..',
+          data['error']?.toString() ?? 'Unknown error occurred',
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          duration: Duration(seconds: 3),
+        );
+        throw Exception(data['error']?.toString() ?? 'Signup failed');
       }
     } catch (err) {
-      print(err);
+      print('❌ Error in signUp: $err');
+
+      // Show user-friendly error
+      Get.snackbar(
+        'Error',
+        'Failed to create account. Please try again.',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        duration: Duration(seconds: 3),
+      );
+
+      rethrow;
     }
   }
 
@@ -316,28 +327,89 @@ class SupabaseAuthManger {
     }
   }
 
-  /// Call the Striga `create-user` Edge Function for a given app user ID
-  Future<void> _createStrigaUserFor(int appUserId, String accessToken) async {
+  /// Common OAuth sign-in flow for Google, Facebook, etc.
+  /// Returns true if successful, false otherwise
+  Future<bool> _handleOAuthSignIn({
+    required Future<AuthResponse?> Function() authProvider,
+    required String providerName,
+  }) async {
     try {
-      final response = await Supabase.instance.client.functions.invoke(
-        'striga/create-user',
-        headers: {
-          'Authorization': 'Bearer $accessToken',
-        },
-        body: {
-          'userId': appUserId,
-        },
-      );
+      print('🔵 Starting $providerName Sign-In flow...');
 
-      final data = response.data;
+      final response = await authProvider();
 
-      if (data['isRequestSuccessfull'] != true) {
-        print('Striga create-user failed: ${data['error']}');
-      } else {
-        print('Striga user created successfully');
+      if (response == null || response.user == null) {
+        print('❌ $providerName Sign-In was cancelled or failed');
+        return false;
       }
+
+      final session = response.session;
+      final user = response.user;
+
+      if (session == null || user == null) {
+        print('❌ No session or user returned from Supabase');
+        return false;
+      }
+
+      print('🔍 Attempting to load user for authUserId: ${user.id}');
+
+      // Try to load existing user
+      final userExists = await loadFreshUser(user.id, session.accessToken);
+
+      if (!userExists) {
+        print('📝 User not found in public.users, creating new user...');
+
+        try {
+          await createUserForAuthUser(user);
+          print('✅ User created in public.users and private_users');
+
+          print('✅ Striga user creation completed');
+
+          print('🔄 Loading enriched user data...');
+          await loadFreshUser(user.id, session.accessToken);
+          print('✅ Enriched user loaded successfully');
+        } catch (createError) {
+          print('❌ Error creating user: ${createError.toString()}');
+          Get.snackbar(
+            'Error',
+            'Failed to create user profile: ${createError.toString()}',
+            backgroundColor: Colors.red,
+            colorText: Colors.white,
+            duration: Duration(seconds: 3),
+          );
+          return false;
+        }
+      } else {
+        print('✅ User loaded successfully');
+      }
+
+      // Handle invoice token navigation
+      final invoiceToken = Get.parameters['invoice_token'] ??
+          Uri.base.queryParameters['invoice_token'];
+
+      print('✅ $providerName Sign-In complete');
+      if (invoiceToken != null && invoiceToken.isNotEmpty) {
+        print('🎯 Navigating to public invoice with token: $invoiceToken');
+        Get.offAllNamed(
+          '/public-invoice-view',
+          arguments: {'token': invoiceToken},
+        );
+      } else {
+        print('🏠 Navigating to home screen');
+        Get.offAllNamed('/home-screen');
+      }
+
+      return true;
     } catch (e) {
-      print('Error calling striga/create-user: $e');
+      print('❌ Error in $providerName Sign-In flow: ${e.toString()}');
+      Get.snackbar(
+        'Error',
+        '$providerName Sign-In failed: ${e.toString()}',
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        duration: Duration(seconds: 3),
+      );
+      return false;
     }
   }
 }

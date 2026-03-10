@@ -1,6 +1,7 @@
 //// filepath: /Users/denniskumar/Documents/GitHub/slickbill/lib/feature_dashboard/screens/add_iban_screen.dart
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/utils/supabase_auth_manger.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -36,75 +37,35 @@ class _AddIbanScreenState extends State<AddIbanScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      final client = Supabase.instance.client;
-      final session = client.auth.currentSession;
-      if (session == null || session.user == null) {
-        Get.snackbar('Error', 'No active session, please sign in again.');
-        return;
-      }
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) throw Exception('Not authenticated');
 
-      final user = _userController.user.value;
-      if (user.privateUserId == null) {
-        Get.snackbar('Error', 'No private user profile found.');
-        return;
-      }
+      await Supabase.instance.client.from('banks').insert({
+        'user_id': user.id,
+        'iban': _ibanController.text.trim(),
+        'account_holder': _bankAccountNameController.text.trim(),
+        'created_at': DateTime.now().toIso8601String(),
+      });
 
-      final privateUserId = user.privateUserId!;
+      if (!mounted) return;
 
-      final iban = _ibanController.text.trim();
-      final bankName = _bankNameController.text.trim();
-      final bankAccountName = _bankAccountNameController.text.trim();
-
-      // Load existing ibans JSON for this private user
-      final existing = await client
-          .from('private_users')
-          .select('ibans, iban, bankAccountName')
-          .eq('id', privateUserId)
-          .maybeSingle();
-
-      final List<dynamic> existingIbansJson =
-          (existing?['ibans'] as List<dynamic>?) ?? [];
-
-      // New entry with all fields
-      final newEntry = {
-        'iban': iban,
-        'bankName': bankName, // institution
-        'bankAccountName': bankAccountName, // per-account name/alias
-        'isPrimary': true,
-      };
-
-      // Mark previous entries as non-primary
-      for (final item in existingIbansJson) {
-        if (item is Map<String, dynamic>) {
-          item['isPrimary'] = false;
-        }
-      }
-      existingIbansJson.add(newEntry);
-
-      // Update private_users row (scalar fields follow the primary)
-      await client.from('private_users').update({
-        'iban': iban,
-        'bankAccountName': bankAccountName,
-        'ibans': existingIbansJson,
-      }).eq('id', privateUserId);
-
-      // Reload full user so Profile sees updated iban / bankAccountName
-      await _authManager.loadFreshUser(
-        session.user!.id,
-        session.accessToken,
-      );
-
-      Get.back(); // Close screen
       Get.snackbar(
         'Success',
-        'Bank account saved.',
-        snackPosition: SnackPosition.TOP,
+        'Bank account added successfully',
+        backgroundColor: Colors.green.withOpacity(0.1),
+        colorText: Colors.green,
       );
+
+      // ✅ Return true to trigger refresh
+      Get.back(result: true);
     } catch (e) {
+      if (!mounted) return;
+
       Get.snackbar(
         'Error',
-        'Failed to save bank account: $e',
-        snackPosition: SnackPosition.TOP,
+        'Failed to add bank account: ${e.toString()}',
+        backgroundColor: Theme.of(context).colorScheme.red,
+        colorText: Colors.white,
       );
     } finally {
       if (mounted) {
@@ -126,6 +87,9 @@ class _AddIbanScreenState extends State<AddIbanScreen> {
           child: Column(
             children: [
               TextFormField(
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.dark,
+                ),
                 controller: _bankNameController,
                 decoration: const InputDecoration(
                   labelText: 'Bank name (e.g. LHV Bank AS)',
@@ -135,6 +99,9 @@ class _AddIbanScreenState extends State<AddIbanScreen> {
               ),
               const SizedBox(height: 16),
               TextFormField(
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.dark,
+                ),
                 controller: _bankAccountNameController,
                 decoration: const InputDecoration(
                   labelText: 'Bank account name',
@@ -144,6 +111,9 @@ class _AddIbanScreenState extends State<AddIbanScreen> {
               ),
               const SizedBox(height: 16),
               TextFormField(
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.dark,
+                ),
                 controller: _ibanController,
                 decoration: const InputDecoration(
                   labelText: 'IBAN',

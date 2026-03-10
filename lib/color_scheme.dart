@@ -11,7 +11,7 @@ extension CustomColorScheme on ColorScheme {
   Color get turqouise => const Color.fromARGB(255, 1, 56, 73);
   Color get green => const Color(0xFF399E5A);
   Color get red => const Color(0xFFDB2B39);
-  Color get light => const Color(0xFFF3F9FA);
+  Color get light => const Color.fromARGB(255, 253, 254, 255);
   Color get dark => const Color(0xFF0A0B0C);
   Color get gray => const Color(0xFF979797);
   Color get lightGray => const Color(0xFFBFBFBF);

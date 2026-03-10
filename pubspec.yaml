@@ -43,6 +43,15 @@ dependencies:
   iban_to_bic: ^0.0.8
   google_sign_in: ^7.2.0
   universal_html: ^2.2.4
+  app_links: ^6.4.1
+  flutter_facebook_auth: ^7.0.1
+  onesignal_flutter: ^5.3.5
+  local_auth: ^2.1.7
+  local_auth_android: ^1.0.32
+  local_auth_ios: ^1.1.5
+  flutter_inappwebview: ^6.1.5
+  url_launcher: ^6.3.2
+  # firebase_core: ^4.3.0
 
 dev_dependencies:
   flutter_test:
@@ -59,10 +68,12 @@ flutter:
     - assets/logo_text.png
     - assets/logo_icon.png
     - assets/logo_text_darkbg.png
+    - assets/g-logo.png
+    - assets/fb-logo.png
 
 dependency_overrides:
   web: ^0.5.1
   image_picker_platform_interface: ^2.11.0
   path_provider_android: ^2.2.1
-  path_provider_platform_interface: ^2.1.1 
+  path_provider_platform_interface: ^2.1.1
   url_launcher_android: ^6.3.0

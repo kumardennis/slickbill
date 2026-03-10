@@ -59,6 +59,18 @@ class DigitalInvoiceRepository {
     return InvoiceModel.fromJson(response);
   }
 
+  Future<InvoiceModel?> updateTxHashForInvoiceById(
+      int invoiceId, String txHash) async {
+    final response = await _client
+        .from('digital_invoices')
+        .update({'txHash': txHash})
+        .eq('id', invoiceId)
+        .select();
+
+    if (response == null || response.isEmpty) return null;
+    return InvoiceModel.fromJson(response.first);
+  }
+
   /// Create a new private invoice
   Future<InvoiceModel> createInvoice(Map<String, dynamic> invoiceData) async {
     final response = await _client
@@ -139,15 +151,16 @@ class DigitalInvoiceRepository {
   Future<PublicInvoiceModel?> getPublicInvoiceByToken(String token) async {
     final response = await _client
         .from('public_digital_invoices')
-        .select()
+        .select('''
+        *,
+        sender:private_users!public_digital_invoices_senderPrivateUserId_fkey(*),
+        receiver:private_users!public_digital_invoices_receiverPrivateUserId_fkey(*)
+      ''')
         .eq('publicToken', token)
+        .not('publicToken', 'is', null)
         .maybeSingle();
 
     if (response == null) return null;
-
-    // Increment view count
-    await _client.from('public_digital_invoices').update(
-        {'viewCount': response['viewCount'] + 1}).eq('publicToken', token);
 
     return PublicInvoiceModel.fromJson(response);
   }
@@ -424,6 +437,31 @@ class DigitalInvoiceRepository {
         .order('created_at', ascending: false);
 
     return (response as List).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> incrementPublicInvoiceViewCount(String publicToken) async {
+    try {
+      // ✅ First fetch current value, then increment
+      final response = await _client
+          .from('public_digital_invoices')
+          .select('viewCount')
+          .eq('publicToken', publicToken)
+          .maybeSingle();
+
+      if (response == null) {
+        throw Exception('Invoice not found');
+      }
+
+      final currentCount = (response['viewCount'] as int?) ?? 0;
+
+      await _client.from('public_digital_invoices').update(
+          {'viewCount': currentCount + 1}).eq('publicToken', publicToken);
+
+      print('✅ View count incremented in DB for: $publicToken');
+    } catch (e) {
+      print('❌ Error incrementing view count: $e');
+      rethrow;
+    }
   }
 
   // ==================== HELPERS ====================

@@ -74,6 +74,18 @@ export const handler = async (req: Request) => {
 
     const strigaWalletsResponseBody = await strigaWalletsResponse.json();
 
+    if (!strigaWalletsResponse.ok) {
+      const responseData = {
+        isRequestSuccessfull: false,
+        data: { bodyWallets, strigaFetchOptionWallets, userData },
+        error: strigaWalletsResponseBody,
+      };
+
+      return new Response(JSON.stringify(responseData), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // then enrich account
 
     const body = {

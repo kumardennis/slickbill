@@ -1,4 +1,8 @@
 <resources>
+ <string name="app_name">SlickBill</string>
     <string name="servicedesc">SlickBill NFC Service</string>
     <string name="aiddescription">SlickBill AID Group</string>
+     <string name="facebook_app_id">765613359179996</string>
+    <string name="facebook_client_token">d0492a954bf934738648f22ccfe8bd70</string>
+    <string name="fb_login_protocol_scheme">fb765613359179996</string>
 </resources>

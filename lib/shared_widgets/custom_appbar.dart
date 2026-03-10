@@ -49,6 +49,7 @@ class CustomAppbar extends HookWidget implements PreferredSizeWidget {
               ),
             )
           : null,
+      actions: appbarIcon != null ? [appbarIcon!] : null,
       bottom: tabBar,
       backgroundColor: Theme.of(context).colorScheme.light,
       elevation: 0,

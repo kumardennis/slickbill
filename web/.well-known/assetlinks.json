@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.slickbill.app",
+    "sha256_cert_fingerprints": ["41:4F:6E:E4:0E:CE:36:90:3E:1B:19:E7:1F:17:F6:2B:42:B1:7A:3E"]
+  }
+}]
