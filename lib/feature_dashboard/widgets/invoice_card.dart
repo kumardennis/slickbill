@@ -35,6 +35,7 @@ class InvoiceCard extends HookWidget {
   @override
   Widget build(BuildContext context) {
     FormatNumber formatNumber = FormatNumber();
+    final normalizedStatus = status.trim().toUpperCase();
 
     bool dateIsPassed = DateTime.now().isAfter(DateTime.parse(dueDate));
 
@@ -94,19 +95,30 @@ class InvoiceCard extends HookWidget {
               ),
               Row(
                 children: [
-                  Text(status == 'PAID' ? 'lbl_Paid'.tr : 'lbl_Unpaid'.tr,
-                      style:
-                          Theme.of(context).textTheme.displayMedium?.copyWith(
+                  Text(
+                      normalizedStatus == 'PAID'
+                          ? 'lbl_Paid'.tr
+                          : normalizedStatus == 'PROCESSING'
+                              ? 'Waiting'
+                              : 'lbl_Unpaid'.tr,
+                      style: Theme.of(context)
+                          .textTheme
+                          .displayMedium
+                          ?.copyWith(
                               fontWeight: FontWeight.w600,
-                              color: status == 'PAID'
+                              color: normalizedStatus == 'PAID'
                                   ? Theme.of(context).colorScheme.green
-                                  : dateIsPassed
-                                      ? Theme.of(context).colorScheme.red
-                                      : Theme.of(context).colorScheme.yellow)),
+                                  : normalizedStatus == 'PROCESSING'
+                                      ? Theme.of(context).colorScheme.yellow
+                                      : dateIsPassed
+                                          ? Theme.of(context).colorScheme.red
+                                          : Theme.of(context)
+                                              .colorScheme
+                                              .yellow)),
                   const SizedBox(
                     width: 10,
                   ),
-                  status == 'PAID'
+                  normalizedStatus == 'PAID'
                       ? FaIcon(
                           FontAwesomeIcons.circleCheck,
                           size: 20,
@@ -115,9 +127,11 @@ class InvoiceCard extends HookWidget {
                       : FaIcon(
                           FontAwesomeIcons.clockRotateLeft,
                           size: 20,
-                          color: dateIsPassed
-                              ? Theme.of(context).colorScheme.red
-                              : Theme.of(context).colorScheme.yellow,
+                          color: normalizedStatus == 'PROCESSING'
+                              ? Theme.of(context).colorScheme.yellow
+                              : dateIsPassed
+                                  ? Theme.of(context).colorScheme.red
+                                  : Theme.of(context).colorScheme.yellow,
                         )
                 ],
               )

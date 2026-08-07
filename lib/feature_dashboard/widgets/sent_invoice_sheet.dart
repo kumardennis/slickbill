@@ -115,18 +115,26 @@ class SentInvoiceSheet extends HookWidget {
                         Text(
                             invoice.status == 'PAID'
                                 ? 'lbl_Paid'.tr
-                                : 'lbl_Unpaid'.tr,
+                                : invoice.status == 'PROCESSING'
+                                    ? 'Waiting'
+                                    : 'lbl_Unpaid'.tr,
                             style: Theme.of(context)
                                 .textTheme
                                 .displayMedium
                                 ?.copyWith(
                                     color: invoice.status == 'PAID'
                                         ? Theme.of(context).colorScheme.green
-                                        : dateIsPassed
-                                            ? Theme.of(context).colorScheme.red
-                                            : Theme.of(context)
+                                        : invoice.status == 'PROCESSING'
+                                            ? Theme.of(context)
                                                 .colorScheme
-                                                .yellow)),
+                                                .yellow
+                                            : dateIsPassed
+                                                ? Theme.of(context)
+                                                    .colorScheme
+                                                    .red
+                                                : Theme.of(context)
+                                                    .colorScheme
+                                                    .yellow)),
                         const SizedBox(
                           width: 10,
                         ),
@@ -139,9 +147,11 @@ class SentInvoiceSheet extends HookWidget {
                             : FaIcon(
                                 FontAwesomeIcons.clockRotateLeft,
                                 size: 20,
-                                color: dateIsPassed
-                                    ? Theme.of(context).colorScheme.red
-                                    : Theme.of(context).colorScheme.yellow,
+                                color: invoice.status == 'PROCESSING'
+                                    ? Theme.of(context).colorScheme.yellow
+                                    : dateIsPassed
+                                        ? Theme.of(context).colorScheme.red
+                                        : Theme.of(context).colorScheme.yellow,
                               )
                       ],
                     ),
@@ -171,29 +181,28 @@ class SentInvoiceSheet extends HookWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width / 2,
-                      child: Wrap(
-                        children: [
-                          Text(
-                            invoice.originalInvoiceNo != null
-                                ? '#${invoice.originalInvoiceNo}'
-                                : '-',
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineMedium
-                                ?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                        ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        invoice.originalInvoiceNo != null
+                            ? '#${invoice.originalInvoiceNo}'
+                            : '-',
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
-                    ),
-                    Text('lbl_OriginalInvoiceNo'.tr,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.gray))
-                  ],
+                      Text('lbl_OriginalInvoiceNo'.tr,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.gray))
+                    ],
+                  ),
                 ),
                 Text(
                     (invoice.paidOnDate != null &&
@@ -225,20 +234,26 @@ class SentInvoiceSheet extends HookWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${invoice.senders?.privateUsers?.iban ?? invoice.senderIban ?? '-'}',
-                      style: Theme.of(context)
-                          .textTheme
-                          .displayMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    Text('lbl_IBAN'.tr,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.gray))
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${invoice.senders?.privateUsers?.iban ?? invoice.senderIban ?? '-'}',
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .displayMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      Text('lbl_IBAN'.tr,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.gray))
+                    ],
+                  ),
                 ),
                 GestureDetector(
                   onTap: () async {
@@ -266,12 +281,11 @@ class SentInvoiceSheet extends HookWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width - 150,
-                      child: Text(
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
                           invoice.senders?.privateUsers?.bankAccountName ??
                               invoice.senderName,
                           overflow: TextOverflow.ellipsis,
@@ -279,11 +293,14 @@ class SentInvoiceSheet extends HookWidget {
                               .textTheme
                               .displayMedium
                               ?.copyWith(fontWeight: FontWeight.w600)),
-                    ),
-                    Text('lbl_AccountHolder'.tr,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.gray))
-                  ],
+                      Text('lbl_AccountHolder'.tr,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.gray))
+                    ],
+                  ),
                 ),
                 GestureDetector(
                   onTap: () async {
@@ -644,22 +661,21 @@ class SentInvoiceSheet extends HookWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width - 70,
-                      child: Wrap(
-                        children: [
-                          Text(invoice.category ?? '-',
-                              style: Theme.of(context).textTheme.displayMedium),
-                        ],
-                      ),
-                    ),
-                    Text('lbl_Category'.tr,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.gray)),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(invoice.category ?? '-',
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.displayMedium),
+                      Text('lbl_Category'.tr,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.gray)),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -670,18 +686,24 @@ class SentInvoiceSheet extends HookWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(invoice.referenceNo ?? '-',
-                        style: Theme.of(context)
-                            .textTheme
-                            .displayMedium
-                            ?.copyWith(fontWeight: FontWeight.w600)),
-                    Text('lbl_ReferenceNumber'.tr,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.gray))
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(invoice.referenceNo ?? '-',
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context)
+                              .textTheme
+                              .displayMedium
+                              ?.copyWith(fontWeight: FontWeight.w600)),
+                      Text('lbl_ReferenceNumber'.tr,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.gray))
+                    ],
+                  ),
                 ),
                 GestureDetector(
                   onTap: () async {

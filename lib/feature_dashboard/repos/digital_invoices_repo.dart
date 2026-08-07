@@ -67,7 +67,19 @@ class DigitalInvoiceRepository {
         .eq('id', invoiceId)
         .select();
 
-    if (response == null || response.isEmpty) return null;
+    if (response.isEmpty) return null;
+    return InvoiceModel.fromJson(response.first);
+  }
+
+  Future<InvoiceModel?> updateMoneriumOrderIdForInvoiceById(
+      int invoiceId, String moneriumOrderId) async {
+    final response = await _client
+        .from('digital_invoices')
+        .update({'moneriumOrderId': moneriumOrderId})
+        .eq('id', invoiceId)
+        .select();
+
+    if (response.isEmpty) return null;
     return InvoiceModel.fromJson(response.first);
   }
 
@@ -136,6 +148,7 @@ class DigitalInvoiceRepository {
       'senderPrivateUserId': senderPrivateUserId,
       'viewCount': 0,
       'claimCount': 0,
+      'externalPaymentCount': 0,
     };
 
     final response = await _client
@@ -149,6 +162,12 @@ class DigitalInvoiceRepository {
 
   /// Get public invoice by token (for guest viewing)
   Future<PublicInvoiceModel?> getPublicInvoiceByToken(String token) async {
+    final normalizedToken = token.trim();
+    if (normalizedToken.isEmpty) {
+      print('⚠️ getPublicInvoiceByToken called with empty token');
+      return null;
+    }
+
     final response = await _client
         .from('public_digital_invoices')
         .select('''
@@ -156,7 +175,7 @@ class DigitalInvoiceRepository {
         sender:private_users!public_digital_invoices_senderPrivateUserId_fkey(*),
         receiver:private_users!public_digital_invoices_receiverPrivateUserId_fkey(*)
       ''')
-        .eq('publicToken', token)
+        .eq('publicToken', normalizedToken)
         .not('publicToken', 'is', null)
         .maybeSingle();
 
@@ -171,11 +190,16 @@ class DigitalInvoiceRepository {
     required int claimerPrivateUserId,
   }) async {
     try {
+      final normalizedToken = token.trim();
+      if (normalizedToken.isEmpty) {
+        throw Exception('Missing public invoice token');
+      }
+
       // Step 1: Fetch public invoice by token
       final publicInvoiceResponse = await _client
           .from('public_digital_invoices')
           .select()
-          .eq('publicToken', token)
+          .eq('publicToken', normalizedToken)
           .single();
 
       final publicInvoice = PublicInvoiceModel.fromJson(publicInvoiceResponse);
@@ -274,6 +298,7 @@ class DigitalInvoiceRepository {
       }).eq('id', publicInvoice.id);
 
       print('Invoice claimed successfully: ${digitalInvoice.id}');
+
       return digitalInvoice;
     } catch (e) {
       print('Error claiming invoice: $e');
@@ -407,13 +432,13 @@ class DigitalInvoiceRepository {
   /// Check if user has already claimed a specific public invoice
   Future<PublicInvoiceClaimModel?> getUserClaimForPublicInvoice({
     required int publicInvoiceId,
-    required int claimerUserId,
+    required int claimerPrivateUserId,
   }) async {
     final response = await _client
         .from('public_invoice_claims')
         .select()
         .eq('public_invoice_id', publicInvoiceId)
-        .eq('claimed_by_user_id', claimerUserId)
+        .eq('claimed_by_user_id', claimerPrivateUserId)
         .maybeSingle();
 
     if (response == null) return null;
@@ -462,15 +487,5 @@ class DigitalInvoiceRepository {
       print('❌ Error incrementing view count: $e');
       rethrow;
     }
-  }
-
-  // ==================== HELPERS ====================
-
-  /// Generate a random URL-safe token
-  String _generateToken() {
-    const chars =
-        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final random = DateTime.now().millisecondsSinceEpoch;
-    return List.generate(10, (i) => chars[(random + i) % chars.length]).join();
   }
 }

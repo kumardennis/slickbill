@@ -2,14 +2,13 @@
 // https://deno.land/manual/getting_started/setup_your_environment
 // This enables autocomplete, go to definition, etc.
 
-import { User } from "https://esm.sh/v96/@supabase/gotrue-js@2.16.0/dist/module/index.d.ts";
 import {
   confirmedRequiredParams,
   errorResponseData,
 } from "../../_shared/confirmedRequiredParams.ts";
 import { corsHeaders } from "../../_shared/cors.ts";
 import { createSupabase } from "../../_shared/supabaseClient.ts";
-import { sendOneSignalPush } from "../../_shared/oneSignal.ts";
+import { sendFcmPush } from "../../_shared/fcm.ts";
 
 export const handler = async (req: Request) => {
   const supabase = createSupabase(req);
@@ -129,20 +128,32 @@ export const handler = async (req: Request) => {
       error: digitalInvoiceError,
     };
 
-    const { data: sender, error: senderError2 } = await supabase
+    const { data: sender, error: _senderError2 } = await supabase
       .from("private_users")
       .select("firstName, lastName")
       .eq("id", privateUserId)
       .single();
 
-    await sendOneSignalPush({
-      externalUserId: receiverUserId.toString(), // map from private_users.userId
-      heading: "New Slickbill!",
-      content: Boolean(sender?.firstName)
-        ? `${sender?.firstName} sent you a slickbill!`
-        : "You received a new slickbill!",
-      data: { type: "NEW_SLICKBILL", invoiceId: digitalInvoiceData[0].id },
-    });
+    const { data: receiverUser } = await supabase
+      .from("users")
+      .select("fcm_token")
+      .eq("id", receiverUserId)
+      .single();
+
+    const fcmToken = receiverUser?.fcm_token as string | null;
+    if (fcmToken) {
+      await sendFcmPush({
+        token: fcmToken,
+        title: "New Slickbill!",
+        body: sender?.firstName
+          ? `${sender?.firstName} sent you a slickbill!`
+          : "You received a new slickbill!",
+        data: {
+          type: "NEW_SLICKBILL",
+          invoiceId: digitalInvoiceData[0].id,
+        },
+      });
+    }
 
     return new Response(JSON.stringify(responseData), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

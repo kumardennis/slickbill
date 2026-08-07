@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>285202567016-b0qbj3mm9d9rhmf6g73jv177oh1uqecr.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.285202567016-b0qbj3mm9d9rhmf6g73jv177oh1uqecr</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>285202567016-n77d0f95fr88d7s29fbti9mr3gm7te9e.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>AIzaSyAeHiUglOqTczDaJJT6f9_z9VOIjHmaaWo</string>
+	<key>GCM_SENDER_ID</key>
+	<string>285202567016</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.example.slickbill</string>
+	<key>PROJECT_ID</key>
+	<string>slickbills</string>
+	<key>STORAGE_BUCKET</key>
+	<string>slickbills.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:285202567016:ios:51cdf5e582eef6840d10dd</string>
+</dict>
+</plist>

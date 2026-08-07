@@ -21,6 +21,7 @@ class PublicInvoiceModel {
 
   final int viewCount;
   final int claimCount;
+  final int externalPaymentCount;
   final dynamic data;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -46,6 +47,7 @@ class PublicInvoiceModel {
     this.receiver,
     required this.viewCount,
     required this.claimCount,
+    this.externalPaymentCount = 0,
     this.data,
     required this.createdAt,
     required this.updatedAt,
@@ -79,6 +81,8 @@ class PublicInvoiceModel {
 
     final viewCount = json['viewCount'] ?? json['view_count'] ?? 0;
     final claimCount = json['claimCount'] ?? json['claim_count'] ?? 0;
+    final externalPaymentCount =
+        json['externalPaymentCount'] ?? json['external_payment_count'] ?? 0;
 
     final data = json['data'];
 
@@ -134,8 +138,11 @@ class PublicInvoiceModel {
       sender: sender,
       receiverPrivateUserId: receiverPrivateUserId,
       receiver: receiver,
-      viewCount: viewCount,
-      claimCount: claimCount,
+      viewCount: viewCount is int ? viewCount : int.tryParse('$viewCount') ?? 0,
+      claimCount: claimCount is int ? claimCount : int.tryParse('$claimCount') ?? 0,
+      externalPaymentCount: externalPaymentCount is int
+          ? externalPaymentCount
+          : int.tryParse('$externalPaymentCount') ?? 0,
       data: data,
       createdAt: createdAt,
       updatedAt: updatedAt,
@@ -162,6 +169,7 @@ class PublicInvoiceModel {
       'receiverPrivateUserId': receiverPrivateUserId,
       'viewCount': viewCount,
       'claimCount': claimCount,
+      'externalPaymentCount': externalPaymentCount,
       'data': data,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
@@ -171,6 +179,49 @@ class PublicInvoiceModel {
       'sender': sender?.toJson(),
       'receiver': receiver?.toJson(),
     };
+  }
+
+  /// Last external bank payer from Monerium settle
+  /// (`public_digital_invoices.data.lastExternalPayer`).
+  ExternalPayerSnapshot? get lastExternalPayer {
+    final raw = data;
+    if (raw is! Map) return null;
+    final payer = raw['lastExternalPayer'] ?? raw['last_external_payer'];
+    if (payer is! Map) return null;
+    return ExternalPayerSnapshot.fromJson(Map<String, dynamic>.from(payer));
+  }
+}
+
+/// Snapshot written by Express on external public-invoice settle.
+class ExternalPayerSnapshot {
+  final String? name;
+  final String? iban;
+  final String? moneriumOrderId;
+  final String? paidAt;
+
+  const ExternalPayerSnapshot({
+    this.name,
+    this.iban,
+    this.moneriumOrderId,
+    this.paidAt,
+  });
+
+  factory ExternalPayerSnapshot.fromJson(Map<String, dynamic> json) {
+    return ExternalPayerSnapshot(
+      name: json['name']?.toString(),
+      iban: json['iban']?.toString(),
+      moneriumOrderId: json['moneriumOrderId']?.toString() ??
+          json['monerium_order_id']?.toString(),
+      paidAt: json['paidAt']?.toString() ?? json['paid_at']?.toString(),
+    );
+  }
+
+  String get displayLabel {
+    final n = name?.trim();
+    if (n != null && n.isNotEmpty) return n;
+    final i = iban?.trim();
+    if (i != null && i.isNotEmpty) return i;
+    return 'External payer';
   }
 }
 

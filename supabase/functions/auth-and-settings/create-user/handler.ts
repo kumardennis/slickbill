@@ -37,6 +37,7 @@ export const handler = async (req: Request) => {
       isPrivateUser,
       iban,
       accountHolder,
+      emailRedirectTo,
     } = await req.json();
 
     if (
@@ -74,9 +75,17 @@ export const handler = async (req: Request) => {
       });
     }
 
+    const resolvedEmailRedirectTo =
+      typeof emailRedirectTo === "string" && emailRedirectTo.trim().length > 0
+        ? emailRedirectTo.trim()
+        : "https://app.slickbills.com/sign-in?verified=1";
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
+      options: {
+        emailRedirectTo: resolvedEmailRedirectTo,
+      },
     });
 
     if (error !== null) {

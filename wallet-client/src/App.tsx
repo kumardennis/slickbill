@@ -15,6 +15,8 @@ import { Onramp } from "./pages/onramp/Onramp.tsx";
 import { UpgradeToSmartAccount } from "./pages/smart-account/SmartAccountUpgrade.tsx";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { LinkEmail } from "./pages/link-email/LinkEmail.tsx";
+import { MetamaskAuth } from "./pages/metamask/MetamaskAuth.tsx";
+import { MoneriumSiwe } from "./pages/siwe/MoneriumSiwe.tsx";
 
 declare global {
   interface Window {
@@ -50,7 +52,7 @@ function App() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ code }),
-        }
+        },
       );
 
       const json = await res.json().catch(() => null);
@@ -192,7 +194,7 @@ function AppContent() {
   useEffect(() => {
     console.log(
       "Current user:",
-      user.currentUser?.authenticationMethods?.google?.email ?? "(none)"
+      user.currentUser?.authenticationMethods?.google?.email ?? "(none)",
     );
 
     if (!window.isFlutterApp) return;
@@ -266,6 +268,11 @@ function AppContent() {
             />
             <Route path="/wallet/link-email" element={<EmailToAccountPage />} />
             <Route path="/wallet/auth" element={<AuthPage />} />
+            <Route
+              path="/wallet/metamask-auth"
+              element={<MetamaskAuthPage />}
+            />
+              <Route path="/wallet/siwe" element={<MoneriumSiwe />} />
             <Route path="*" element={<Navigate to="/wallet/auth" replace />} />
           </Routes>
         </div>
@@ -533,6 +540,19 @@ function AuthPage() {
             This page will update automatically once authentication completes.
           </div>
         </div>
+      </SectionCard>
+    </div>
+  );
+}
+
+function MetamaskAuthPage() {
+  return (
+    <div style={styles.stack}>
+      <SectionCard
+        title="MetaMask"
+        subtitle="Browser-based Web3Auth wallet connection flow."
+      >
+        <MetamaskAuth />
       </SectionCard>
     </div>
   );

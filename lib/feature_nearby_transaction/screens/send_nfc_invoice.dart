@@ -12,6 +12,7 @@ import 'package:nfc_manager/nfc_manager.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/constants.dart';
+import 'package:slickbill/feature_auth/getx_controllers/current_bank_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
 import 'package:slickbill/feature_navigation/getx_controllers/navigation_controller.dart';
@@ -30,6 +31,7 @@ class SendNfcInvoice extends HookWidget {
   Widget build(BuildContext context) {
     final NavigationController navigationController = Get.find();
     final UserController userController = Get.find();
+    final CurrentBankController currentBankController = Get.find();
     final digitalInvoiceController = Get.find<DigitalInvoiceController>();
 
     SendInvoicesClass sendInvoicesClass = SendInvoicesClass();
@@ -160,16 +162,20 @@ class SendNfcInvoice extends HookWidget {
           jsonObject['referenceNumber'],
           jsonObject['senderPrivateUserId'],
           jsonObject['senderName'],
+          jsonObject['senderIban'],
           jsonObject['amount'],
           jsonObject['category'],
         );
 
         navigationController.changeIndex(0);
 
-        Get.snackbar('Slickbill Received', 'Received a slickbill from a user!');
+        // FCM NEW_SLICKBILL ("X sent you a slickbill") is the user-facing toast.
       } catch (e) {
         debugPrint('Error parsing QR code: $e');
-        Get.snackbar('Error', 'Failed to process the QR code.');
+        Get.snackbar(
+          'Error',
+          e.toString().replaceFirst('Exception: ', ''),
+        );
       }
     }
 
@@ -214,17 +220,52 @@ class SendNfcInvoice extends HookWidget {
       return null;
     }, [qrCodeReadValue.value]);
 
+    String resolveSenderIban() {
+      final currentBankIban = currentBankController.current.value.iban.trim();
+      if (currentBankIban.isNotEmpty) return currentBankIban;
+
+      final userPrimaryIban = (userController.user.value.iban ?? '').trim();
+      if (userPrimaryIban.isNotEmpty) return userPrimaryIban;
+
+      final userIbans = userController.user.value.ibans;
+      if (userIbans != null && userIbans.isNotEmpty) {
+        for (final bank in userIbans) {
+          if (bank.isPrimary && bank.iban.trim().isNotEmpty) {
+            return bank.iban.trim();
+          }
+        }
+
+        for (final bank in userIbans) {
+          if (bank.iban.trim().isNotEmpty) {
+            return bank.iban.trim();
+          }
+        }
+      }
+
+      return '';
+    }
+
     void updateQRData() {
+      final senderIban = resolveSenderIban();
+
       qrData.value = jsonEncode({
+        'qrVersion': 2,
         'description': descriptionController.value.text,
         'dueDate': dueDateController.text,
         'referenceNumber': referenceNumberController.text,
         'senderPrivateUserId': userController.user.value.privateUserId,
         'senderName':
             '${userController.user.value.firstName} ${userController.user.value.lastName}',
+        'senderIban': senderIban,
         'amount': receiverUserAmount.value,
         'category': category.value,
       });
+
+      if (senderIban.isEmpty) {
+        debugPrint(
+          '[QRGenerate] senderIban is empty. currentBank=${currentBankController.current.value.iban} user.iban=${userController.user.value.iban} user.ibans.count=${userController.user.value.ibans?.length ?? 0}',
+        );
+      }
     }
 
     useEffect(() {
@@ -240,6 +281,23 @@ class SendNfcInvoice extends HookWidget {
 
       return null;
     }, [receiverUserAmount.value, category.value]);
+
+    useEffect(() {
+      final workers = <Worker>[
+        ever(currentBankController.current, (_) {
+          updateQRData();
+        }),
+        ever(userController.user, (_) {
+          updateQRData();
+        }),
+      ];
+
+      return () {
+        for (final worker in workers) {
+          worker.dispose();
+        }
+      };
+    }, const []);
 
     useEffect(() {
       void listener() {

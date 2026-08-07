@@ -8,13 +8,12 @@ import 'package:slickbill/feature_auth/getx_controllers/current_bank_controller.
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/screens/sign_in.dart';
 import 'package:slickbill/feature_dashboard/screens/add_ibans.dart';
-import 'package:slickbill/feature_dashboard/widgets/cdp_wallet_balance.dart';
 import 'package:slickbill/feature_dashboard/widgets/current_bank_selector.dart';
+import 'package:slickbill/feature_dashboard/widgets/monerium_balance_card.dart';
+import 'package:slickbill/feature_dashboard/widgets/monerium_kyc_status_card.dart';
 import 'package:slickbill/feature_dashboard/widgets/user_info.dart';
-import 'package:slickbill/feature_dashboard/widgets/wallet_balance.dart';
-import 'package:slickbill/services/coinbase/coinbase_service.dart';
+import 'package:slickbill/feature_dashboard/widgets/wallet_info.dart';
 import 'package:slickbill/shared_widgets/custom_appbar.dart';
-import 'package:slickbill/shared_widgets/input_field.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class Profile extends HookWidget {
@@ -23,8 +22,7 @@ class Profile extends HookWidget {
   @override
   Widget build(BuildContext context) {
     UserController userController = Get.put(UserController());
-    CurrentBankController currentBankController =
-        Get.put(CurrentBankController());
+    Get.put(CurrentBankController());
 
     Future<void> handleSignOut() async {
       try {
@@ -89,260 +87,170 @@ class Profile extends HookWidget {
     // Bank section
     return Scaffold(
       appBar: const CustomAppbar(title: 'Profile', appbarIcon: null),
-      body: SingleChildScrollView(
-        child: Container(
-          width: MediaQuery.of(context).size.width,
-          child: Column(
-            children: [
-              UserInfo(),
-              const SizedBox(height: 20),
+      body: Obx(
+        () {
+          final user = userController.user.value;
+          final moneriumUserId =
+              (user.privateUserId != null && user.privateUserId! > 0)
+                  ? user.privateUserId.toString()
+                  : user.id.toString();
 
-              Obx(() {
-                final hasWallet = true;
-
-                print(
-                    'User has wallet: ${userController.user.value.cdpWalletId}');
-
-                return Stack(
-                  children: [
-                    // const WalletBalance(),
-                    const CdpWalletBalance(),
-                    if (!hasWallet)
-                      Positioned(
-                        top: 0,
-                        right: 0,
-                        left: 0,
-                        bottom: 0,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.7),
-                            borderRadius: BorderRadius.circular(16),
+          return SingleChildScrollView(
+            child: SizedBox(
+              width: MediaQuery.of(context).size.width,
+              child: Column(
+                children: [
+                  MoneriumBalanceCard(user: user),
+                  UserInfo(),
+                  const WalletInfo(),
+                  MoneriumKycStatusCard(userId: moneriumUserId),
+                  const SizedBox(height: 20),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.light,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 20.0,
+                            vertical: 12.0,
                           ),
-                          margin: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 16,
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(
-                                Icons.wallet_outlined,
-                                color: Colors.white,
-                                size: 48,
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: () async {
+                                final result =
+                                    await Get.to(() => const AddIbanScreen());
+                                if (result == true) {
+                                  await userController.loadUserData();
+                                }
+                              },
+                              icon: Icon(
+                                Icons.add,
+                                color: Theme.of(context).colorScheme.blue,
                               ),
-                              const SizedBox(height: 16),
-                              Text(
-                                'Crypto Wallet',
+                              label: Text(
+                                'Add bank account / IBAN',
                                 style: Theme.of(context)
                                     .textTheme
-                                    .titleLarge
+                                    .titleMedium
                                     ?.copyWith(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
+                                      color: Theme.of(context).colorScheme.blue,
+                                      fontWeight: FontWeight.w600,
                                     ),
                               ),
-                              const SizedBox(height: 8),
-                              Container(
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(
+                                  color: Theme.of(context).colorScheme.blue,
+                                ),
                                 padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
                                   horizontal: 16,
-                                  vertical: 8,
                                 ),
-                                decoration: BoxDecoration(
-                                  color: Colors.orange.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(20),
-                                  border: Border.all(
-                                    color: Colors.orange,
-                                    width: 1,
-                                  ),
-                                ),
-                                child: Text(
-                                  'COMING SOON',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelLarge
-                                      ?.copyWith(
-                                        color: Colors.orange,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 1.2,
-                                      ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
                               ),
-                              const SizedBox(height: 12),
-                              Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(horizontal: 32),
-                                child: Text(
-                                  'Send and receive crypto payments directly',
-                                  textAlign: TextAlign.center,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyMedium
-                                      ?.copyWith(
-                                        color: Colors.white.withOpacity(0.8),
-                                      ),
-                                ),
+                            ),
+                          ),
+                        ),
+                        if ((user.bankName?.trim().isNotEmpty ?? false) ||
+                            (user.bankAccountName?.trim().isNotEmpty ?? false))
+                          Column(
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.account_balance,
+                                    color: Theme.of(context).colorScheme.blue,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Primary Bank Account',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelMedium
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .blue,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                (user.bankName?.trim().isNotEmpty ?? false)
+                                    ? user.bankName!
+                                    : (user.bankAccountName ?? ''),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context).colorScheme.blue,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                              ),
+                              Text(
+                                user.iban ?? '',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context).colorScheme.blue,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                               ),
                             ],
                           ),
-                        ),
-                      ),
-                  ],
-                );
-              }),
-
-              const SizedBox(height: 20),
-
-              // Bank Account Section
-              Obx(() {
-                final user = userController.user.value;
-                return Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  margin: const EdgeInsets.symmetric(horizontal: 20),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.light,
-                    borderRadius: BorderRadius.circular(12),
+                      ],
+                    ),
                   ),
-                  child: Column(
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20.0,
-                          vertical: 12.0,
+                  const SizedBox(height: 20),
+                  const CurrentBankSelector(),
+                  const SizedBox(height: 20),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: handleSignOut,
+                        icon: const Icon(
+                          Icons.logout,
+                          color: Colors.white,
                         ),
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: () async {
-                              // ✅ Navigate and wait for result
-                              final result =
-                                  await Get.to(() => const AddIbanScreen());
-
-                              // ✅ Refresh the entire page if bank was added
-                              if (result == true) {
-                                // Reload both controllers
-                                await userController.loadUserData();
-                              }
-                            },
-                            icon: Icon(
-                              Icons.add,
-                              color: Theme.of(context).colorScheme.blue,
-                            ),
-                            label: Text(
-                              'Add bank account / IBAN',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    color: Theme.of(context).colorScheme.blue,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              side: BorderSide(
-                                color: Theme.of(context).colorScheme.blue,
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                vertical: 14,
-                                horizontal: 16,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
+                        label: const Text(
+                          'Sign Out',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                      ),
-                      if (user.bankAccountName != null)
-                        Column(
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.account_balance,
-                                  color: Theme.of(context).colorScheme.blue,
-                                  size: 20,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Primary Bank Account',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelMedium
-                                      ?.copyWith(
-                                        color:
-                                            Theme.of(context).colorScheme.blue,
-                                      ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              user.bankAccountName ?? '',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    color: Theme.of(context).colorScheme.blue,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                            ),
-                            Text(
-                              user.iban ?? '',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleMedium
-                                  ?.copyWith(
-                                    color: Theme.of(context).colorScheme.blue,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                            ),
-                          ],
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          elevation: 2,
                         ),
-                    ],
-                  ),
-                );
-              }),
-
-              const SizedBox(height: 20),
-              const CurrentBankSelector(),
-              const SizedBox(height: 20),
-
-              // Sign Out Button
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: handleSignOut,
-                    icon: const Icon(
-                      Icons.logout,
-                      color: Colors.white,
-                    ),
-                    label: const Text(
-                      'Sign Out',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 2,
-                    ),
                   ),
-                ),
+                  const SizedBox(height: 40),
+                ],
               ),
-              const SizedBox(height: 40), // Bottom padding
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }

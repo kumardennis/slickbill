@@ -1,66 +1,177 @@
 import 'package:app_links/app_links.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
+import 'package:slickbill/feature_auth/services/metamask_wallet_service.dart';
+import 'package:slickbill/feature_auth/services/monerium_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+String? _pendingBillToken;
+
+String? consumePendingBillToken() {
+  final token = _pendingBillToken;
+  _pendingBillToken = null;
+  return token;
+}
+
+bool hasPendingBillToken() {
+  return (_pendingBillToken?.isNotEmpty ?? false);
+}
+
+String? _extractBillToken(Uri uri) {
+  if (uri.pathSegments.isNotEmpty && uri.pathSegments.first.trim().isNotEmpty) {
+    return uri.pathSegments.first.trim();
+  }
+
+  if (uri.fragment.isNotEmpty) {
+    final fragment = uri.fragment.trim();
+    if (fragment.isNotEmpty) {
+      final normalizedFragment =
+          fragment.startsWith('/') ? fragment.substring(1) : fragment;
+      final fragmentSegments = normalizedFragment
+          .split('/')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+
+      if (fragmentSegments.isNotEmpty) {
+        if (fragmentSegments.first == 'bill' && fragmentSegments.length > 1) {
+          return fragmentSegments[1];
+        }
+        if (fragmentSegments.first != 'bill') {
+          return fragmentSegments.first;
+        }
+      }
+    }
+  }
+
+  final tokenFromQuery = uri.queryParameters['token'] ??
+      uri.queryParameters['publicToken'] ??
+      uri.queryParameters['invoice_token'];
+
+  if (tokenFromQuery != null && tokenFromQuery.trim().isNotEmpty) {
+    return tokenFromQuery.trim();
+  }
+
+  return null;
+}
+
+bool processIncomingDeepLinkUri(Uri uri) {
+  if (uri.scheme == 'w3a') {
+    print('🔑 Web3Auth callback received');
+    print(
+        '🔑 Web3Auth callback scheme=${uri.scheme} host=${uri.host} path=${uri.path}');
+    print('🔑 Web3Auth callback query=${uri.query}');
+    MetamaskWalletService.onAuthCallbackUri(uri);
+    return true;
+  }
+
+  final isMetaMaskCallback =
+      (uri.scheme == 'slickbills' || uri.scheme == 'slickbill') &&
+          uri.host == 'metamask-auth';
+  if (isMetaMaskCallback) {
+    print('🦊 MetaMask callback received');
+    print(
+        '🦊 MetaMask callback scheme=${uri.scheme} host=${uri.host} path=${uri.path}');
+    print('🦊 MetaMask callback query=${uri.query}');
+    MetamaskWalletService.onAuthCallbackUri(uri);
+    return true;
+  }
+
+  final isBillLink =
+      (uri.scheme == 'slickbills' || uri.scheme == 'slickbill') &&
+          uri.host == 'bill';
+  if (isBillLink) {
+    print('📄 Bill deep link detected');
+
+    final invoiceToken = _extractBillToken(uri);
+
+    if (invoiceToken != null) {
+      print('   Invoice token: $invoiceToken');
+      _pendingBillToken = invoiceToken;
+      Get.offAllNamed('/bill/$invoiceToken');
+    } else {
+      print('   No invoice token found in bill deep link, not navigating away');
+    }
+    return true;
+  }
+
+  if (uri.scheme == 'https' &&
+      (uri.host == 'slickbills.com' || uri.host == 'www.slickbills.com')) {
+    if (uri.pathSegments.isNotEmpty) {
+      print('🌐 Web deep link: /${uri.pathSegments.join('/')}');
+      Get.toNamed('/${uri.pathSegments.join('/')}');
+    }
+    return true;
+  }
+
+  if ((uri.scheme == 'slickbills' || uri.scheme == 'slickbill') &&
+      uri.host == 'home-screen') {
+    final isMoneriumFlow = uri.queryParameters['monerium'] == '1' ||
+        uri.queryParameters['provider'] == 'monerium';
+
+    if (isMoneriumFlow) {
+      print('💶 Monerium callback received via home-screen');
+      MoneriumService.onAuthCallbackUri(uri);
+      return true;
+    }
+
+    final isMetaMaskFlow = uri.queryParameters['metamask'] == '1' ||
+        uri.queryParameters.containsKey('address') ||
+        uri.queryParameters.containsKey('success');
+
+    if (isMetaMaskFlow) {
+      print('🦊 MetaMask callback received via home-screen');
+      print('🦊 home-screen callback query=${uri.query}');
+      MetamaskWalletService.onAuthCallbackUri(uri);
+      return true;
+    }
+
+    print('🔵 Facebook OAuth callback detected');
+
+    Future.delayed(Duration(milliseconds: 500), () {
+      final session = Supabase.instance.client.auth.currentSession;
+      if (session != null) {
+        print('✅ OAuth session established');
+      } else {
+        print('⚠️ No session found after OAuth callback');
+      }
+    });
+
+    return true;
+  }
+
+  return false;
+}
 
 void deepLinkHandler(BuildContext context) {
   final appLinks = AppLinks();
   String? lastProcessedLink;
+  DateTime? lastProcessedAt;
 
-  final sub = appLinks.uriLinkStream.listen((Uri? uri) {
+  appLinks.uriLinkStream.listen((Uri? uri) {
     if (uri != null) {
       print('🔗 Received deep link: $uri');
       final uriString = uri.toString();
-      // Prevent duplicate processing
-      if (lastProcessedLink == uriString) {
+      // Prevent near-simultaneous duplicate delivery from the OS/plugin,
+      // but allow later attempts even if callback URL repeats.
+      final now = DateTime.now();
+      final isImmediateDuplicate = lastProcessedLink == uriString &&
+          lastProcessedAt != null &&
+          now.difference(lastProcessedAt!).inSeconds < 2;
+
+      if (isImmediateDuplicate) {
         print('⏭️ Skipping duplicate deep link: $uriString');
         return;
       }
 
-      if (uri.scheme == 'slickbills' && uri.host == 'bill') {
-        print('📄 Bill deep link detected');
-
-        if (uri.pathSegments.isNotEmpty) {
-          // Has invoice token: slickbills://bill/invoice-token
-          final invoiceToken = uri.pathSegments[0];
-          print('   Invoice token: $invoiceToken');
-          Get.offAllNamed('/bill/$invoiceToken');
-        } else {
-          // No token: slickbills://bill
-          print('   No invoice token, going to bills list');
-          Get.toNamed('/home-screen'); // or wherever you list bills
-        }
-        return;
+      void markProcessed() {
+        lastProcessedLink = uriString;
+        lastProcessedAt = now;
       }
 
-      // ✅ Handle HTTPS deep links (for web)
-      if (uri.scheme == 'https' && uri.host == 'slickbills.com') {
-        if (uri.pathSegments.isNotEmpty) {
-          print('🌐 Web deep link: /${uri.pathSegments.join('/')}');
-          Get.toNamed('/${uri.pathSegments.join('/')}');
-        }
-        return;
-      }
-
-      // ✅ Check if it's an OAuth callback
-      if (uri.scheme == 'slickbills' && uri.host == 'home-screen') {
-        print('🔵 Facebook OAuth callback detected');
-
-        // Supabase will automatically handle the callback
-        // The session will be available via supabase.auth.currentSession
-
-        // Give it a moment to process
-        Future.delayed(Duration(milliseconds: 500), () {
-          final session = Supabase.instance.client.auth.currentSession;
-          if (session != null) {
-            print('✅ OAuth session established');
-            // Navigation will be handled by SupabaseAuthManger
-          } else {
-            print('⚠️ No session found after OAuth callback');
-          }
-        });
-
-        return;
+      final handled = processIncomingDeepLinkUri(uri);
+      if (handled) {
+        markProcessed();
       }
     }
   }, onError: (err) {

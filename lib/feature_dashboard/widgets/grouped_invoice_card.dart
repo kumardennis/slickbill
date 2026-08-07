@@ -51,9 +51,14 @@ class GroupedInvoiceCard extends StatelessWidget {
           .format(DateTime.parse(first.createdAt));
     } catch (_) {}
 
-    final groupStatus = invoices.every((e) => e.status.toUpperCase() == 'PAID')
+    final hasProcessing =
+        invoices.any((e) => e.status.toUpperCase() == 'PROCESSING');
+    final allPaid = invoices.every((e) => e.status.toUpperCase() == 'PAID');
+    final groupStatus = allPaid
         ? 'Paid'
-        : 'Unpaid';
+        : hasProcessing
+            ? 'Waiting'
+            : 'Unpaid';
 
     return Container(
       decoration: BoxDecoration(

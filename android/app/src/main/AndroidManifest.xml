@@ -9,13 +9,13 @@
 <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
-        android:label="slickbills"
+        android:label="SlickBills"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
@@ -95,7 +95,7 @@
     <!-- <data android:scheme="https" android:host="slickbills.com" android:pathPrefix="/bill" /> -->
 </intent-filter>
 
-<intent-filter android:autoVerify="true">
+<intent-filter>
  <data android:scheme="slickbills" android:host="bill" />
     <action android:name="android.intent.action.VIEW" />
     <category android:name="android.intent.category.DEFAULT" />
@@ -103,12 +103,32 @@
  
 </intent-filter>
 
-<intent-filter android:autoVerify="true">
+<intent-filter>
  <data android:scheme="slickbills" android:host="home-screen" />
     <action android:name="android.intent.action.VIEW" />
     <category android:name="android.intent.category.DEFAULT" />
     <category android:name="android.intent.category.BROWSABLE" />
  
+</intent-filter>
+
+<intent-filter>
+    <action android:name="android.intent.action.VIEW" />
+    <category android:name="android.intent.category.DEFAULT" />
+    <category android:name="android.intent.category.BROWSABLE" />
+    <data
+        android:scheme="w3a"
+        android:host="com.slickbills.app"
+        android:pathPrefix="/auth" />
+</intent-filter>
+
+<intent-filter>
+  <action android:name="android.intent.action.VIEW" />
+
+  <category android:name="android.intent.category.DEFAULT" />
+  <category android:name="android.intent.category.BROWSABLE" />
+
+  <data android:scheme="{scheme}" android:host="slickbills.com"/>
+  <!-- Accept URIs: w3a://com.example.w3aflutter -->
 </intent-filter>
 
         </activity>

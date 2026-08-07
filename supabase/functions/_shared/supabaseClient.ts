@@ -1,8 +1,9 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { corsHeaders } from "./cors.ts";
+import { Database } from "./types.ts";
 
 export const createSupabase = (req: Request) =>
-  createClient(
+  createClient<Database>(
     Deno.env.get("SUPABASE_URL") ?? "",
     Deno.env.get("SUPABASE_ANON_KEY") ?? "",
     {
@@ -12,5 +13,5 @@ export const createSupabase = (req: Request) =>
           Authorization: req.headers.get("Authorization")!,
         },
       },
-    }
+    },
   );

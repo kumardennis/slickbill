@@ -1,8 +1,11 @@
 import UIKit
 import Flutter
+import UserNotifications
+import FirebaseCore
+import FirebaseMessaging
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, MessagingDelegate {
     private let CHANNEL_PDF_BYTES = "com.example.slickbill/getPdfBytes"
     private let CHANNEL_EXTRACT_TEXT = "com.example.slickbill/extractText"
     private let CHANNEL_NFC = "com.example.slickbill/nfc"
@@ -13,8 +16,20 @@ import Flutter
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
-        
-        let controller : FlutterViewController = window?.rootViewController as! FlutterViewController
+
+        if FirebaseApp.app() == nil {
+            FirebaseApp.configure()
+        }
+
+        GeneratedPluginRegistrant.register(with: self)
+
+        UNUserNotificationCenter.current().delegate = self
+        Messaging.messaging().delegate = self
+        application.registerForRemoteNotifications()
+
+        guard let controller = window?.rootViewController as? FlutterViewController else {
+            return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+        }
         
         // NFC Channel
         let nfcChannel = FlutterMethodChannel(name: CHANNEL_NFC,
@@ -56,8 +71,17 @@ import Flutter
             }
         })
         
-        GeneratedPluginRegistrant.register(with: self)
         return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    }
+
+    override func application(_ application: UIApplication,
+                              didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Messaging.messaging().apnsToken = deviceToken
+        super.application(application, didRegisterForRemoteNotificationsWithDeviceToken: deviceToken)
+    }
+
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        print("FCM registration token refreshed: \(fcmToken ?? "nil")")
     }
     
     // Handle file opening from other apps

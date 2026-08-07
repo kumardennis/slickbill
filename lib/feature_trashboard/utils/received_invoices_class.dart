@@ -132,7 +132,8 @@ class ReceivedInvoicesClass {
       final data = await response.data;
 
       if (data['isRequestSuccessfull'] == true) {
-        Get.snackbar('Success', 'inf_StatusUpdated'.tr);
+        // Caller owns the user-facing toast for this action.
+        return;
       } else {
         Get.snackbar('Oops..', data['error'].toString());
       }

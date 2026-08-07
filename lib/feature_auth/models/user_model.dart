@@ -106,6 +106,7 @@ class ClientUserModel {
   final String accessToken;
   final String? iban;
   final List<BankAccount>? ibans;
+  final String? bankName;
   final String? bankAccountName;
   final String? firstName;
   final String? lastName;
@@ -115,6 +116,7 @@ class ClientUserModel {
   final String? strigaUserId;
   final String? strigaWalletId;
   final String? cdpWalletId;
+  final String? metamaskWalletAddress;
 
   ClientUserModel({
     required this.id,
@@ -126,6 +128,7 @@ class ClientUserModel {
     required this.accessToken,
     this.iban,
     this.ibans,
+    this.bankName,
     this.bankAccountName,
     this.firstName,
     this.lastName,
@@ -135,6 +138,7 @@ class ClientUserModel {
     this.strigaUserId,
     this.strigaWalletId,
     this.cdpWalletId,
+    this.metamaskWalletAddress,
   });
 
   ClientUserModel.empty()
@@ -147,6 +151,7 @@ class ClientUserModel {
         accessToken = '',
         iban = null,
         ibans = null,
+        bankName = null,
         bankAccountName = null,
         firstName = null,
         lastName = null,
@@ -155,7 +160,8 @@ class ClientUserModel {
         isPrivate = true,
         strigaUserId = null,
         strigaWalletId = null,
-        cdpWalletId = null;
+        cdpWalletId = null,
+        metamaskWalletAddress = null;
 
   factory ClientUserModel.fromJson(Map<String, dynamic> json) {
     return ClientUserModel(
@@ -172,6 +178,7 @@ class ClientUserModel {
               .map((i) => BankAccount.fromJson(i as Map<String, dynamic>))
               .toList()
           : null,
+      bankName: json['bankName'] as String?,
       bankAccountName: json['bankAccountName'] as String?,
       firstName: json['firstName'] as String?,
       lastName: json['lastName'] as String?,
@@ -181,6 +188,8 @@ class ClientUserModel {
       strigaUserId: json['strigaUserId'] as String?,
       strigaWalletId: json['strigaWalletId'] as String?,
       cdpWalletId: json['cdpWalletId'] as String?,
+      metamaskWalletAddress: (json['metamaskWalletAddress'] ??
+          json['metamask_wallet_address']) as String?,
     );
   }
 
@@ -195,6 +204,7 @@ class ClientUserModel {
       'accessToken': accessToken,
       'iban': iban,
       'ibans': ibans?.map((i) => i.toJson()).toList(),
+      'bankName': bankName,
       'bankAccountName': bankAccountName,
       'firstName': firstName,
       'lastName': lastName,
@@ -203,6 +213,8 @@ class ClientUserModel {
       'isPrivate': isPrivate,
       'strigaUserId': strigaUserId,
       'strigaWalletId': strigaWalletId,
+      'cdpWalletId': cdpWalletId,
+      'metamaskWalletAddress': metamaskWalletAddress,
     };
   }
 
@@ -216,6 +228,7 @@ class ClientUserModel {
     String? accessToken,
     String? iban,
     List<BankAccount>? ibans,
+    String? bankName,
     String? bankAccountName,
     String? firstName,
     String? lastName,
@@ -225,6 +238,7 @@ class ClientUserModel {
     String? strigaUserId,
     String? sringaWalletId,
     String? cdpWalletId,
+    String? metamaskWalletAddress,
   }) {
     return ClientUserModel(
       id: id ?? this.id,
@@ -236,6 +250,7 @@ class ClientUserModel {
       accessToken: accessToken ?? this.accessToken,
       iban: iban ?? this.iban,
       ibans: ibans ?? this.ibans,
+      bankName: bankName ?? this.bankName,
       bankAccountName: bankAccountName ?? this.bankAccountName,
       firstName: firstName ?? this.firstName,
       lastName: lastName ?? this.lastName,
@@ -245,6 +260,8 @@ class ClientUserModel {
       strigaUserId: strigaUserId ?? this.strigaUserId,
       strigaWalletId: strigaWalletId ?? this.strigaWalletId,
       cdpWalletId: cdpWalletId ?? this.cdpWalletId,
+      metamaskWalletAddress:
+          metamaskWalletAddress ?? this.metamaskWalletAddress,
     );
   }
 }
@@ -260,6 +277,7 @@ class SupabaseUserModel {
   final String? strigaWalletId;
   final String? phoneCountryCode;
   final String? cdpWalletId;
+  final String? fcmToken;
 
   SupabaseUserModel({
     required this.id,
@@ -272,6 +290,7 @@ class SupabaseUserModel {
     this.strigaWalletId,
     this.cdpWalletId,
     this.phoneCountryCode,
+    this.fcmToken,
   });
 
   factory SupabaseUserModel.fromJson(Map<String, dynamic> json) {
@@ -286,6 +305,7 @@ class SupabaseUserModel {
       strigaWalletId: json['strigaWalletId'] as String?,
       phoneCountryCode: json['phoneCountryCode'] as String?,
       cdpWalletId: json['cdpWalletId'] as String?,
+      fcmToken: (json['fcm_token'] ?? json['fcmToken']) as String?,
     );
   }
 
@@ -301,6 +321,7 @@ class SupabaseUserModel {
       'strigaWalletId': strigaWalletId,
       'phoneCountryCode': phoneCountryCode,
       'cdpWalletId': cdpWalletId,
+      'fcm_token': fcmToken,
     };
   }
 }

@@ -684,12 +684,136 @@ class PublicInvoiceView extends HookWidget {
                             ),
                             onPressed: () async {
                               try {
+                                final claimerPrivateUserId =
+                                    userController.user.value.privateUserId;
+
+                                if (claimerPrivateUserId == null) {
+                                  Get.snackbar(
+                                    'Error',
+                                    'Please sign in again before claiming this invoice.',
+                                    backgroundColor: Theme.of(context)
+                                        .colorScheme
+                                        .red
+                                        .withOpacity(0.2),
+                                    colorText:
+                                        Theme.of(context).colorScheme.red,
+                                  );
+                                  return;
+                                }
+
+                                final existingInvoice = await invoiceController
+                                    .getExistingClaimedInvoice(
+                                  publicInvoiceId: inv.id,
+                                  claimerPrivateUserId: claimerPrivateUserId,
+                                );
+
+                                if (existingInvoice != null) {
+                                  final openExisting = await showDialog<bool>(
+                                        context: context,
+                                        builder: (dialogContext) => AlertDialog(
+                                          backgroundColor:
+                                              const Color(0xFF0F172A),
+                                          title: const Text(
+                                            'Invoice Already Claimed',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          content: const Text(
+                                            'You already claimed this invoice earlier. Open your invoices now?',
+                                            style: TextStyle(
+                                              color: Colors.white70,
+                                            ),
+                                          ),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.of(
+                                                      dialogContext,
+                                                      rootNavigator: true)
+                                                  .pop(false),
+                                              child: const Text(
+                                                'Cancel',
+                                                style: TextStyle(
+                                                  color: Colors.white70,
+                                                ),
+                                              ),
+                                            ),
+                                            ElevatedButton(
+                                              onPressed: () => Navigator.of(
+                                                      dialogContext,
+                                                      rootNavigator: true)
+                                                  .pop(true),
+                                              style: ElevatedButton.styleFrom(
+                                                backgroundColor: Colors.white,
+                                                foregroundColor:
+                                                    const Color(0xFF0F172A),
+                                              ),
+                                              child: const Text('Open'),
+                                            ),
+                                          ],
+                                        ),
+                                      ) ??
+                                      false;
+
+                                  if (openExisting) {
+                                    Get.offAllNamed('/home-screen');
+                                  }
+                                  return;
+                                }
+
+                                final confirmClaim = await showDialog<bool>(
+                                      context: context,
+                                      builder: (dialogContext) => AlertDialog(
+                                        backgroundColor:
+                                            const Color(0xFF0F172A),
+                                        title: const Text(
+                                          'Confirm Invoice Claim',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        content: const Text(
+                                          'Do you want to claim this invoice to your account?',
+                                          style: TextStyle(
+                                            color: Colors.white70,
+                                          ),
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.of(
+                                                    dialogContext,
+                                                    rootNavigator: true)
+                                                .pop(false),
+                                            child: const Text(
+                                              'Cancel',
+                                              style: TextStyle(
+                                                color: Colors.white70,
+                                              ),
+                                            ),
+                                          ),
+                                          ElevatedButton(
+                                            onPressed: () => Navigator.of(
+                                                    dialogContext,
+                                                    rootNavigator: true)
+                                                .pop(true),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: Colors.white,
+                                              foregroundColor:
+                                                  const Color(0xFF0F172A),
+                                            ),
+                                            child: const Text('Claim'),
+                                          ),
+                                        ],
+                                      ),
+                                    ) ??
+                                    false;
+
+                                if (!confirmClaim) return;
+
                                 final claimedInvoice =
                                     await invoiceController.claimPublicInvoice(
                                   token: token,
-                                  claimerUserId: userController.user.value.id!,
-                                  claimerPrivateUserId:
-                                      userController.user.value.privateUserId!,
+                                  claimerPrivateUserId: claimerPrivateUserId,
                                 );
 
                                 if (claimedInvoice != null) {
@@ -730,6 +854,7 @@ class PublicInvoiceView extends HookWidget {
                                     fontSize: 17,
                                     fontWeight: FontWeight.bold,
                                     letterSpacing: 0.5,
+                                    color: Colors.white,
                                   ),
                                 ),
                                 const SizedBox(width: 10),
@@ -742,49 +867,47 @@ class PublicInvoiceView extends HookWidget {
                             ),
                           ),
                         ),
-                      if (isSignedIn) ...[
-                        const SizedBox(height: 16),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              side: BorderSide(
-                                color: Theme.of(context).colorScheme.light,
-                                width: 2,
-                              ),
-                              padding: EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            side: BorderSide(
+                              color: Theme.of(context).colorScheme.light,
+                              width: 2,
                             ),
-                            onPressed: () {
-                              Get.offAllNamed('/home-screen');
-                            },
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  'Go to Home',
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .bodyLarge
-                                      ?.copyWith(
-                                        color:
-                                            Theme.of(context).colorScheme.light,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                ),
-                                const SizedBox(width: 10),
-                                FaIcon(
-                                  FontAwesomeIcons.house,
-                                  color: Theme.of(context).colorScheme.light,
-                                  size: 18,
-                                ),
-                              ],
+                            padding: EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
+                          onPressed: () {
+                            Get.offAllNamed('/home-screen');
+                          },
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Go to Home',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyLarge
+                                    ?.copyWith(
+                                      color:
+                                          Theme.of(context).colorScheme.light,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                              ),
+                              const SizedBox(width: 10),
+                              FaIcon(
+                                FontAwesomeIcons.house,
+                                color: Theme.of(context).colorScheme.light,
+                                size: 18,
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
+                      ),
                     ],
                   ),
 

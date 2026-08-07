@@ -620,26 +620,56 @@ class PublicInvoices extends HookWidget {
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Row(
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
                                         children: [
-                                          Icon(
-                                            Icons.visibility_outlined,
-                                            size: 18,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .lightGray,
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                Icons.visibility_outlined,
+                                                size: 18,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .lightGray,
+                                              ),
+                                              SizedBox(width: 6),
+                                              Text(
+                                                '${publicInvoice.viewCount} views',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodyMedium
+                                                    ?.copyWith(
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .lightGray,
+                                                    ),
+                                              ),
+                                            ],
                                           ),
-                                          SizedBox(width: 6),
-                                          Text(
-                                            '${publicInvoice.viewCount} views',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .bodyMedium
-                                                ?.copyWith(
-                                                  color: Theme.of(context)
-                                                      .colorScheme
-                                                      .lightGray,
-                                                ),
+                                          SizedBox(height: 4),
+                                          Row(
+                                            children: [
+                                              Icon(
+                                                Icons.payments_outlined,
+                                                size: 18,
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .lightGray,
+                                              ),
+                                              SizedBox(width: 6),
+                                              Text(
+                                                '${publicInvoice.externalPaymentCount} payments',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodyMedium
+                                                    ?.copyWith(
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .lightGray,
+                                                    ),
+                                              ),
+                                            ],
                                           ),
                                         ],
                                       ),
@@ -706,6 +736,71 @@ class PublicInvoices extends HookWidget {
                                 ],
                               ),
                             ),
+
+                            // Last external bank payer (from data.lastExternalPayer)
+                            if (publicInvoice.lastExternalPayer != null) ...[
+                              SizedBox(height: 12),
+                              Container(
+                                width: double.infinity,
+                                padding: EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .gray
+                                      .withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Last external payment',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelMedium
+                                          ?.copyWith(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .lightGray,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      publicInvoice
+                                          .lastExternalPayer!.displayLabel,
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .bodyMedium
+                                          ?.copyWith(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .lightGray,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                    ),
+                                    if ((publicInvoice.lastExternalPayer!.iban ??
+                                                '')
+                                            .isNotEmpty &&
+                                        (publicInvoice
+                                                    .lastExternalPayer!.name ??
+                                                '')
+                                            .isNotEmpty)
+                                      Text(
+                                        publicInvoice.lastExternalPayer!.iban!,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodySmall
+                                            ?.copyWith(
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .lightGray,
+                                            ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
 
                             // Expanded claimed invoices list
                             if (isExpanded && claimedCount > 0)

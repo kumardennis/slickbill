@@ -8,7 +8,10 @@ import '../models/invoice_model.dart';
 class ReceivedInvoicesClass {
   final UserController userController = Get.find();
 
-  Future<List<InvoiceModel>?> getPrivateReceivedInvoices({int? id}) async {
+  Future<List<InvoiceModel>?> getPrivateReceivedInvoices({
+    int? id,
+    bool silent = false,
+  }) async {
     print("=====BILS=====");
     print(userController.user.value.privateUserId);
     try {
@@ -31,7 +34,9 @@ class ReceivedInvoicesClass {
 
         return invoices;
       } else {
-        Get.snackbar('Oops..', data['error'].toString());
+        if (!silent) {
+          Get.snackbar('Oops..', data['error'].toString());
+        }
         return null;
       }
     } catch (err) {
@@ -120,22 +125,45 @@ class ReceivedInvoicesClass {
     }
   }
 
-  Future<void> updateInvoiceStatus(invoiceId, isPaid) async {
+  Future<void> updateInvoiceStatus(
+    invoiceId,
+    dynamic statusOrIsPaid, {
+    bool silent = false,
+  }) async {
     try {
-      final response = await Supabase.instance.client.functions
-          .invoke('invoices/update-invoice-status', headers: {
-        'Authorization': 'Bearer ${userController.user.value.accessToken}'
-      }, body: {
+      final body = <String, dynamic>{
         "invoiceId": invoiceId,
-        "isPaid": isPaid
-      });
+      };
+
+      if (statusOrIsPaid is bool) {
+        body["isPaid"] = statusOrIsPaid;
+      } else if (statusOrIsPaid is String && statusOrIsPaid.trim().isNotEmpty) {
+        body["status"] = statusOrIsPaid.trim().toUpperCase();
+      } else {
+        if (!silent) {
+          Get.snackbar('Oops..', 'Invalid status update payload.');
+        }
+        return;
+      }
+
+      final response = await Supabase.instance.client.functions.invoke(
+          'invoices/update-invoice-status',
+          headers: {
+            'Authorization': 'Bearer ${userController.user.value.accessToken}'
+          },
+          body: body);
 
       final data = await response.data;
 
       if (data['isRequestSuccessfull'] == true) {
-        Get.snackbar('Success', 'inf_StatusUpdated'.tr);
+        // Caller owns the user-facing toast for this action.
+        return;
       } else {
-        Get.snackbar('Oops..', data['error'].toString());
+        if (!silent) {
+          Get.snackbar('Oops..', data['error'].toString());
+        } else {
+          print(data['error']);
+        }
       }
     } catch (err) {
       print(err);

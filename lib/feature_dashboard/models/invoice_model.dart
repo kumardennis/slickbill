@@ -24,6 +24,7 @@ class InvoiceModel {
     required this.senders,
     required this.category,
     required this.txHash,
+    this.moneriumOrderId,
   });
   late final int id;
   late final String createdAt;
@@ -48,6 +49,7 @@ class InvoiceModel {
   late final Senders? senders;
   late final String? category;
   late final String? txHash;
+  late final String? moneriumOrderId;
 
   InvoiceModel.fromJson(Map<String, dynamic> json) {
     id = json['id'];
@@ -74,6 +76,7 @@ class InvoiceModel {
     senders =
         json['senders'] != null ? Senders.fromJson(json['senders']) : null;
     txHash = json['txHash'];
+    moneriumOrderId = json['moneriumOrderId'];
   }
 
   Map<String, dynamic> toJson() {
@@ -98,6 +101,7 @@ class InvoiceModel {
     _data['receivers'] = receivers.toJson();
     _data['senders'] = senders?.toJson();
     _data['txHash'] = txHash;
+    _data['moneriumOrderId'] = moneriumOrderId;
     return _data;
   }
 }

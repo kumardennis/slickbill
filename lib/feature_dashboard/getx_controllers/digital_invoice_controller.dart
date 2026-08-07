@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:slickbill/core/services/push_notification_service.dart';
 import 'package:slickbill/core/services/view_tracking_service.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
 import 'package:slickbill/feature_public/models/public_invoice_model.dart';
 import 'package:slickbill/feature_dashboard/models/public_invoice_claim_model.dart';
 import 'package:slickbill/feature_dashboard/repos/digital_invoices_repo.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DigitalInvoiceController extends GetxController {
   final DigitalInvoiceRepository _repository = DigitalInvoiceRepository();
@@ -33,6 +33,18 @@ class DigitalInvoiceController extends GetxController {
   final Rx<InvoiceModel?> selectedInvoice = Rx<InvoiceModel?>(null);
   final Rx<PublicInvoiceModel?> selectedPublicInvoice =
       Rx<PublicInvoiceModel?>(null);
+
+  /// Incremented when the user taps Refresh on a settlement toast.
+  final RxInt sentListRefreshRequest = 0.obs;
+  final RxInt receivedListRefreshRequest = 0.obs;
+
+  void requestSentListRefresh() {
+    sentListRefreshRequest.value++;
+  }
+
+  void requestReceivedListRefresh() {
+    receivedListRefreshRequest.value++;
+  }
 
   // ==================== PRIVATE INVOICE METHODS ====================
 
@@ -87,7 +99,10 @@ class DigitalInvoiceController extends GetxController {
   }
 
   /// Get invoice by ID
-  Future<InvoiceModel?> getInvoiceById(int invoiceId) async {
+  Future<InvoiceModel?> getInvoiceById(
+    int invoiceId, {
+    bool silent = false,
+  }) async {
     try {
       final invoice = await _repository.getInvoiceById(invoiceId);
       if (invoice != null) {
@@ -95,7 +110,9 @@ class DigitalInvoiceController extends GetxController {
       }
       return invoice;
     } catch (e) {
-      Get.snackbar('Error', 'Failed to load invoice: $e');
+      if (!silent) {
+        Get.snackbar('Error', 'Failed to load invoice: $e');
+      }
       print('Error loading invoice: $e');
       return null;
     }
@@ -109,13 +126,35 @@ class DigitalInvoiceController extends GetxController {
       final updatedInvoice =
           await _repository.updateTxHashForInvoiceById(invoiceId, txHash);
       if (updatedInvoice != null) {
-        Get.snackbar('Success', 'Transaction hash updated successfully!');
+        // No success toast — pay flow shows its own "Payment Initiated".
         return updatedInvoice;
       }
       debugPrint('Error: Failed to update transaction hash');
       return null;
     } catch (e) {
       debugPrint('Error updating transaction hash: $e');
+      return null;
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  Future<InvoiceModel?> updateMoneriumOrderIdForInvoice(
+      int invoiceId, String moneriumOrderId) async {
+    try {
+      isLoading.value = true;
+      final updatedInvoice =
+          await _repository.updateMoneriumOrderIdForInvoiceById(
+        invoiceId,
+        moneriumOrderId,
+      );
+      if (updatedInvoice != null) {
+        return updatedInvoice;
+      }
+      debugPrint('Error: Failed to update Monerium order id');
+      return null;
+    } catch (e) {
+      debugPrint('Error updating Monerium order id: $e');
       return null;
     } finally {
       isLoading.value = false;
@@ -241,7 +280,6 @@ class DigitalInvoiceController extends GetxController {
   /// Claim a public invoice
   Future<InvoiceModel?> claimPublicInvoice({
     required String token,
-    required int claimerUserId,
     required int claimerPrivateUserId,
   }) async {
     try {
@@ -252,7 +290,7 @@ class DigitalInvoiceController extends GetxController {
       if (publicInvoice != null) {
         final existingClaim = await _repository.getUserClaimForPublicInvoice(
           publicInvoiceId: publicInvoice.id,
-          claimerUserId: claimerUserId,
+          claimerPrivateUserId: claimerPrivateUserId,
         );
 
         if (existingClaim != null) {
@@ -280,7 +318,12 @@ class DigitalInvoiceController extends GetxController {
       // Reload to get fresh data with relationships
       await loadReceivedInvoices(claimerPrivateUserId);
 
-      Get.snackbar('Success', 'Invoice added to your account!');
+      await _sendClaimNotification(
+        publicInvoice: publicInvoice,
+        invoice: invoice,
+      );
+
+      // No "Invoice added" toast — caller / FCM owns claim UX.
 
       return invoice;
     } catch (e) {
@@ -289,6 +332,27 @@ class DigitalInvoiceController extends GetxController {
       return null;
     } finally {
       isClaiming.value = false;
+    }
+  }
+
+  Future<InvoiceModel?> getExistingClaimedInvoice({
+    required int publicInvoiceId,
+    required int claimerPrivateUserId,
+  }) async {
+    try {
+      final existingClaim = await _repository.getUserClaimForPublicInvoice(
+        publicInvoiceId: publicInvoiceId,
+        claimerPrivateUserId: claimerPrivateUserId,
+      );
+
+      if (existingClaim?.digitalInvoiceId == null) {
+        return null;
+      }
+
+      return await _repository.getInvoiceById(existingClaim!.digitalInvoiceId!);
+    } catch (e) {
+      print('Error checking existing public invoice claim: $e');
+      return null;
     }
   }
 
@@ -351,6 +415,41 @@ class DigitalInvoiceController extends GetxController {
     } catch (e) {
       print('Error tracking view: $e');
       // Silent fail - don't break UX
+    }
+  }
+
+  Future<void> _sendClaimNotification({
+    required PublicInvoiceModel? publicInvoice,
+    required InvoiceModel invoice,
+  }) async {
+    final recipientUserId = publicInvoice?.sender?.userId;
+    if (recipientUserId == null || recipientUserId <= 0) {
+      print('⚠️ Skipping claim notification: sender userId missing');
+      return;
+    }
+
+    final claimerName = invoice.receivers.privateUsers?.firstName;
+    final session = Supabase.instance.client.auth.currentSession;
+
+    try {
+      await Supabase.instance.client.functions.invoke(
+        'notifications/send-notification',
+        headers: {
+          if (session?.accessToken != null)
+            'Authorization': 'Bearer ${session!.accessToken}',
+        },
+        body: {
+          'userId': recipientUserId,
+          'type': 'SLICKBILL_CLAIMED',
+          'invoiceId': invoice.id,
+          'title': 'Slickbill Claimed',
+          'body': claimerName == null || claimerName.isEmpty
+              ? 'Your public slickbill has been claimed.'
+              : '$claimerName claimed your slickbill',
+        },
+      );
+    } catch (e) {
+      print('⚠️ Error sending claim notification: $e');
     }
   }
 

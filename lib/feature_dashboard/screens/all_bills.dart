@@ -7,9 +7,11 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
+import 'package:slickbill/feature_dashboard/getx_controllers/payment_setup_controller.dart';
 import 'package:slickbill/feature_dashboard/screens/public_invoices.dart';
 import 'package:slickbill/feature_dashboard/screens/received_bills.dart';
 import 'package:slickbill/feature_dashboard/screens/sent_bills.dart';
+import 'package:slickbill/feature_dashboard/widgets/payment_setup_banner.dart';
 import 'package:slickbill/feature_navigation/getx_controllers/navigation_controller.dart';
 import 'package:slickbill/feature_trashboard/screens/all_trash_bills.dart';
 import 'package:slickbill/shared_widgets/custom_appbar.dart';
@@ -22,11 +24,18 @@ class AllBills extends HookWidget {
     final tabController = useTabController(initialLength: 3);
     NavigationController navigationController = Get.find();
     UserController userController = Get.put(UserController());
+    final PaymentSetupController paymentSetupController =
+        Get.put(PaymentSetupController());
 
     var tabIndex = useState(0);
 
     final filePath = useState<Uint8List?>(null);
     final checkingForIntent = useState<bool>(true);
+
+    useEffect(() {
+      paymentSetupController.refresh();
+      return null;
+    }, []);
 
     return (Scaffold(
       appBar: CustomAppbar(
@@ -128,11 +137,18 @@ class AllBills extends HookWidget {
       ),
       body: filePath.value != null
           ? const SizedBox()
-          : TabBarView(controller: tabController, children: [
-              ReceivedBills(),
-              SentBills(),
-              PublicInvoices(),
-            ]),
+          : Column(
+              children: [
+                const PaymentSetupBanner(),
+                Expanded(
+                  child: TabBarView(controller: tabController, children: [
+                    ReceivedBills(),
+                    SentBills(),
+                    PublicInvoices(),
+                  ]),
+                ),
+              ],
+            ),
     ));
   }
 }

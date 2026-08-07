@@ -55,7 +55,7 @@ class OpenAndCreateSelfInvoice extends HookWidget {
     var extractedData = useState<ExtractedInvoiceDataModel?>(null);
 
     const platformPDFBytes =
-        const MethodChannel('com.example.slickbill/getPdfBytes');
+        const MethodChannel('com.slickbills.app/getPdfBytes');
 
     final isLoading = useState<bool>(false);
 

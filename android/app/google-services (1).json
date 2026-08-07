@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "285202567016",
+    "project_id": "slickbills",
+    "storage_bucket": "slickbills.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:285202567016:android:95298770f25574fa0d10dd",
+        "android_client_info": {
+          "package_name": "com.slickbills.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "285202567016-4dmj8emo57dn5ia1nj5r10j4u3cfnd39.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDUk_Hr6sYUyijGxSiQhB8w8l-CibHYHVg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "285202567016-4dmj8emo57dn5ia1nj5r10j4u3cfnd39.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "285202567016-b0qbj3mm9d9rhmf6g73jv177oh1uqecr.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.slickbill"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

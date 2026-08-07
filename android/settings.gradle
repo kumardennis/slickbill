@@ -16,10 +16,24 @@ pluginManagement {
     }
 }
 
+
+
 plugins {
     id "dev.flutter.flutter-plugin-loader" version "1.0.0"
-    id "com.android.application" version "8.2.1" apply false  // Updated from 8.1.4
-    id "org.jetbrains.kotlin.android" version "1.9.22" apply false  // Updated from 1.9.10
+    id "com.android.application" version "8.9.2" apply false
+    // START: FlutterFire Configuration
+    id "com.google.gms.google-services" version "4.4.2" apply false
+    // END: FlutterFire Configuration
+    id "org.jetbrains.kotlin.android" version "2.2.0" apply false}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
+    repositories {
+        google()
+        mavenCentral()
+        maven { url "https://storage.googleapis.com/download.flutter.io" }
+        maven { url "https://jitpack.io" }
+    }
 }
 
 include ":app"

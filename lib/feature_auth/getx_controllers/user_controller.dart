@@ -1,11 +1,12 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:slickbill/core/services/push_notification_service.dart';
+import 'package:slickbill/feature_auth/repos/user_repo.dart';
 import 'package:slickbill/feature_auth/screens/sign_in.dart';
 import 'package:slickbill/feature_auth/services/google_auth_service.dart';
-import 'package:slickbill/feature_dashboard/repos/user_repo.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/user_model.dart';
@@ -23,14 +24,18 @@ class UserController extends GetxController {
     firstName: '',
     lastName: '',
     cdpWalletId: null,
+    metamaskWalletAddress: null,
   ).obs;
 
-  var _isRefreshing = false;
   final GoogleAuthService _googleAuthService = GoogleAuthService();
 
   loadUser(ClientUserModel updatedUser) {
     user.value = updatedUser;
     saveUserData();
+
+    if (updatedUser.id > 0) {
+      unawaited(PushNotificationService.loginUser());
+    }
   }
 
   bool _isTokenExpired(Session session) {
@@ -151,6 +156,176 @@ class UserController extends GetxController {
     } catch (e) {
       print('❌ Error fetching CDP wallet address: $e');
       return null;
+    }
+  }
+
+  Future<bool> updateMetamaskWalletAddress(String walletAddress) async {
+    try {
+      if (user.value.id <= 0) {
+        return false;
+      }
+
+      final response = await _userRepo.updateMetamaskWalletAddress(
+        userId: user.value.id,
+        walletAddress: walletAddress,
+      );
+
+      if (response != null) {
+        user.value = user.value.copyWith(metamaskWalletAddress: walletAddress);
+        await saveUserData();
+        return true;
+      }
+
+      return false;
+    } catch (e) {
+      print('Error updating MetaMask wallet address: $e');
+      return false;
+    }
+  }
+
+  Future<String?> getMetamaskWalletAddress() async {
+    try {
+      if (user.value.id <= 0) {
+        return null;
+      }
+
+      final address = await _userRepo.getMetamaskWalletAddress(user.value.id);
+      if (address != null) {
+        user.value = user.value.copyWith(metamaskWalletAddress: address);
+        await saveUserData();
+      }
+      return address;
+    } catch (e) {
+      print('Error fetching MetaMask wallet address: $e');
+      return null;
+    }
+  }
+
+  Future<bool> updatePrimaryIbanColumn({
+    required String iban,
+    String? bankName,
+    String? bankAccountName,
+  }) async {
+    try {
+      if (user.value.privateUserId == null) {
+        return false;
+      }
+
+      Map<String, dynamic>? response;
+      try {
+        response = await _userRepo.updatePrimaryIbanColumn(
+          privateUserId: user.value.privateUserId!,
+          iban: iban,
+          bankName: bankName,
+          bankAccountName: bankAccountName,
+        );
+      } catch (e) {
+        final supportsBankName = bankName != null && bankName.trim().isNotEmpty;
+        if (!supportsBankName) {
+          rethrow;
+        }
+
+        print('Retrying primary iban update without bankName due error: $e');
+        response = await _userRepo.updatePrimaryIbanColumn(
+          privateUserId: user.value.privateUserId!,
+          iban: iban,
+          bankName: bankName,
+          bankAccountName: bankAccountName,
+          includeTopLevelBankName: false,
+        );
+      }
+
+      if (response == null) {
+        return false;
+      }
+
+      final trimmedBankName = bankName?.trim();
+      final trimmedBankAccountName = bankAccountName?.trim();
+      List<BankAccount>? parsedIbans;
+      final responseIbans = response['ibans'];
+      if (responseIbans is List) {
+        parsedIbans = responseIbans
+            .whereType<Map>()
+            .map((row) => BankAccount.fromJson(Map<String, dynamic>.from(row)))
+            .toList(growable: false);
+      }
+
+      user.value = user.value.copyWith(
+        iban: iban,
+        ibans: parsedIbans ?? user.value.ibans,
+        bankName: trimmedBankName != null && trimmedBankName.isNotEmpty
+            ? trimmedBankName
+            : user.value.bankName,
+        bankAccountName:
+            trimmedBankAccountName != null && trimmedBankAccountName.isNotEmpty
+                ? trimmedBankAccountName
+                : user.value.bankAccountName,
+      );
+      await saveUserData();
+      return true;
+    } catch (e) {
+      print('Error updating primary iban column: $e');
+      return false;
+    }
+  }
+
+  Future<bool> upsertIbansJson(List<BankAccount> incomingIbans) async {
+    try {
+      final privateUserId = user.value.privateUserId;
+      if (privateUserId == null) {
+        return false;
+      }
+
+      if (incomingIbans.isEmpty) {
+        return true;
+      }
+
+      final payload = incomingIbans.map((item) => item.toJson()).toList();
+      final response = await _userRepo.upsertIbansJson(
+        privateUserId: privateUserId,
+        ibans: payload,
+      );
+
+      if (response == null) {
+        return false;
+      }
+
+      List<BankAccount>? parsedIbans;
+      final responseIbans = response['ibans'];
+      if (responseIbans is List) {
+        parsedIbans = responseIbans
+            .whereType<Map>()
+            .map((row) => BankAccount.fromJson(Map<String, dynamic>.from(row)))
+            .toList(growable: false);
+      }
+
+      BankAccount? primary;
+      if (parsedIbans != null) {
+        for (final account in parsedIbans) {
+          if (account.isPrimary) {
+            primary = account;
+            break;
+          }
+        }
+        primary ??= parsedIbans.isNotEmpty ? parsedIbans.first : null;
+      }
+
+      user.value = user.value.copyWith(
+        ibans: parsedIbans ?? user.value.ibans,
+        iban: primary?.iban ?? response['iban']?.toString() ?? user.value.iban,
+        bankName: primary?.bankName.isNotEmpty == true
+            ? primary!.bankName
+            : (response['bankName']?.toString() ?? user.value.bankName),
+        bankAccountName: primary?.bankAccountName?.trim().isNotEmpty == true
+            ? primary!.bankAccountName
+            : (response['bankAccountName']?.toString() ??
+                user.value.bankAccountName),
+      );
+      await saveUserData();
+      return true;
+    } catch (e) {
+      print('Error upserting ibans json: $e');
+      return false;
     }
   }
 

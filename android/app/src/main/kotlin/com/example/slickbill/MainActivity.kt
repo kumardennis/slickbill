@@ -1,4 +1,4 @@
-package com.example.slickbill
+package com.slickbills.app
 
 import android.content.Intent
 import android.net.Uri
@@ -8,9 +8,9 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity: FlutterFragmentActivity() {
-    private val CHANNEL_PDF_BYTES = "com.example.slickbill/getPdfBytes"
-    private val CHANNEL_EXTRACT_TEXT = "com.example.slickbill/extractText"
-    private val CHANNEL_NFC = "com.example.slickbill/nfc"
+    private val CHANNEL_PDF_BYTES = "com.slickbills.app/getPdfBytes"
+    private val CHANNEL_EXTRACT_TEXT = "com.slickbills.app/extractText"
+    private val CHANNEL_NFC = "com.slickbills.app/nfc"
 
     private var pendingFileUri: Uri? = null
 
@@ -36,6 +36,10 @@ class MainActivity: FlutterFragmentActivity() {
             Intent.ACTION_VIEW, Intent.ACTION_SEND -> {
                 val uri = intent.data ?: intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
                 if (uri != null) {
+                    if (uri.scheme == "w3a") {
+                        Log.d("MainActivity", "Ignoring Web3Auth callback URI in file handler: $uri")
+                        return
+                    }
                     pendingFileUri = uri
                     Log.d("MainActivity", "File URI received: $uri")
                 }

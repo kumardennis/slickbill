@@ -14,7 +14,7 @@ class NFCHandlerWidget extends StatefulWidget {
 }
 
 class _NFCHandlerWidgetState extends State<NFCHandlerWidget> {
-  static const platform = const MethodChannel('com.example.slickbill/nfc');
+  static const platform = const MethodChannel('com.slickbills.app/nfc');
 
   @override
   void initState() {
@@ -22,25 +22,25 @@ class _NFCHandlerWidgetState extends State<NFCHandlerWidget> {
 
     // Only initialize NFC on mobile platforms
     if (!kIsWeb) {
-      _initNFC();
+      // _initNFC();
     }
   }
 
-  Future<void> _initNFC() async {
-    try {
-      final String? intentAction =
-          await platform.invokeMethod('getIntentAction');
-      if (intentAction == 'android.nfc.action.NDEF_DISCOVERED' ||
-          intentAction == 'android.nfc.action.TECH_DISCOVERED' ||
-          intentAction == 'android.nfc.action.TAG_DISCOVERED') {
-        // Handle the NFC intent here
-        print('NFC tag detected');
-        // You can add your own logic here to handle the NFC tag
-      }
-    } on PlatformException catch (e) {
-      print("Failed to get intent action: '${e.message}'.");
-    }
-  }
+  // Future<void> _initNFC() async {
+  //   try {
+  //     final String? intentAction =
+  //         await platform.invokeMethod('getIntentAction');
+  //     if (intentAction == 'android.nfc.action.NDEF_DISCOVERED' ||
+  //         intentAction == 'android.nfc.action.TECH_DISCOVERED' ||
+  //         intentAction == 'android.nfc.action.TAG_DISCOVERED') {
+  //       // Handle the NFC intent here
+  //       print('NFC tag detected');
+  //       // You can add your own logic here to handle the NFC tag
+  //     }
+  //   } on PlatformException catch (e) {
+  //     print("Failed to get intent action: '${e.message}'.");
+  //   }
+  // }
 
   @override
   Widget build(BuildContext context) {

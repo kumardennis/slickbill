@@ -3,12 +3,8 @@ import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/core/services/push_notification_service.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
-import 'package:slickbill/feature_auth/screens/home_screen.dart';
-import 'package:slickbill/feature_auth/screens/sign_in.dart';
 import 'package:slickbill/feature_auth/services/deep_links.dart';
 import 'package:slickbill/feature_auth/utils/supabase_auth_manger.dart';
-import 'package:slickbill/feature_auth/services/google_auth_service.dart';
-import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
 
@@ -33,13 +29,21 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _checkAuth() async {
     await Future.delayed(const Duration(seconds: 2));
 
+    final pendingBillToken = consumePendingBillToken();
+    if (pendingBillToken != null && pendingBillToken.isNotEmpty) {
+      print('🔗 Splash consumed pending bill token: $pendingBillToken');
+      Get.offAllNamed('/bill/$pendingBillToken');
+      return;
+    }
+
     bool isFromGoogleOAuth = false;
     bool isFromFacebookOAuth = false;
     String? invoiceToken;
 
     // ✅ Check if this is a deep link navigation
     final currentRoute = Get.currentRoute;
-    final isBillDeepLink = currentRoute.startsWith('/bill/');
+    final isBillDeepLink =
+        currentRoute.startsWith('/bill/') || hasPendingBillToken();
 
     if (isBillDeepLink) {
       print(
@@ -171,17 +175,18 @@ class _SplashScreenState extends State<SplashScreen> {
           print(
               '🔍 User privateUserId: ${userController.user.value.privateUserId}');
 
-          final oneSignalExternalId =
-              (userController.user.value.privateUserId ??
-                      userController.user.value.id)
-                  .toString();
-          await PushNotificationService.loginUser(oneSignalExternalId);
+          // Push token sync now happens in UserController.loadUser.
 
           // If came from OAuth with invoice token, redirect to that invoice
           if ((isFromGoogleOAuth || isFromFacebookOAuth) &&
               invoiceToken != null) {
             print('✅ Redirecting to invoice: $invoiceToken');
             Get.offAllNamed('/bill/$invoiceToken');
+            return;
+          }
+
+          if (PushNotificationService.consumePendingNavigation()) {
+            print('✅ Consumed pending notification navigation');
             return;
           }
 

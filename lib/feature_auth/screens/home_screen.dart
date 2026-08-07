@@ -10,6 +10,8 @@ import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_auth/getx_controllers/current_bank_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/models/user_model.dart';
+import 'package:slickbill/core/services/invoice_toast_coordinator.dart';
+import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/intent_controller.dart';
 import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
 import 'package:slickbill/feature_nearby_transaction/screens/send_nfc_invoice.dart';
@@ -31,6 +33,8 @@ class HomeScreen extends HookWidget {
   ReceivedInvoicesClass receivedInvoicesClass = ReceivedInvoicesClass();
 
   IntentController intentController = Get.put(IntentController());
+  final DigitalInvoiceController invoiceController =
+      Get.put(DigitalInvoiceController(), permanent: true);
 
   final NavigationController navigationController =
       Get.put(NavigationController()); // Initialize controller
@@ -61,6 +65,12 @@ class HomeScreen extends HookWidget {
     }
 
     useEffect(() {
+      final privateUserId =
+          userController.user.value.privateUserId?.toString() ?? '';
+      if (privateUserId.isEmpty) {
+        return null;
+      }
+
       final changes = supabase
           .channel('invoice-updates-home-screen')
           .onPostgresChanges(
@@ -70,9 +80,96 @@ class HomeScreen extends HookWidget {
               filter: PostgresChangeFilter(
                   type: PostgresChangeFilterType.eq,
                   column: 'receiverPrivateUserId',
-                  value: userController.user.value.privateUserId.toString()),
+                  value: privateUserId),
               callback: (payload) =>
                   openNewReceivedInvoiceSheet(payload.newRecord['id']))
+          .onPostgresChanges(
+              event: PostgresChangeEvent.update,
+              schema: 'public',
+              table: 'digital_invoices',
+              filter: PostgresChangeFilter(
+                  type: PostgresChangeFilterType.eq,
+                  column: 'senderPrivateUserId',
+                  value: privateUserId),
+              callback: (payload) async {
+                final invoiceId = '${payload.newRecord['id'] ?? ''}';
+                final newStatus =
+                    '${payload.newRecord['status'] ?? ''}'.trim().toUpperCase();
+                // Prefer FCM for settle; wait briefly so push can claim first.
+                if (newStatus == 'PAID') {
+                  await Future.delayed(const Duration(milliseconds: 1500));
+                  if (!InvoiceToastCoordinator.claimToast(
+                    kind: InvoiceToastCoordinator.kindOwnerPaid,
+                    invoiceId: invoiceId,
+                  )) {
+                    return;
+                  }
+                }
+
+                if (Get.isSnackbarOpen) {
+                  Get.closeCurrentSnackbar();
+                }
+
+                Get.snackbar(
+                  'A SlickBill has been updated',
+                  'Tap refresh to load latest data',
+                  snackPosition: SnackPosition.TOP,
+                  duration: const Duration(seconds: 5),
+                  mainButton: TextButton(
+                    onPressed: () async {
+                      if (Get.isSnackbarOpen) {
+                        Get.closeCurrentSnackbar();
+                      }
+                      invoiceController.requestSentListRefresh();
+                    },
+                    child: const Text('Refresh'),
+                  ),
+                );
+              })
+          .onPostgresChanges(
+              event: PostgresChangeEvent.update,
+              schema: 'public',
+              table: 'digital_invoices',
+              filter: PostgresChangeFilter(
+                  type: PostgresChangeFilterType.eq,
+                  column: 'receiverPrivateUserId',
+                  value: privateUserId),
+              callback: (payload) async {
+                final newStatus =
+                    '${payload.newRecord['status'] ?? ''}'.trim().toUpperCase();
+                // Payer: only toast when payment completes (not PROCESSING noise).
+                if (newStatus != 'PAID') return;
+
+                final invoiceId = '${payload.newRecord['id'] ?? ''}';
+                // Prefer FCM for settle; wait briefly so push can claim first.
+                await Future.delayed(const Duration(milliseconds: 1500));
+                if (!InvoiceToastCoordinator.claimToast(
+                  kind: InvoiceToastCoordinator.kindPayerPaid,
+                  invoiceId: invoiceId,
+                )) {
+                  return;
+                }
+
+                if (Get.isSnackbarOpen) {
+                  Get.closeCurrentSnackbar();
+                }
+
+                Get.snackbar(
+                  'Payment successful',
+                  'Tap refresh to load latest data',
+                  snackPosition: SnackPosition.TOP,
+                  duration: const Duration(seconds: 5),
+                  mainButton: TextButton(
+                    onPressed: () async {
+                      if (Get.isSnackbarOpen) {
+                        Get.closeCurrentSnackbar();
+                      }
+                      invoiceController.requestReceivedListRefresh();
+                    },
+                    child: const Text('Refresh'),
+                  ),
+                );
+              })
           .subscribe();
 
       return () async {
@@ -82,13 +179,13 @@ class HomeScreen extends HookWidget {
           // Safely ignore cleanup errors
         }
       };
-    }, []);
+    }, [userController.user.value.privateUserId]);
 
     final filePath = useState<Uint8List?>(null);
     final checkingForIntent = useState<bool>(true);
     final intentAlreadyHandled = useState<bool>(false);
 
-    const platform = const MethodChannel('com.example.slickbill/getPdfBytes');
+    const platform = const MethodChannel('com.slickbills.app/getPdfBytes');
 
     Future<Uint8List?> _getFilePath() async {
       try {

@@ -1,15 +1,11 @@
-import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/shared_widgets/input_field.dart';
 import '../services/google_auth_service.dart';
 import '../utils/supabase_auth_manger.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 class SignUp extends HookWidget {
   SignUp({Key? key}) : super(key: key);
@@ -20,13 +16,9 @@ class SignUp extends HookWidget {
   @override
   Widget build(BuildContext context) {
     TextEditingController? email = useTextEditingController();
+    TextEditingController? fullName = useTextEditingController();
     TextEditingController? password = useTextEditingController();
     TextEditingController? confirmPassword = useTextEditingController();
-    TextEditingController? firstName = useTextEditingController();
-    TextEditingController? lastName = useTextEditingController();
-    TextEditingController? username = useTextEditingController();
-    TextEditingController? iban = useTextEditingController();
-    TextEditingController? accountHolder = useTextEditingController();
 
     final isLoading = useState<bool>(false); // ✅ Add loading state
 
@@ -34,6 +26,12 @@ class SignUp extends HookWidget {
       // ✅ Add email validation
       if (email.text.isEmpty || !email.text.contains('@')) {
         Get.snackbar('Oops..', 'Please enter a valid email');
+        return;
+      }
+
+      final trimmedName = fullName.text.trim();
+      if (trimmedName.isEmpty) {
+        Get.snackbar('Oops..', 'Please enter your name');
         return;
       }
 
@@ -47,30 +45,28 @@ class SignUp extends HookWidget {
         return;
       }
 
-      if (username.text.isEmpty) {
-        Get.snackbar('Oops..', 'Username is kinda important');
-        return;
-      }
-
-      if (iban.text.isEmpty || accountHolder.text.isEmpty) {
-        Get.snackbar('Oops..', 'Please add your shareable bank info...');
-        return;
-      }
-
       // ✅ Show loading state
       isLoading.value = true;
 
       try {
         print('🔄 Starting signup for: ${email.text}'); // ✅ Debug log
 
+        final nameParts =
+            trimmedName.split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
+        final firstName = nameParts.isNotEmpty ? nameParts.first : trimmedName;
+        final lastName =
+            nameParts.length > 1 ? nameParts.sublist(1).join(' ') : '';
+
+        final suggestedUsername = email.text.trim().contains('@')
+            ? email.text.trim().split('@').first
+            : email.text.trim();
+
         await _supabase.signUp(
           email.text,
           password.text,
-          firstName.text,
-          lastName.text,
-          username.text,
-          iban.text,
-          accountHolder.text,
+          suggestedUsername,
+          firstName: firstName,
+          lastName: lastName,
         );
 
         print('✅ Signup successful'); // ✅ Debug log
@@ -225,6 +221,11 @@ class SignUp extends HookWidget {
 
                       // Form Fields
                       InputField(
+                        controller: fullName,
+                        label: 'Full name',
+                        obscure: false,
+                      ),
+                      InputField(
                         controller: email,
                         label: 'lbl_Email'.tr,
                         obscure: false,
@@ -238,31 +239,6 @@ class SignUp extends HookWidget {
                         controller: confirmPassword,
                         label: 'lbl_ConfirmPassword'.tr,
                         obscure: true,
-                      ),
-                      InputField(
-                        controller: firstName,
-                        label: 'lbl_FirstName'.tr,
-                        obscure: false,
-                      ),
-                      InputField(
-                        controller: lastName,
-                        label: 'lbl_LastName'.tr,
-                        obscure: false,
-                      ),
-                      InputField(
-                        controller: username,
-                        label: 'lbl_Username'.tr,
-                        obscure: false,
-                      ),
-                      InputField(
-                        controller: iban,
-                        label: 'lbl_IBAN'.tr,
-                        obscure: false,
-                      ),
-                      InputField(
-                        controller: accountHolder,
-                        label: 'lbl_AccountHolder'.tr,
-                        obscure: false,
                       ),
 
                       const SizedBox(height: 32),

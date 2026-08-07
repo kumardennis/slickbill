@@ -144,29 +144,28 @@ class SentPublicInvoiceSheet extends HookWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width / 2,
-                      child: Wrap(
-                        children: [
-                          Text(
-                            invoice.originalInvoiceNo != null
-                                ? '#${invoice.originalInvoiceNo}'
-                                : '-',
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineMedium
-                                ?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                        ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        invoice.originalInvoiceNo != null
+                            ? '#${invoice.originalInvoiceNo}'
+                            : '-',
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
-                    ),
-                    Text('lbl_OriginalInvoiceNo'.tr,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.gray))
-                  ],
+                      Text('lbl_OriginalInvoiceNo'.tr,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.gray))
+                    ],
+                  ),
                 ),
                 Text(
                     invoice.paidOnDate != null
@@ -193,20 +192,26 @@ class SentPublicInvoiceSheet extends HookWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${invoice.senderIban ?? "-"}',
-                      style: Theme.of(context)
-                          .textTheme
-                          .displayMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    Text('lbl_IBAN'.tr,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.gray))
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${invoice.senderIban ?? "-"}',
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .displayMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      Text('lbl_IBAN'.tr,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.gray))
+                    ],
+                  ),
                 ),
                 GestureDetector(
                   onTap: () async {
@@ -228,22 +233,24 @@ class SentPublicInvoiceSheet extends HookWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width - 150,
-                      child: Text(invoice.senderName ?? "-",
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(invoice.senderName ?? "-",
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context)
                               .textTheme
                               .displayMedium
                               ?.copyWith(fontWeight: FontWeight.w600)),
-                    ),
-                    Text('lbl_AccountHolder'.tr,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.gray))
-                  ],
+                      Text('lbl_AccountHolder'.tr,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.gray))
+                    ],
+                  ),
                 ),
                 GestureDetector(
                   onTap: () async {
@@ -360,8 +367,8 @@ class SentPublicInvoiceSheet extends HookWidget {
                                                 mode: LaunchMode
                                                     .externalApplication);
                                           } else {
-                                            Get.snackbar('Error',
-                                                'Could not open link');
+                                            Get.snackbar(
+                                                'Error', 'Could not open link');
                                           }
                                         },
                                         child: Container(
@@ -396,8 +403,7 @@ class SentPublicInvoiceSheet extends HookWidget {
                                                       .textTheme
                                                       .bodyMedium
                                                       ?.copyWith(
-                                                        color: Theme.of(
-                                                                context)
+                                                        color: Theme.of(context)
                                                             .colorScheme
                                                             .light,
                                                         decoration:
@@ -439,8 +445,7 @@ class SentPublicInvoiceSheet extends HookWidget {
                                       child: Container(
                                         padding: EdgeInsets.all(10),
                                         decoration: BoxDecoration(
-                                          color:
-                                              Colors.white.withOpacity(0.15),
+                                          color: Colors.white.withOpacity(0.15),
                                           borderRadius:
                                               BorderRadius.circular(8),
                                           border: Border.all(
@@ -477,22 +482,21 @@ class SentPublicInvoiceSheet extends HookWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width - 70,
-                      child: Wrap(
-                        children: [
-                          Text(invoice.category ?? '-',
-                              style: Theme.of(context).textTheme.displayMedium),
-                        ],
-                      ),
-                    ),
-                    Text('lbl_Category'.tr,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.gray)),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(invoice.category ?? '-',
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.displayMedium),
+                      Text('lbl_Category'.tr,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.gray)),
+                    ],
+                  ),
                 ),
               ],
             ),

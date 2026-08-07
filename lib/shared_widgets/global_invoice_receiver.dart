@@ -1,14 +1,15 @@
 import 'dart:convert';
+
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
 import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
-import '../feature_send/utils/send_invoices_class.dart';
+
 import '../feature_navigation/getx_controllers/navigation_controller.dart';
+import '../feature_send/utils/send_invoices_class.dart';
 
 class GlobalReceiveService {
   static void showReceiveOptions(BuildContext context) {
@@ -24,7 +25,6 @@ class GlobalReceiveService {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle bar
             Container(
               width: 40,
               height: 4,
@@ -34,8 +34,6 @@ class GlobalReceiveService {
               ),
             ),
             const SizedBox(height: 24),
-
-            // Title
             Text(
               'Receive Slickbill',
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -52,29 +50,8 @@ class GlobalReceiveService {
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
-
-            // Options
             Row(
               children: [
-                // Expanded(
-                //   child: _buildReceiveOption(
-                //     context: context,
-                //     icon: FontAwesomeIcons.nfcSymbol,
-                //     title: 'NFC',
-                //     subtitle: 'inf_NFCInstruction'.tr,
-                //     color: Theme.of(context).colorScheme.blue,
-                //     onTap: () {
-                //       Navigator.pop(context);
-                //       Navigator.push(
-                //         context,
-                //         MaterialPageRoute(
-                //           builder: (context) => const MakeNfcAvailable(),
-                //         ),
-                //       );
-                //     },
-                //   ),
-                // ),
-                // const SizedBox(width: 16),
                 Expanded(
                   child: _buildReceiveOption(
                     context: context,
@@ -103,7 +80,7 @@ class GlobalReceiveService {
 
   static Widget _buildReceiveOption({
     required BuildContext context,
-    required IconData icon,
+    required FaIconData icon,
     required String title,
     required String subtitle,
     required Color color,
@@ -172,129 +149,28 @@ class GlobalReceiveService {
   }
 
   static void _scanQR(BuildContext context) {
-    bool isProcessing = false;
-
-    final scannerController = MobileScannerController(
-      detectionSpeed: DetectionSpeed.noDuplicates,
-      facing: CameraFacing.back,
-    );
-
     final navigator = Navigator.of(context, rootNavigator: true);
 
     navigator
-        .push(
+        .push<String>(
       MaterialPageRoute(
-        builder: (context) => Scaffold(
-          backgroundColor: Colors.black,
-          appBar: AppBar(
-            title: const Text('Scan QR Code'),
-            backgroundColor: Colors.black,
-            elevation: 0,
-            iconTheme: IconThemeData(color: Colors.white),
-          ),
-          body: Stack(
-            children: [
-              // Camera Preview
-              MobileScanner(
-                controller: scannerController,
-                onDetect: (BarcodeCapture barcodes) async {
-                  if (isProcessing) return;
-                  isProcessing = true;
-
-                  final scannedResult = _handleBarcode(barcodes);
-
-                  await scannerController.stop();
-                  if (Navigator.of(context).canPop()) {
-                    Navigator.of(context).pop();
-                  }
-
-                  if (scannedResult == null) return;
-
-                  // Show processing message
-                  Get.snackbar(
-                    'QR Code Scanned',
-                    'Processing the slickbill...',
-                    backgroundColor:
-                        Theme.of(context).colorScheme.green.withOpacity(0.1),
-                    colorText: Theme.of(context).colorScheme.green,
-                  );
-
-                  // Process the QR code
-                  await _createSlickbillFromQR(scannedResult);
-                },
-              ),
-
-              // Overlay with scan frame
-              CustomPaint(
-                painter: _ScannerOverlayPainter(),
-                child: Container(),
-              ),
-
-              // Instructions
-              Positioned(
-                top: 40,
-                left: 0,
-                right: 0,
-                child: Container(
-                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                  margin: EdgeInsets.symmetric(horizontal: 20),
-                  decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.7),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    children: [
-                      Icon(
-                        Icons.qr_code_scanner,
-                        color: Colors.white,
-                        size: 32,
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Position QR code within frame',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // // Flash toggle
-              // Positioned(
-              //   bottom: 40,
-              //   left: 0,
-              //   right: 0,
-              //   child: Center(
-              //     child: IconButton(
-              //       icon: ValueListenableBuilder(
-              //         valueListenable: scannerController.torchState,
-              //         builder: (context, state, child) {
-              //           return Icon(
-              //             state == TorchState.off
-              //                 ? Icons.flash_off
-              //                 : Icons.flash_on,
-              //             color: Colors.white,
-              //             size: 32,
-              //           );
-              //         },
-              //       ),
-              //       onPressed: () => scannerController.toggleTorch(),
-              //     ),
-              //   ),
-              // ),
-            ],
-          ),
-        ),
+        builder: (_) => const _GlobalQrScannerPage(),
       ),
     )
-        .then((_) {
-      // Cleanup if user navigates back
-      scannerController.dispose();
+        .then((scannedResult) async {
+      if (scannedResult == null || scannedResult.isEmpty) return;
+
+      final ctx = Get.context;
+      if (ctx != null) {
+        Get.snackbar(
+          'QR Code Scanned',
+          'Processing the slickbill...',
+          backgroundColor: Theme.of(ctx).colorScheme.green.withOpacity(0.1),
+          colorText: Theme.of(ctx).colorScheme.green,
+        );
+      }
+
+      await _createSlickbillFromQR(scannedResult);
     });
   }
 
@@ -348,14 +224,49 @@ class GlobalReceiveService {
 
       Map<String, dynamic> jsonObject = jsonDecode(result);
 
+      String normalizeString(dynamic value) => (value ?? '').toString().trim();
+      final description = normalizeString(jsonObject['description']);
+      final dueDate = normalizeString(jsonObject['dueDate']);
+      final referenceNumber = normalizeString(jsonObject['referenceNumber']);
+      final senderPrivateUserId = jsonObject['senderPrivateUserId'];
+      final senderName = normalizeString(jsonObject['senderName']);
+      final senderIban = normalizeString(jsonObject['senderIban']);
+      final amount = jsonObject['amount'];
+      final category = normalizeString(jsonObject['category']);
+
+      final missingFields = <String>[
+        if (description.isEmpty) 'description',
+        if (dueDate.isEmpty) 'dueDate',
+        if (senderPrivateUserId == null) 'senderPrivateUserId',
+        if (senderName.isEmpty) 'senderName',
+        if (amount == null) 'amount',
+        if (category.isEmpty) 'category',
+      ];
+
+      if (missingFields.isNotEmpty) {
+        debugPrint(
+          '[QRScan] Missing required QR fields: ${missingFields.join(', ')} | payload=$jsonObject',
+        );
+        throw Exception(
+          'QR code is missing required values: ${missingFields.join(', ')}',
+        );
+      }
+
+      if (senderIban.isEmpty) {
+        debugPrint(
+          '[QRScan] senderIban missing in payload, will attempt resolution via senderPrivateUserId=$senderPrivateUserId',
+        );
+      }
+
       final invoiceId = await sendInvoicesClass.createReceivePrivateQRInvoice(
-        jsonObject['description'],
-        jsonObject['dueDate'],
-        jsonObject['referenceNumber'],
-        jsonObject['senderPrivateUserId'],
-        jsonObject['senderName'],
-        jsonObject['amount'],
-        jsonObject['category'],
+        description,
+        dueDate,
+        referenceNumber,
+        senderPrivateUserId,
+        senderName,
+        senderIban,
+        amount,
+        category,
       );
 
       if (invoiceId == null) {
@@ -363,30 +274,122 @@ class GlobalReceiveService {
       }
 
       final invoices = await receivedInvoicesClass.getPrivateReceivedInvoices(
-          id: int.parse(invoiceId));
+          id: int.parse(invoiceId), silent: true);
 
       navigationController.changeIndex(0);
 
-      Get.snackbar(
-        'Slickbill Received',
-        'Received a slickbill from a user!',
-        backgroundColor:
-            Theme.of(Get.context!).colorScheme.green.withOpacity(0.1),
-        colorText: Theme.of(Get.context!).colorScheme.green,
-      );
-
+      // FCM NEW_SLICKBILL ("X sent you a slickbill") is the user-facing toast.
       return invoices?.first;
     } catch (e) {
       print('Error parsing QR code: $e');
       Get.snackbar(
         'Error',
-        'Failed to process the QR code.',
+        e.toString().replaceFirst('Exception: ', ''),
         backgroundColor:
             Theme.of(Get.context!).colorScheme.red.withOpacity(0.1),
         colorText: Theme.of(Get.context!).colorScheme.red,
       );
     }
     return null;
+  }
+}
+
+class _GlobalQrScannerPage extends StatefulWidget {
+  const _GlobalQrScannerPage();
+
+  @override
+  State<_GlobalQrScannerPage> createState() => _GlobalQrScannerPageState();
+}
+
+class _GlobalQrScannerPageState extends State<_GlobalQrScannerPage> {
+  final MobileScannerController _scannerController = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates,
+    facing: CameraFacing.back,
+  );
+
+  bool _isProcessing = false;
+
+  @override
+  void dispose() {
+    _scannerController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onDetect(BarcodeCapture barcodes) async {
+    if (_isProcessing) return;
+    _isProcessing = true;
+
+    final scannedResult = GlobalReceiveService._handleBarcode(barcodes);
+    if (scannedResult == null) {
+      _isProcessing = false;
+      return;
+    }
+
+    try {
+      await _scannerController.stop();
+    } catch (_) {
+      // Camera may already be stopping while route is closing.
+    }
+
+    if (!mounted) return;
+    Navigator.of(context).pop(scannedResult);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        title: const Text('Scan QR Code'),
+        backgroundColor: Colors.black,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Stack(
+        children: [
+          MobileScanner(
+            controller: _scannerController,
+            onDetect: _onDetect,
+          ),
+          CustomPaint(
+            painter: _ScannerOverlayPainter(),
+            child: Container(),
+          ),
+          Positioned(
+            top: 40,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Column(
+                children: [
+                  Icon(
+                    Icons.qr_code_scanner,
+                    color: Colors.white,
+                    size: 32,
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    'Position QR code within frame',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

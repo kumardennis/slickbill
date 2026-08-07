@@ -1,12 +1,11 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
 
 class CoinbaseService {
   // ✅ Change this to your local server URL during development
   // For production, use your deployed Vercel URL
   static String get baseUrl {
-    return 'https://express-denniskumar299-2803-dennis-projects-be7d97f3.vercel.app';
+    return 'https://express-ten-xi.vercel.app';
   }
 
   // For production:

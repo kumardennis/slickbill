@@ -13,10 +13,10 @@ import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
 import 'package:slickbill/feature_dashboard/utils/sent_invoices_class.dart';
 import 'package:slickbill/feature_dashboard/widgets/invoice_card.dart';
 import 'package:slickbill/feature_dashboard/widgets/statistics_card.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../feature_auth/getx_controllers/user_controller.dart';
 import '../../feature_auth/utils/money_formatter.dart';
+import '../getx_controllers/digital_invoice_controller.dart';
 import '../widgets/received_invoice_sheet.dart';
 import '../widgets/sent_invoice_sheet.dart';
 import '../widgets/grouped_invoice_card.dart';
@@ -24,8 +24,8 @@ import '../widgets/grouped_invoice_card.dart';
 class SentBills extends HookWidget {
   SentInvoicesClass sentInvoicesClass = SentInvoicesClass();
   final UserController userController = Get.find();
-
-  final supabase = Supabase.instance.client;
+  final DigitalInvoiceController invoiceController =
+      Get.find<DigitalInvoiceController>();
 
   SentBills({super.key});
 
@@ -38,87 +38,81 @@ class SentBills extends HookWidget {
 
     FormatNumber formatNumber = FormatNumber();
 
+    void recomputeSummaryFromInvoices(List<InvoiceModel>? rows) {
+      final items = rows ?? <InvoiceModel>[];
+
+      final pendingSum = items.where((i) {
+        final normalized = i.status.trim().toUpperCase();
+        return normalized == 'UNPAID' || normalized == 'PROCESSING';
+      }).fold<double>(0.0, (sum, i) => sum + i.amount);
+
+      final now = DateTime.now();
+      final receivedThisMonthSum = items.where((i) {
+        final isPaid = i.status.trim().toUpperCase() == 'PAID';
+        if (!isPaid) return false;
+        final paidOnDate = i.paidOnDate;
+        if (paidOnDate == null || paidOnDate.trim().isEmpty) return false;
+        try {
+          final date = DateTime.parse(paidOnDate);
+          return date.year == now.year && date.month == now.month;
+        } catch (_) {
+          return false;
+        }
+      }).fold<double>(0.0, (sum, i) => sum + i.amount);
+
+      pending.value = pendingSum;
+      receivedThisMonth.value = receivedThisMonthSum;
+    }
+
     Future getInvoices() async {
       isLoading.value = true;
 
       var response = await sentInvoicesClass.getPrivateSentInvoices();
 
       invoices.value = response;
+      recomputeSummaryFromInvoices(response);
 
       isLoading.value = false;
-    }
-
-    Future getPendingSum() async {
-      var response = await sentInvoicesClass.getPendingInvoicesSum();
-
-      pending.value = response;
-    }
-
-    Future getRceivedSum() async {
-      var response = await sentInvoicesClass
-          .getReceivedPaymentsThisMonth(userController.user.value.accessToken);
-
-      receivedThisMonth.value = response;
     }
 
     Future updateInvoiceObsolete(InvoiceModel invoice, isObsolete) async {
       await sentInvoicesClass.updateInvoiceObsolete(invoice.id, isObsolete);
       await getInvoices();
-      await getPendingSum();
-      await getRceivedSum();
       Navigator.of(context).pop();
     }
 
     Future<void> openInvoice(InvoiceModel invoice) async {
       await showModalBottomSheet(
-          context: context,
-          builder: (context) => SentInvoiceSheet(
-              invoice: invoice, updateInvoiceObsolete: updateInvoiceObsolete));
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => FractionallySizedBox(
+          heightFactor: 0.94,
+          child: SentInvoiceSheet(
+            invoice: invoice,
+            updateInvoiceObsolete: updateInvoiceObsolete,
+          ),
+        ),
+      );
     }
 
     Future refreshAllData() async {
       await getInvoices();
-      await getPendingSum();
-      await getRceivedSum();
     }
 
     useEffect(() {
       refreshAllData();
 
-      final changes = supabase
-          .channel('invoice-updates-received-bills')
-          .onPostgresChanges(
-              event: PostgresChangeEvent.update,
-              schema: 'public',
-              table: 'digital_invoices',
-              filter: PostgresChangeFilter(
-                  type: PostgresChangeFilterType.eq,
-                  column: 'senderPrivateUserId',
-                  value: userController.user.value.privateUserId.toString()),
-              callback: (payload) {
-                if (Get.isSnackbarOpen) {
-                  Get.closeCurrentSnackbar();
-                }
+      // Refresh only when user taps Refresh on the settlement toast (home).
+      final refreshWorker =
+          ever<int>(invoiceController.sentListRefreshRequest, (_) {
+        refreshAllData();
+      });
 
-                Get.snackbar(
-                  'A SlickBill has been updated',
-                  'Tap refresh to load latest data',
-                  snackPosition: SnackPosition.TOP,
-                  duration: const Duration(seconds: 5),
-                  mainButton: TextButton(
-                    onPressed: () async {
-                      if (Get.isSnackbarOpen) {
-                        Get.closeCurrentSnackbar();
-                      }
-                      await refreshAllData();
-                    },
-                    child: const Text('Refresh'),
-                  ),
-                );
-              })
-          .subscribe();
-
-      return () => changes.unsubscribe();
+      return () {
+        refreshWorker.dispose();
+      };
     }, [userController.user.value.accessToken]);
 
     String groupKey(InvoiceModel i) {

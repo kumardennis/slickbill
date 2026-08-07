@@ -6,15 +6,9 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:slickbill/color_scheme.dart';
-import 'package:slickbill/core/services/push_notification_service.dart';
-import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
-import 'package:slickbill/feature_auth/screens/home_screen.dart';
-import 'package:slickbill/feature_auth/services/facebook_auth_service.dart';
 import 'package:slickbill/feature_auth/services/google_auth_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../utils/supabase_auth_manger.dart';
 
@@ -26,12 +20,12 @@ class SignIn extends HookWidget {
   Widget build(BuildContext context) {
     final _supabase = SupabaseAuthManger();
     final _googleAuthService = GoogleAuthService();
-    final _facebookAuthService = FacebookAuthService();
-    final UserController userController = Get.find<UserController>();
 
     final emailController = useTextEditingController();
     final passwordController = useTextEditingController();
     ValueNotifier<bool> isLoadingOAuth = useState<bool>(false);
+    final isResendingVerification = useState<bool>(false);
+    final showResendVerification = useState<bool>(false);
 
     // Get invoice token from URL if present
     String? getInvoiceToken() {
@@ -42,6 +36,43 @@ class SignIn extends HookWidget {
       // Fall back to Get.parameters or query params
       return Get.parameters['invoice_token'] ??
           Uri.base.queryParameters['invoice_token'];
+    }
+
+    bool _isEmailConfirmationCallback(Uri uri) {
+      if (uri.queryParameters['verified'] == '1') {
+        return true;
+      }
+
+      final type = (uri.queryParameters['type'] ?? '').toLowerCase();
+      if (type == 'signup' || type == 'email' || type == 'email_change') {
+        return true;
+      }
+
+      final fragment = uri.fragment;
+      if (fragment.isEmpty) {
+        return false;
+      }
+
+      final fragmentParams = Uri.splitQueryString(fragment);
+      final fragmentType = (fragmentParams['type'] ?? '').toLowerCase();
+      return fragmentType == 'signup' ||
+          fragmentType == 'email' ||
+          fragmentType == 'email_change';
+    }
+
+    bool _isEmailNotConfirmedError(Object error) {
+      final message = error.toString().toLowerCase();
+      return message.contains('email_not_confirmed') ||
+          message.contains('email not confirmed') ||
+          message.contains('confirm your email') ||
+          message.contains('verify your email');
+    }
+
+    String _signInErrorMessage(Object error) {
+      if (_isEmailNotConfirmedError(error)) {
+        return 'Please verify your email before signing in. Check your inbox, or resend the verification email below.';
+      }
+      return 'Failed to sign in: ${error.toString()}';
     }
 
     // Extract OAuth processing to a separate function
@@ -60,24 +91,11 @@ class SignIn extends HookWidget {
           print('📝 User not found, creating...');
           await _supabase.createUserForAuthUser(user);
 
-          // Get the newly created user ID
-          final userRecord = await _supabase.supabseClient
-              .from('users')
-              .select('id')
-              .eq('authUserId', user.id)
-              .single();
-
-          final appUserId = userRecord['id'] as int;
-
           // Load the user again
           await _supabase.loadFreshUser(user.id, accessToken);
         }
 
-        // ✅ Login user to OneSignal after successful auth
-        final oneSignalExternalId = (userController.user.value.privateUserId ??
-                userController.user.value.id)
-            .toString();
-        await PushNotificationService.loginUser(oneSignalExternalId);
+        // Push token sync now happens in UserController.loadUser.
 
         print('✅ User loaded successfully');
         print('🔍 Invoice token after OAuth: $invoiceToken');
@@ -107,15 +125,33 @@ class SignIn extends HookWidget {
       }
     }
 
-    // Handle OAuth callback on page load
+    // Handle OAuth / email-confirmation callback on page load
     useEffect(() {
       if (kIsWeb) {
         Future.delayed(const Duration(milliseconds: 1000), () async {
           final currentUri = Uri.base;
           final hasOAuthCode = currentUri.queryParameters.containsKey('code');
+          final isEmailConfirmation =
+              _isEmailConfirmationCallback(currentUri);
 
           print('🔍 Has OAuth code: $hasOAuthCode');
+          print('🔍 Is email confirmation: $isEmailConfirmation');
           print('🔍 Current URL: ${currentUri.toString()}');
+
+          if (isEmailConfirmation) {
+            // Confirmations should only verify email; ask user to sign in manually.
+            try {
+              await Supabase.instance.client.auth.signOut();
+            } catch (_) {}
+            Get.snackbar(
+              'Email verified',
+              'Your email is confirmed. Please sign in to continue.',
+              backgroundColor: Colors.green.withOpacity(0.15),
+              colorText: Colors.green.shade800,
+              duration: const Duration(seconds: 4),
+            );
+            return;
+          }
 
           if (hasOAuthCode) {
             print('⏳ OAuth callback detected, processing...');
@@ -140,6 +176,40 @@ class SignIn extends HookWidget {
       }
       return null;
     }, []);
+
+    Future<void> resendVerification() async {
+      final email = emailController.text.trim();
+      if (email.isEmpty || !email.contains('@')) {
+        Get.snackbar(
+          'Email required',
+          'Enter the email you signed up with, then tap Resend.',
+          backgroundColor: Theme.of(context).colorScheme.red,
+          colorText: Colors.white,
+        );
+        return;
+      }
+
+      isResendingVerification.value = true;
+      try {
+        await _supabase.resendSignupVerificationEmail(email);
+        Get.snackbar(
+          'Verification sent',
+          'Check your inbox for a new verification link.',
+          backgroundColor: Colors.green.withOpacity(0.15),
+          colorText: Colors.green.shade800,
+          duration: const Duration(seconds: 4),
+        );
+      } catch (e) {
+        Get.snackbar(
+          'Could not resend',
+          e.toString(),
+          backgroundColor: Theme.of(context).colorScheme.red,
+          colorText: Colors.white,
+        );
+      } finally {
+        isResendingVerification.value = false;
+      }
+    }
 
     void signIn() async {
       final email = emailController.text.trim();
@@ -166,14 +236,11 @@ class SignIn extends HookWidget {
           Get.back();
         }
 
+        showResendVerification.value = false;
+
         final invoiceToken = getInvoiceToken();
 
         print('🔍 Invoice token after sign-in: $invoiceToken');
-
-        final oneSignalExternalId = (userController.user.value.privateUserId ??
-                userController.user.value.id)
-            .toString();
-        await PushNotificationService.loginUser(oneSignalExternalId);
 
         // Navigate based on whether we have an invoice token
         if (invoiceToken != null && invoiceToken.isNotEmpty) {
@@ -195,13 +262,15 @@ class SignIn extends HookWidget {
         }
 
         debugPrint(e.toString());
+        final notConfirmed = _isEmailNotConfirmedError(e);
+        showResendVerification.value = notConfirmed;
 
         Get.snackbar(
-          'Error',
-          'Failed to sign in: ${e.toString()}',
+          notConfirmed ? 'Verify your email' : 'Error',
+          _signInErrorMessage(e),
           backgroundColor: Theme.of(context).colorScheme.red,
           colorText: Colors.white,
-          duration: const Duration(seconds: 3),
+          duration: const Duration(seconds: 4),
         );
       }
     }
@@ -217,11 +286,7 @@ class SignIn extends HookWidget {
           final success = await _supabase.signInWithGoogle();
           if (success) {
             final invoiceToken = getInvoiceToken();
-            final oneSignalExternalId =
-                (userController.user.value.privateUserId ??
-                        userController.user.value.id)
-                    .toString();
-            await PushNotificationService.loginUser(oneSignalExternalId);
+
             if (invoiceToken != null && invoiceToken.isNotEmpty) {
               Get.offAllNamed(
                 '/bill/$invoiceToken',
@@ -241,11 +306,7 @@ class SignIn extends HookWidget {
         final success = await _supabase.signInWithFacebook();
         if (success) {
           final invoiceToken = getInvoiceToken();
-          final oneSignalExternalId =
-              (userController.user.value.privateUserId ??
-                      userController.user.value.id)
-                  .toString();
-          await PushNotificationService.loginUser(oneSignalExternalId);
+
           if (invoiceToken != null && invoiceToken.isNotEmpty) {
             Get.offAllNamed(
               '/bill/$invoiceToken',
@@ -552,6 +613,35 @@ class SignIn extends HookWidget {
                                 ),
                               ),
                             ),
+
+                            if (showResendVerification.value) ...[
+                              const SizedBox(height: 16),
+                              TextButton(
+                                onPressed: isResendingVerification.value
+                                    ? null
+                                    : resendVerification,
+                                child: isResendingVerification.value
+                                    ? SizedBox(
+                                        height: 18,
+                                        width: 18,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .light,
+                                        ),
+                                      )
+                                    : Text(
+                                        'Resend verification email',
+                                        style: TextStyle(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .light,
+                                          decoration: TextDecoration.underline,
+                                        ),
+                                      ),
+                              ),
+                            ],
 
                             const SizedBox(height: 24),
 

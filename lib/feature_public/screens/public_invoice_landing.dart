@@ -75,7 +75,7 @@ class PublicInvoiceLanding extends HookWidget {
             print(
                 '🔍 User privateUserId: ${userController.user.value.privateUserId}');
 
-            if (userController.user != null) {
+            if (userController.user.value.privateUserId != null) {
               print('✅ User data loaded: ${userController.user.value.email}');
 
               print('✅ User data and invoices loaded, navigating to home');
@@ -115,22 +115,37 @@ class PublicInvoiceLanding extends HookWidget {
       Future<void> initialize() async {
         // Load the invoice first
         try {
+          final normalizedToken = token.trim();
+          if (normalizedToken.isEmpty) {
+            if (context.mounted) {
+              Get.snackbar(
+                'Invalid Link',
+                'Missing public invoice token in this link.',
+              );
+            }
+            return;
+          }
+
           final loadedInvoice =
-              await invoiceController.getPublicInvoiceByToken(token);
+              await invoiceController.getPublicInvoiceByToken(normalizedToken);
 
           // ✅ Check if widget is still mounted before updating state
           if (!context.mounted) return;
 
           invoice.value = loadedInvoice;
 
-          await invoiceController.trackPublicInvoiceView(token);
+          await invoiceController.trackPublicInvoiceView(normalizedToken);
 
-          await _checkAuth();
-
-          // If on web, try to open in app
           if (kIsWeb && !hasCheckedDeepLink.value) {
             hasCheckedDeepLink.value = true;
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              if (context.mounted) {
+                _showAppInstallDialog(context, normalizedToken);
+              }
+            });
           }
+
+          await _checkAuth();
         } catch (e) {
           // ✅ Check if widget is still mounted before showing snackbar
           if (!context.mounted) return;
@@ -184,37 +199,43 @@ class PublicInvoiceLanding extends HookWidget {
     // The OS will open the app if it's installed, or the website if it's not.
     final universalLink = 'slickbills://bill/$token';
 
-    Get.dialog(
-      AlertDialog(
-        title: Text(
-          'Open in SlickBill App?',
-          style: TextStyle(color: Theme.of(context).colorScheme.dark),
-        ),
-        content: Text(
-          'You will be redirected. If the app is installed, it will open automatically.',
-          style: TextStyle(color: Theme.of(context).colorScheme.darkGray),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Get.back(),
-            child: Text('Cancel'),
+    showDialog<void>(
+      context: context,
+      barrierDismissible: true,
+      builder: (dialogContext) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0F172A),
+          title: const Text(
+            'Open in SlickBill App?',
+            style: TextStyle(color: Colors.white),
           ),
-          ElevatedButton(
-            onPressed: () {
-              // Navigate to the standard web URL. The OS handles the redirection.
-              html.window.open(universalLink, '_self');
-              Get.back();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.blue,
-            ),
-            child: Text(
-              'Open in App',
-              style: TextStyle(color: Theme.of(context).colorScheme.light),
-            ),
+          content: const Text(
+            'Open this invoice in the app now? If the app is installed, it will open immediately.',
+            style: TextStyle(color: Colors.white70),
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () =>
+                  Navigator.of(dialogContext, rootNavigator: true).pop(),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.white70),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(dialogContext, rootNavigator: true).pop();
+                html.window.open(universalLink, '_self');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF0F172A),
+              ),
+              child: const Text('Open in App'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -243,6 +264,17 @@ class PublicInvoiceLanding extends HookWidget {
                   color: Theme.of(context).colorScheme.darkGray,
                 ),
           ),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: () => Get.offAllNamed('/home-screen'),
+            icon: const Icon(Icons.home_rounded),
+            label: const Text('Go to Home'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.blue,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+          ),
         ],
       ),
     );
@@ -270,7 +302,13 @@ class PublicInvoiceLanding extends HookWidget {
                 TextButton(
                   onPressed: () => _showAppInstallDialog(context, token),
                   child: Text("Open in App"),
-                )
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: () => Get.offAllNamed('/home-screen'),
+                  icon: const Icon(Icons.home_rounded, size: 18),
+                  label: const Text('Go Home'),
+                ),
               ],
             ),
           )
@@ -676,14 +714,148 @@ class PublicInvoiceLanding extends HookWidget {
                             ElevatedButton(
                               onPressed: () async {
                                 try {
+                                  final claimerPrivateUserId =
+                                      userController.user.value.privateUserId;
+
+                                  if (claimerPrivateUserId == null) {
+                                    Get.snackbar(
+                                      'Error',
+                                      'Please sign in again before claiming this invoice.',
+                                      backgroundColor: Theme.of(context)
+                                          .colorScheme
+                                          .red
+                                          .withOpacity(0.2),
+                                      colorText:
+                                          Theme.of(context).colorScheme.red,
+                                    );
+                                    return;
+                                  }
+
+                                  final existingInvoice =
+                                      await _digitalInvoiceController
+                                          .getExistingClaimedInvoice(
+                                    publicInvoiceId: invoice.id,
+                                    claimerPrivateUserId: claimerPrivateUserId,
+                                  );
+
+                                  if (existingInvoice != null) {
+                                    final openExisting = await showDialog<bool>(
+                                          context: context,
+                                          builder: (dialogContext) =>
+                                              AlertDialog(
+                                            backgroundColor:
+                                                const Color(0xFF0F172A),
+                                            title: const Text(
+                                              'Invoice Already Claimed',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                            content: const Text(
+                                              'You already claimed this invoice earlier. Open your invoices now?',
+                                              style: TextStyle(
+                                                color: Colors.white70,
+                                              ),
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () => Navigator.of(
+                                                        dialogContext,
+                                                        rootNavigator: true)
+                                                    .pop(false),
+                                                child: const Text(
+                                                  'Cancel',
+                                                  style: TextStyle(
+                                                    color: Colors.white70,
+                                                  ),
+                                                ),
+                                              ),
+                                              ElevatedButton(
+                                                onPressed: () => Navigator.of(
+                                                        dialogContext,
+                                                        rootNavigator: true)
+                                                    .pop(true),
+                                                style: ElevatedButton.styleFrom(
+                                                  backgroundColor: Colors.white,
+                                                  foregroundColor:
+                                                      const Color(0xFF0F172A),
+                                                ),
+                                                child: const Text('Open'),
+                                              ),
+                                            ],
+                                          ),
+                                        ) ??
+                                        false;
+
+                                    if (openExisting) {
+                                      Get.offAllNamed('/home-screen');
+                                    }
+                                    return;
+                                  }
+
+                                  final confirmClaim =
+                                      await showDialog<bool>(
+                                            context: context,
+                                            builder: (dialogContext) =>
+                                                AlertDialog(
+                                              backgroundColor:
+                                                  const Color(0xFF0F172A),
+                                              title: const Text(
+                                                'Confirm Invoice Claim',
+                                                style: TextStyle(
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                              content: const Text(
+                                                'Do you want to claim this invoice to your account?',
+                                                style: TextStyle(
+                                                  color: Colors.white70,
+                                                ),
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () =>
+                                                      Navigator.of(
+                                                              dialogContext,
+                                                              rootNavigator:
+                                                                  true)
+                                                          .pop(false),
+                                                  child: const Text(
+                                                    'Cancel',
+                                                    style: TextStyle(
+                                                      color: Colors.white70,
+                                                    ),
+                                                  ),
+                                                ),
+                                                ElevatedButton(
+                                                  onPressed: () =>
+                                                      Navigator.of(
+                                                              dialogContext,
+                                                              rootNavigator:
+                                                                  true)
+                                                          .pop(true),
+                                                  style:
+                                                      ElevatedButton.styleFrom(
+                                                    backgroundColor:
+                                                        Colors.white,
+                                                    foregroundColor:
+                                                        const Color(
+                                                            0xFF0F172A),
+                                                  ),
+                                                  child: const Text('Claim'),
+                                                ),
+                                              ],
+                                            ),
+                                          ) ??
+                                          false;
+
+                                  if (!confirmClaim) return;
+
                                   final claimedInvoice =
                                       await _digitalInvoiceController
                                           .claimPublicInvoice(
                                     token: token,
-                                    claimerUserId:
-                                        userController.user.value.id!,
-                                    claimerPrivateUserId: userController
-                                        .user.value.privateUserId!,
+                                    claimerPrivateUserId: claimerPrivateUserId,
                                   );
 
                                   if (claimedInvoice != null) {
@@ -737,6 +909,7 @@ class PublicInvoiceLanding extends HookWidget {
                                   fontSize: 17,
                                   fontWeight: FontWeight.bold,
                                   letterSpacing: 0.5,
+                                  color: Colors.white,
                                 ),
                               ),
                             ),

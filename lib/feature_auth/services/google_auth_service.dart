@@ -20,15 +20,14 @@ class GoogleAuthService {
       final GoogleSignIn signIn = GoogleSignIn.instance;
 
       if (defaultTargetPlatform == TargetPlatform.iOS) {
-        unawaited(
-          signIn.initialize(
-            clientId: EnvConfig.googleIosClientId,
-            serverClientId: EnvConfig.googleWebClientId,
-          ),
+        await signIn.initialize(
+          clientId: EnvConfig.googleIosClientId,
+          serverClientId: EnvConfig.googleWebClientId,
         );
       } else {
-        unawaited(
-            signIn.initialize(serverClientId: EnvConfig.googleWebClientId));
+        await signIn.initialize(
+          serverClientId: EnvConfig.googleWebClientId,
+        );
       }
 
       final googleAccount = await signIn.authenticate();

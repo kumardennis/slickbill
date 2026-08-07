@@ -5,8 +5,9 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
-import 'package:loader_overlay/loader_overlay.dart';
 import 'package:slickbill/color_scheme.dart';
+import 'package:slickbill/feature_auth/services/monerium_service.dart';
+import 'package:slickbill/feature_auth/services/monerium_transfer_listener_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../feature_auth/utils/money_formatter.dart';
@@ -19,6 +20,12 @@ class ReceivedInvoiceSheet extends HookWidget {
   final Function updateInvoiceObsolete;
   final Function createCoinbaseTransaction;
   final Function createCDPEmbeddedTransaction;
+  final Function createMoneriumTransaction;
+  final String moneriumUserId;
+  final String moneriumWalletAddress;
+  final Future<bool> Function(InvoiceModel invoice, {bool silent})
+      manualRecheckMoneriumStatus;
+  final Future<InvoiceModel?> Function(int invoiceId)? refreshInvoice;
 
   const ReceivedInvoiceSheet(
       {super.key,
@@ -27,7 +34,12 @@ class ReceivedInvoiceSheet extends HookWidget {
       required this.updateInvoiceStatus,
       required this.updateInvoiceObsolete,
       required this.createCoinbaseTransaction,
-      required this.createCDPEmbeddedTransaction});
+      required this.createCDPEmbeddedTransaction,
+      required this.createMoneriumTransaction,
+      required this.moneriumUserId,
+      required this.moneriumWalletAddress,
+      required this.manualRecheckMoneriumStatus,
+      this.refreshInvoice});
 
   List<String> _extractUrls(String text) {
     final urlPattern = RegExp(
@@ -66,13 +78,160 @@ class ReceivedInvoiceSheet extends HookWidget {
     FormatNumber formatNumber = FormatNumber();
 
     var paymentStarted = useState<bool>(false);
-    var unpayingStarted = useState<bool>(false);
+    var recheckStarted = useState<bool>(false);
+    var currentInvoice = useState<InvoiceModel>(invoice);
+    var initialStatusChecked = useState<bool>(false);
+    var hasMoneriumSession = useState<bool>(false);
+    var initialStatusCheckInProgress = useState<bool>(false);
+    final isMounted = useIsMounted();
+
+    useEffect(() {
+      if (initialStatusChecked.value) {
+        return null;
+      }
+
+      final walletAddress = moneriumWalletAddress.trim();
+      final status = currentInvoice.value.status.trim().toUpperCase();
+      final shouldRecheck =
+          status == 'PROCESSING' || status == 'UNPAID' || status == 'PENDING';
+
+      // Already paid: nothing to heal upward; never demote on open.
+      if (walletAddress.isEmpty || !shouldRecheck) {
+        initialStatusChecked.value = true;
+        hasMoneriumSession.value = false;
+        return null;
+      }
+
+      Future<void> checkBackendStatusOnce() async {
+        if (isMounted()) {
+          initialStatusCheckInProgress.value = true;
+        }
+        try {
+          final session = await MoneriumService.getStoredSession(
+            userId: moneriumUserId,
+          );
+          final hasSession = session != null &&
+              (session['accessToken']?.toString().trim() ?? '').isNotEmpty;
+
+          if (!hasSession) {
+            hasMoneriumSession.value = false;
+            return;
+          }
+
+          hasMoneriumSession.value = true;
+          await manualRecheckMoneriumStatus(
+            currentInvoice.value,
+            silent: true,
+          );
+          if (!isMounted()) {
+            return;
+          }
+
+          if (refreshInvoice != null) {
+            final refreshed = await refreshInvoice!(currentInvoice.value.id);
+            if (!isMounted()) {
+              return;
+            }
+            if (refreshed != null) {
+              currentInvoice.value = refreshed;
+            }
+          }
+        } finally {
+          if (isMounted()) {
+            initialStatusCheckInProgress.value = false;
+            initialStatusChecked.value = true;
+          }
+        }
+      }
+
+      checkBackendStatusOnce();
+      return null;
+    }, [
+      currentInvoice.value.id,
+      currentInvoice.value.status,
+      moneriumWalletAddress,
+      moneriumUserId,
+      initialStatusChecked.value
+    ]);
+
+    useEffect(() {
+      final walletAddress = moneriumWalletAddress.trim();
+      final status = currentInvoice.value.status.trim().toUpperCase();
+
+      if (!initialStatusChecked.value ||
+          !hasMoneriumSession.value ||
+          walletAddress.isEmpty ||
+          status != 'PROCESSING') {
+        return null;
+      }
+
+      Future<void> startListener() async {
+        final started =
+            await MoneriumTransferListenerService.startWatchingInvoiceTransfer(
+          invoiceId: currentInvoice.value.id,
+          payerWalletAddress: walletAddress,
+          onRelevantTransfer: () async {
+            final didCheck = await manualRecheckMoneriumStatus(
+              currentInvoice.value,
+              silent: true,
+            );
+
+            if (!didCheck || !isMounted()) {
+              return;
+            }
+
+            if (refreshInvoice != null) {
+              final refreshed = await refreshInvoice!(currentInvoice.value.id);
+              if (!isMounted()) {
+                return;
+              }
+              if (refreshed != null) {
+                currentInvoice.value = refreshed;
+              }
+            }
+          },
+        );
+
+        if (!started) {
+          debugPrint(
+            '[ReceivedInvoiceSheet] transfer listener not started for invoice=${currentInvoice.value.id}',
+          );
+        }
+      }
+
+      startListener();
+
+      return () {
+        MoneriumTransferListenerService.stopWatchingInvoice(
+          currentInvoice.value.id,
+        );
+      };
+    }, [
+      currentInvoice.value.id,
+      currentInvoice.value.status,
+      moneriumWalletAddress,
+      initialStatusChecked.value,
+      hasMoneriumSession.value
+    ]);
+
+    final displayedInvoice = currentInvoice.value;
+    final normalizedStatus = displayedInvoice.status.trim().toUpperCase();
+    final shouldShowRecheck = normalizedStatus != 'PAID';
+    final sender = displayedInvoice.senders;
+    final senderPrivateUsers = sender?.privateUsers;
+    final senderFirstName = senderPrivateUsers?.firstName ?? '';
+    final senderLastName = senderPrivateUsers?.lastName ?? '';
+    final senderIban = senderPrivateUsers?.iban ?? '-';
+    final senderAccountHolder =
+        senderPrivateUsers?.bankAccountName.isNotEmpty == true
+            ? senderPrivateUsers!.bankAccountName
+            : displayedInvoice.senderName;
 
     bool dateIsPassed =
-        DateTime.now().isAfter(DateTime.parse(invoice.deadline));
+        DateTime.now().isAfter(DateTime.parse(displayedInvoice.deadline));
 
-    print("Sender IBAN: ${invoice.toJson()}");
-    print("TXHASH: ${invoice.txHash}");
+    print("Sender IBAN: ${displayedInvoice.toJson()}");
+    print("TXHASH: ${displayedInvoice.txHash}");
 
     return Container(
       decoration: BoxDecoration(
@@ -102,29 +261,31 @@ class ReceivedInvoiceSheet extends HookWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '#${invoice.invoiceNo}',
-                      style: Theme.of(context)
-                          .textTheme
-                          .headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    Text(
-                        DateFormat('EEE, dd MMM yyyy')
-                            .format(DateTime.parse(invoice.createdAt!)),
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.gray)),
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width - 150,
-                      child: Text(
-                          '${invoice.senders?.privateUsers?.firstName} ${invoice.senders?.privateUsers?.lastName ?? ''}',
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '#${displayedInvoice.invoiceNo}',
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      Text(
+                          DateFormat('EEE, dd MMM yyyy').format(
+                              DateTime.parse(displayedInvoice.createdAt)),
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.gray)),
+                      Text('$senderFirstName $senderLastName',
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.displayMedium),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -133,24 +294,32 @@ class ReceivedInvoiceSheet extends HookWidget {
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
                         Text(
-                            invoice.status == 'PAID'
+                            normalizedStatus == 'PAID'
                                 ? 'lbl_Paid'.tr
-                                : 'lbl_Unpaid'.tr,
+                                : normalizedStatus == 'PROCESSING'
+                                    ? 'Waiting'
+                                    : 'lbl_Unpaid'.tr,
                             style: Theme.of(context)
                                 .textTheme
                                 .displayMedium
                                 ?.copyWith(
-                                    color: invoice.status == 'PAID'
+                                    color: normalizedStatus == 'PAID'
                                         ? Theme.of(context).colorScheme.green
-                                        : dateIsPassed
-                                            ? Theme.of(context).colorScheme.red
-                                            : Theme.of(context)
+                                        : normalizedStatus == 'PROCESSING'
+                                            ? Theme.of(context)
                                                 .colorScheme
-                                                .yellow)),
+                                                .yellow
+                                            : dateIsPassed
+                                                ? Theme.of(context)
+                                                    .colorScheme
+                                                    .red
+                                                : Theme.of(context)
+                                                    .colorScheme
+                                                    .yellow)),
                         const SizedBox(
                           width: 10,
                         ),
-                        invoice.status == 'PAID'
+                        normalizedStatus == 'PAID'
                             ? FaIcon(
                                 FontAwesomeIcons.circleCheck,
                                 size: 20,
@@ -159,16 +328,18 @@ class ReceivedInvoiceSheet extends HookWidget {
                             : FaIcon(
                                 FontAwesomeIcons.clockRotateLeft,
                                 size: 20,
-                                color: dateIsPassed
-                                    ? Theme.of(context).colorScheme.red
-                                    : Theme.of(context).colorScheme.yellow,
+                                color: normalizedStatus == 'PROCESSING'
+                                    ? Theme.of(context).colorScheme.yellow
+                                    : dateIsPassed
+                                        ? Theme.of(context).colorScheme.red
+                                        : Theme.of(context).colorScheme.yellow,
                               )
                       ],
                     ),
                     const SizedBox(
                       height: 10,
                     ),
-                    Text(formatNumber.formatMoney(invoice.amount),
+                    Text(formatNumber.formatMoney(displayedInvoice.amount),
                         style: Theme.of(context)
                             .textTheme
                             .displayLarge
@@ -179,6 +350,104 @@ class ReceivedInvoiceSheet extends HookWidget {
                 )
               ],
             ),
+            if (normalizedStatus == 'PAID') ...[
+              const SizedBox(height: 14),
+              TweenAnimationBuilder<double>(
+                duration: const Duration(milliseconds: 900),
+                curve: Curves.fastOutSlowIn,
+                tween: Tween(begin: 0.7, end: 1.0),
+                builder: (context, value, child) {
+                  return Transform.scale(
+                    scale: value,
+                    child: Opacity(
+                      opacity: value.clamp(0.0, 1.0),
+                      child: child,
+                    ),
+                  );
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.green.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color:
+                          Theme.of(context).colorScheme.green.withOpacity(0.7),
+                      width: 1.2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .green
+                            .withOpacity(0.2),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.check_circle_rounded,
+                        color: Theme.of(context).colorScheme.green,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Payment successful',
+                          style:
+                              Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: Theme.of(context).colorScheme.green,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+            if (initialStatusCheckInProgress.value) ...[
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.blue.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.light.withOpacity(0.5),
+                    width: 1.0,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Checking latest payment status...',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.light,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             Padding(
               padding: const EdgeInsets.all(20.0),
               child: Divider(
@@ -191,42 +460,41 @@ class ReceivedInvoiceSheet extends HookWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width / 2,
-                      child: Wrap(
-                        children: [
-                          Text(
-                            invoice.originalInvoiceNo != null
-                                ? '#${invoice.originalInvoiceNo}'
-                                : '-',
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineMedium
-                                ?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                        ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayedInvoice.originalInvoiceNo != null
+                            ? '#${displayedInvoice.originalInvoiceNo}'
+                            : '-',
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
-                    ),
-                    Text('lbl_OriginalInvoiceNo'.tr,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.gray))
-                  ],
+                      Text('lbl_OriginalInvoiceNo'.tr,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.gray))
+                    ],
+                  ),
                 ),
                 Text(
-                    invoice.paidOnDate != null
+                    displayedInvoice.paidOnDate != null
                         ? 'lbl_PaidOn'.trParams({
                             'date':
-                                '${DateFormat('EEE, dd MMM').format(DateTime.parse(invoice.paidOnDate!))}'
+                                '${DateFormat('EEE, dd MMM').format(DateTime.parse(displayedInvoice.paidOnDate!))}'
                           })
                         : 'lbl_Due'.trParams({
                             'date':
-                                '${DateFormat('EEE, dd MMM').format(DateTime.parse(invoice.deadline!))}'
+                                '${DateFormat('EEE, dd MMM').format(DateTime.parse(displayedInvoice.deadline))}'
                           }),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: invoice.paidOnDate != null
+                        color: displayedInvoice.paidOnDate != null
                             ? Theme.of(context).colorScheme.green
                             : dateIsPassed
                                 ? Theme.of(context).colorScheme.red
@@ -240,27 +508,31 @@ class ReceivedInvoiceSheet extends HookWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${invoice.senders?.privateUsers?.iban ?? "-"}',
-                      style: Theme.of(context)
-                          .textTheme
-                          .displayMedium
-                          ?.copyWith(fontWeight: FontWeight.w600),
-                    ),
-                    Text('lbl_IBAN'.tr,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.gray))
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        senderIban,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context)
+                            .textTheme
+                            .displayMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                      Text('lbl_IBAN'.tr,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.gray))
+                    ],
+                  ),
                 ),
                 GestureDetector(
                   onTap: () async {
-                    await Clipboard.setData(ClipboardData(
-                        text: invoice.senders?.privateUsers?.iban ?? "-"));
-                    Get.snackbar('inf_Copied'.tr,
-                        invoice.senders?.privateUsers?.iban ?? "-");
+                    await Clipboard.setData(ClipboardData(text: senderIban));
+                    Get.snackbar('inf_Copied'.tr, senderIban);
                   },
                   child: FaIcon(
                     FontAwesomeIcons.copy,
@@ -276,37 +548,30 @@ class ReceivedInvoiceSheet extends HookWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width - 150,
-                      child: Text(
-                          invoice.senders?.privateUsers?.bankAccountName ??
-                              invoice.senderName ??
-                              '-',
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(senderAccountHolder,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context)
                               .textTheme
                               .displayMedium
                               ?.copyWith(fontWeight: FontWeight.w600)),
-                    ),
-                    Text('lbl_AccountHolder'.tr,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.gray))
-                  ],
+                      Text('lbl_AccountHolder'.tr,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.gray))
+                    ],
+                  ),
                 ),
                 GestureDetector(
                   onTap: () async {
-                    await Clipboard.setData(ClipboardData(
-                        text: invoice.senders?.privateUsers?.bankAccountName ??
-                            invoice.senderName ??
-                            '-'));
-                    Get.snackbar(
-                        'inf_Copied'.tr,
-                        invoice.senders?.privateUsers?.bankAccountName ??
-                            invoice.senderName ??
-                            '-');
+                    await Clipboard.setData(
+                        ClipboardData(text: senderAccountHolder));
+                    Get.snackbar('inf_Copied'.tr, senderAccountHolder);
                   },
                   child: FaIcon(
                     FontAwesomeIcons.copy,
@@ -344,9 +609,10 @@ class ReceivedInvoiceSheet extends HookWidget {
                       ),
                       GestureDetector(
                         onTap: () async {
-                          await Clipboard.setData(
-                              ClipboardData(text: invoice.description));
-                          Get.snackbar('inf_Copied'.tr, invoice.description);
+                          await Clipboard.setData(ClipboardData(
+                              text: displayedInvoice.description));
+                          Get.snackbar(
+                              'inf_Copied'.tr, displayedInvoice.description);
                         },
                         child: FaIcon(
                           FontAwesomeIcons.copy,
@@ -358,17 +624,17 @@ class ReceivedInvoiceSheet extends HookWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    invoice.description,
+                    displayedInvoice.description,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Theme.of(context).colorScheme.light,
                           height: 1.5,
                         ),
                   ),
                   // Payment Links
-                  if (invoice.description.isNotEmpty) ...[
+                  if (displayedInvoice.description.isNotEmpty) ...[
                     Builder(
                       builder: (context) {
-                        final urls = _extractUrls(invoice.description);
+                        final urls = _extractUrls(displayedInvoice.description);
                         if (urls.isEmpty) return SizedBox.shrink();
 
                         return Column(
@@ -525,9 +791,8 @@ class ReceivedInvoiceSheet extends HookWidget {
               ),
             ),
             const SizedBox(height: 30),
-            if (invoice.status == 'PAID' &&
-                invoice.txHash != null &&
-                (invoice.txHash?.isNotEmpty ?? false)) ...[
+            if (displayedInvoice.txHash != null &&
+                (displayedInvoice.txHash?.isNotEmpty ?? false)) ...[
               const SizedBox(height: 20),
               Container(
                 width: double.infinity,
@@ -555,7 +820,7 @@ class ReceivedInvoiceSheet extends HookWidget {
                       children: [
                         Expanded(
                           child: Text(
-                            invoice.txHash!,
+                            displayedInvoice.txHash!,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context)
@@ -573,7 +838,7 @@ class ReceivedInvoiceSheet extends HookWidget {
                         GestureDetector(
                           onTap: () async {
                             await Clipboard.setData(
-                              ClipboardData(text: invoice.txHash!),
+                              ClipboardData(text: displayedInvoice.txHash!),
                             );
                             Get.snackbar(
                               'Copied',
@@ -608,7 +873,8 @@ class ReceivedInvoiceSheet extends HookWidget {
                         ),
                         const SizedBox(width: 8),
                         GestureDetector(
-                          onTap: () async => openTxInExplorer(invoice.txHash!),
+                          onTap: () async =>
+                              openTxInExplorer(displayedInvoice.txHash!),
                           child: Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
@@ -634,7 +900,7 @@ class ReceivedInvoiceSheet extends HookWidget {
                     const SizedBox(height: 6),
                     Builder(
                       builder: (_) {
-                        final link = buildTxUrl(invoice.txHash);
+                        final link = buildTxUrl(displayedInvoice.txHash);
                         if (link == null) return const SizedBox.shrink();
                         return Text(
                           link,
@@ -658,22 +924,21 @@ class ReceivedInvoiceSheet extends HookWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width - 70,
-                      child: Wrap(
-                        children: [
-                          Text(invoice.category ?? '-',
-                              style: Theme.of(context).textTheme.displayMedium),
-                        ],
-                      ),
-                    ),
-                    Text('lbl_Category'.tr,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.gray)),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(displayedInvoice.category ?? '-',
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.displayMedium),
+                      Text('lbl_Category'.tr,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.gray)),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -684,25 +949,32 @@ class ReceivedInvoiceSheet extends HookWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(invoice.referenceNo ?? '-',
-                        style: Theme.of(context)
-                            .textTheme
-                            .displayMedium
-                            ?.copyWith(fontWeight: FontWeight.w600)),
-                    Text('lbl_ReferenceNumber'.tr,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Theme.of(context).colorScheme.gray))
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(displayedInvoice.referenceNo ?? '-',
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context)
+                              .textTheme
+                              .displayMedium
+                              ?.copyWith(fontWeight: FontWeight.w600)),
+                      Text('lbl_ReferenceNumber'.tr,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.gray))
+                    ],
+                  ),
                 ),
                 GestureDetector(
                   onTap: () async {
-                    if (invoice.referenceNo != null) {
-                      await Clipboard.setData(
-                          ClipboardData(text: invoice.referenceNo ?? ''));
-                      Get.snackbar('inf_Copied'.tr, invoice.referenceNo ?? '');
+                    if (displayedInvoice.referenceNo != null) {
+                      await Clipboard.setData(ClipboardData(
+                          text: displayedInvoice.referenceNo ?? ''));
+                      Get.snackbar(
+                          'inf_Copied'.tr, displayedInvoice.referenceNo ?? '');
                     }
                   },
                   child: FaIcon(
@@ -716,73 +988,139 @@ class ReceivedInvoiceSheet extends HookWidget {
               height: 30,
             ),
             Center(
-              child: invoice.status == 'UNPAID'
-                  ? ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.green),
-                      onPressed: () async {
-                        paymentStarted.value = true;
-                        await createCDPEmbeddedTransaction(invoice);
-                        paymentStarted.value = false;
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(15.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              paymentStarted.value
-                                  ? 'inf_StatusUpdating'.tr
-                                  : 'btn_Pay'.tr,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyLarge
-                                  ?.copyWith(
-                                      color:
-                                          Theme.of(context).colorScheme.light),
+              child: normalizedStatus == 'UNPAID'
+                  ? Column(
+                      children: [
+                        ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    Theme.of(context).colorScheme.green),
+                            onPressed: () async {
+                              if (!isMounted()) return;
+
+                              paymentStarted.value = true;
+                              try {
+                                await createMoneriumTransaction(
+                                    displayedInvoice);
+                                if (!isMounted()) return;
+
+                                if (refreshInvoice != null) {
+                                  final refreshed = await refreshInvoice!(
+                                      displayedInvoice.id);
+                                  if (!isMounted()) return;
+
+                                  if (refreshed != null) {
+                                    currentInvoice.value = refreshed;
+                                  }
+                                }
+                              } finally {
+                                if (isMounted()) {
+                                  paymentStarted.value = false;
+                                }
+                              }
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(15.0),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Text(
+                                    paymentStarted.value
+                                        ? 'inf_StatusUpdating'.tr
+                                        : 'btn_Pay'.tr,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyLarge
+                                        ?.copyWith(
+                                            color: Theme.of(context)
+                                                .colorScheme
+                                                .light),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  FaIcon(
+                                    FontAwesomeIcons.circleCheck,
+                                    color: Theme.of(context).colorScheme.light,
+                                  )
+                                ],
+                              ),
+                            )),
+                      ],
+                    )
+                  : normalizedStatus != 'PAID'
+                      ? ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Theme.of(context)
+                                .colorScheme
+                                .blue
+                                .withOpacity(0.25),
+                            side: BorderSide(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .blue
+                                  .withOpacity(0.8),
+                              width: 0.6,
                             ),
-                            const SizedBox(width: 10),
-                            FaIcon(
-                              FontAwesomeIcons.circleCheck,
-                              color: Theme.of(context).colorScheme.light,
-                            )
-                          ],
-                        ),
-                      ))
-                  : ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.red),
-                      onPressed: () async {
-                        unpayingStarted.value = true;
-                        await updateInvoiceStatus!(invoice, false);
-                        unpayingStarted.value = false;
-                        // await openInvoice(invoice);
-                      },
-                      child: Padding(
-                        padding: const EdgeInsets.all(15.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              unpayingStarted.value
-                                  ? 'inf_StatusUpdating'.tr
-                                  : 'btn_Unpay'.tr,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyLarge
-                                  ?.copyWith(
-                                      color:
-                                          Theme.of(context).colorScheme.light),
+                          ),
+                          onPressed: null,
+                          child: const Padding(
+                            padding: EdgeInsets.all(15.0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text('Processing payment...'),
+                              ],
                             ),
-                            const SizedBox(width: 10),
-                            FaIcon(
-                              FontAwesomeIcons.circleCheck,
-                              color: Theme.of(context).colorScheme.light,
-                            )
-                          ],
-                        ),
-                      )),
+                          ),
+                        )
+                      : const SizedBox.shrink(),
             ),
+            if (shouldShowRecheck) ...[
+              const SizedBox(
+                height: 10,
+              ),
+              Center(
+                child: OutlinedButton(
+                  onPressed: () async {
+                    if (!isMounted()) return;
+
+                    recheckStarted.value = true;
+                    try {
+                      final didCheck =
+                          await manualRecheckMoneriumStatus(displayedInvoice);
+                      if (!isMounted()) return;
+
+                      if (didCheck && refreshInvoice != null) {
+                        final refreshed =
+                            await refreshInvoice!(displayedInvoice.id);
+                        if (!isMounted()) return;
+
+                        if (refreshed != null) {
+                          currentInvoice.value = refreshed;
+                        }
+                      }
+                    } finally {
+                      if (isMounted()) {
+                        recheckStarted.value = false;
+                      }
+                    }
+                  },
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                      color: Theme.of(context).colorScheme.light,
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    recheckStarted.value
+                        ? 'Checking...'
+                        : 'Re-check payment status',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.light,
+                        ),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(
               height: 30,
             ),

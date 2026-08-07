@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:get/get.dart';
-import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_auth/services/facebook_auth_service.dart';
 import 'package:slickbill/feature_auth/services/google_auth_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -110,6 +109,9 @@ class SupabaseAuthManger {
           ? privateUserResponse[0]['iban']
           : businessUserResponse[0]['iban'],
       ibans: parsedIbans,
+      bankName: privateUserResponse.length > 0
+          ? privateUserResponse[0]['bankName']
+          : businessUserResponse[0]['bankName'],
       bankAccountName: privateUserResponse.length > 0
           ? privateUserResponse[0]['bankAccountName']
           : businessUserResponse[0]['bankAccountName'],
@@ -128,6 +130,7 @@ class SupabaseAuthManger {
       strigaUserId: userRecordResponse[0]['strigaUserId'],
       strigaWalletId: userRecordResponse[0]['strigaWalletId'],
       cdpWalletId: userRecordResponse[0]['cdpWalletId'],
+      metamaskWalletAddress: userRecordResponse[0]['metamask_wallet_address'],
     );
 
     userController.loadUser(clientUserClassed);
@@ -168,19 +171,44 @@ class SupabaseAuthManger {
         throw Exception('No session or user returned from Supabase');
       }
 
-      if (session != null) {
-        await loadFreshUser(user!.id, session.accessToken);
-
-        prefs.setString('email', email);
-        prefs.setString('password', password);
-
-        Get.toNamed('/home-screen');
-
-        // final userRecord = userRecordResponse
+      if (user.emailConfirmedAt == null) {
+        await supabseClient.auth.signOut();
+        throw Exception(
+          'EMAIL_NOT_CONFIRMED: Please verify your email before signing in.',
+        );
       }
+
+      await loadFreshUser(user.id, session.accessToken);
+
+      prefs.setString('email', email);
+      prefs.setString('password', password);
+
+      Get.toNamed('/home-screen');
+
+      // final userRecord = userRecordResponse
     } catch (err) {
       rethrow;
     }
+  }
+
+  Future<void> resendSignupVerificationEmail(String email) async {
+    final trimmed = email.trim();
+    if (trimmed.isEmpty) {
+      throw Exception('Please enter your email address first.');
+    }
+
+    await supabseClient.auth.resend(
+      type: OtpType.signup,
+      email: trimmed,
+      emailRedirectTo: _emailRedirectTo(),
+    );
+  }
+
+  String _emailRedirectTo() {
+    if (kIsWeb && Uri.base.host.contains('localhost')) {
+      return '${Uri.base.origin}/sign-in?verified=1';
+    }
+    return 'https://app.slickbills.com/sign-in?verified=1';
   }
 
   Future<bool> signInWithGoogle() async {
@@ -198,13 +226,12 @@ class SupabaseAuthManger {
   }
 
   Future<void> signUp(
-      String email,
-      String password,
-      String firstName,
-      String lastName,
-      String username,
-      String iban,
-      String accountHolder) async {
+    String email,
+    String password,
+    String username, {
+    String firstName = '',
+    String lastName = '',
+  }) async {
     try {
       print('🔄 Starting signup process for: $email');
 
@@ -223,9 +250,10 @@ class SupabaseAuthManger {
         "firstName": firstName,
         "lastName": lastName,
         "username": username,
-        "iban": iban,
-        "accountHolder": accountHolder,
-        "isPrivateUser": true
+        "iban": "",
+        "accountHolder": "",
+        "isPrivateUser": true,
+        "emailRedirectTo": _emailRedirectTo(),
       });
 
       print('📦 Response status: ${response.status}');
