@@ -9,6 +9,12 @@ import 'package:slickbill/color_scheme.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../feature_auth/utils/money_formatter.dart';
+import '../../feature_navigation/getx_controllers/navigation_controller.dart';
+import '../getx_controllers/digital_invoice_controller.dart';
+import '../utils/sent_invoices_class.dart';
+import '../../feature_send/models/direct_share_draft.dart';
+import '../../feature_send/models/receiver_user_model.dart';
+import '../../constants.dart';
 import '../models/invoice_model.dart';
 
 class SentInvoiceSheet extends HookWidget {
@@ -29,9 +35,24 @@ class SentInvoiceSheet extends HookWidget {
   @override
   Widget build(BuildContext context) {
     FormatNumber formatNumber = FormatNumber();
+    final sentInvoicesClass = SentInvoicesClass();
+    final invoiceController = Get.find<DigitalInvoiceController>();
+    final navigationController = Get.find<NavigationController>();
+
+    final isReminding = useState(false);
+    final lastRemindedAt = useState<DateTime?>(
+      invoice.lastRemindedAt != null && invoice.lastRemindedAt!.isNotEmpty
+          ? DateTime.tryParse(invoice.lastRemindedAt!)
+          : null,
+    );
 
     bool dateIsPassed =
         DateTime.now().isAfter(DateTime.parse(invoice.deadline));
+    final isUnpaid = invoice.status.trim().toUpperCase() == 'UNPAID';
+    final nextRemindAt = lastRemindedAt.value?.add(const Duration(hours: 24));
+    final canRemind = isUnpaid &&
+        !isReminding.value &&
+        (nextRemindAt == null || DateTime.now().isAfter(nextRemindAt));
 
     String? buildTxUrl(String? txHash) {
       if (txHash == null) return null;
@@ -54,6 +75,50 @@ class SentInvoiceSheet extends HookWidget {
       } else {
         Get.snackbar('Error', 'Could not open explorer link');
       }
+    }
+
+    Future<void> sendReminder() async {
+      if (!canRemind) return;
+      isReminding.value = true;
+      final remindedAt = await sentInvoicesClass.remindInvoice(invoice);
+      isReminding.value = false;
+      if (remindedAt != null) {
+        lastRemindedAt.value = DateTime.tryParse(remindedAt) ?? DateTime.now();
+        Get.snackbar('Sent', 'inf_ReminderSent'.tr);
+      }
+    }
+
+    void duplicateInvoice() {
+      final privateUser = invoice.receivers.privateUsers;
+      if (privateUser == null || privateUser.userId == 0) {
+        Get.snackbar('Oops..', 'Cannot duplicate — receiver is missing');
+        return;
+      }
+
+      final categories = Constants().categories;
+      final category = invoice.category != null &&
+              categories.contains(invoice.category)
+          ? invoice.category!
+          : categories.last;
+
+      invoiceController.setDirectShareDraft(
+        DirectShareDraft(
+          receiver: ReceiverUserModel(
+            id: invoice.receivers.privateUserId,
+            userId: privateUser.userId,
+            username: privateUser.users?.username ?? '',
+            firstName: privateUser.firstName,
+            lastName: privateUser.lastName,
+            amount: invoice.amount,
+          ),
+          description: invoice.description,
+          referenceNo: invoice.referenceNo == '-' ? '' : (invoice.referenceNo ?? ''),
+          category: category,
+        ),
+      );
+
+      Navigator.of(context).pop();
+      navigationController.changeIndex(1);
     }
 
     return Container(
@@ -723,6 +788,95 @@ class SentInvoiceSheet extends HookWidget {
             const SizedBox(
               height: 30,
             ),
+            if (isUnpaid) ...[
+              Center(
+                child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            Theme.of(context).colorScheme.lighterBlue,
+                        disabledBackgroundColor: Theme.of(context)
+                            .colorScheme
+                            .light
+                            .withOpacity(0.2)),
+                    onPressed: canRemind ? sendReminder : null,
+                    child: Padding(
+                      padding: const EdgeInsets.all(15.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            isReminding.value
+                                ? 'inf_SendingReminder'.tr
+                                : 'btn_Remind'.tr,
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodyLarge
+                                ?.copyWith(
+                                    color:
+                                        Theme.of(context).colorScheme.light),
+                          ),
+                          const SizedBox(width: 10),
+                          FaIcon(
+                            FontAwesomeIcons.bell,
+                            color: Theme.of(context).colorScheme.light,
+                          )
+                        ],
+                      ),
+                    )),
+              ),
+              if (lastRemindedAt.value != null) ...[
+                const SizedBox(height: 8),
+                Center(
+                  child: Text(
+                    canRemind
+                        ? 'lbl_LastReminded'.trParams({
+                            'date': DateFormat('EEE, dd MMM HH:mm')
+                                .format(lastRemindedAt.value!.toLocal()),
+                          })
+                        : 'lbl_RemindAgainIn'.trParams({
+                            'hours':
+                                '${nextRemindAt!.difference(DateTime.now()).inHours.clamp(1, 24)}',
+                          }),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.light),
+                  ),
+                ),
+              ],
+              const SizedBox(height: 12),
+            ],
+            Center(
+              child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          Theme.of(context).colorScheme.light.withOpacity(0.18),
+                      disabledBackgroundColor: Theme.of(context)
+                          .colorScheme
+                          .light
+                          .withOpacity(0.1)),
+                  onPressed: duplicateInvoice,
+                  child: Padding(
+                    padding: const EdgeInsets.all(15.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'btn_Duplicate'.tr,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyLarge
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.light),
+                        ),
+                        const SizedBox(width: 10),
+                        FaIcon(
+                          FontAwesomeIcons.clone,
+                          color: Theme.of(context).colorScheme.light,
+                        )
+                      ],
+                    ),
+                  )),
+            ),
+            const SizedBox(height: 12),
             Center(
               child: ElevatedButton(
                   style: ElevatedButton.styleFrom(

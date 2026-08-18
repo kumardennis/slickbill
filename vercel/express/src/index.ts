@@ -42,7 +42,11 @@ import {
   readMoneriumOrdersArray,
   summarizeMoneriumOrder,
 } from "./lib/moneriumOrderSummary.js";
-import { settleInvoicesFromOrders, linkInvoiceToMoneriumOrder, listProcessingInvoicesForPayer } from "./lib/moneriumSettle.js";
+import {
+  settleInvoicesFromOrders,
+  linkInvoiceToMoneriumOrder,
+  listProcessingInvoicesForPayer,
+} from "./lib/moneriumSettle.js";
 import { addAddressesToAlchemyWebhook } from "./lib/alchemyAddresses.js";
 import { notifyUserViaSupabase } from "./lib/notifyUser.js";
 
@@ -936,6 +940,92 @@ app.get("/", (req, res) => {
   res.send("Proxy server is running");
 });
 
+/**
+ * Daily due/overdue reminders. Call with Authorization: Bearer $CRON_SECRET
+ * or the Supabase service role key. Schedule via Vercel cron or an external ping.
+ */
+app.all("/cron/invoice-reminders", async (req: any, res: any) => {
+  try {
+    const cronSecret = process.env.CRON_SECRET?.trim() || "";
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || "";
+    const authHeader =
+      typeof req.headers.authorization === "string"
+        ? req.headers.authorization
+        : "";
+    const providedCron =
+      typeof req.headers["x-cron-secret"] === "string"
+        ? req.headers["x-cron-secret"]
+        : typeof req.body?.secret === "string"
+          ? req.body.secret
+          : "";
+
+    const authorized =
+      (cronSecret &&
+        (authHeader === `Bearer ${cronSecret}` || providedCron === cronSecret)) ||
+      (serviceKey && authHeader === `Bearer ${serviceKey}`);
+
+    if (!authorized) {
+      return res
+        .status(401)
+        .json(makeError("CRON_UNAUTHORIZED", "Invalid cron secret."));
+    }
+
+    const supabaseUrl = process.env.SUPABASE_URL?.trim();
+    if (!supabaseUrl || !serviceKey) {
+      return res
+        .status(503)
+        .json(
+          makeError(
+            "SUPABASE_NOT_CONFIGURED",
+            "SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY missing on Express.",
+          ),
+        );
+    }
+
+    const response = await fetch(
+      `${supabaseUrl.replace(/\/$/, "")}/functions/v1/notifications/send-due-reminders`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${serviceKey}`,
+          apikey: serviceKey,
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      },
+    );
+
+    const text = await response.text();
+    let payload: unknown = text;
+    try {
+      payload = JSON.parse(text);
+    } catch {
+      // keep raw text
+    }
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        ok: false,
+        data: payload,
+      });
+    }
+
+    return res.status(200).json({ ok: true, data: payload });
+  } catch (error) {
+    console.error("❌ invoice reminders cron failed:", error);
+    return res
+      .status(500)
+      .json(
+        makeError(
+          "REMINDERS_CRON_FAILED",
+          error instanceof Error ? error.message : "Unknown error",
+          error,
+          500,
+        ),
+      );
+  }
+});
+
 app.post("/cdp/get-account", async (req: any, res: any) => {
   try {
     const { accountName, currency } = req.body;
@@ -1536,8 +1626,12 @@ app.post("/monerium/siwe/complete", async (req: any, res: any) => {
         );
     }
 
-    const { message, signature, state, walletAddress: bodyWallet } =
-      req.body ?? {};
+    const {
+      message,
+      signature,
+      state,
+      walletAddress: bodyWallet,
+    } = req.body ?? {};
     if (!message || typeof message !== "string") {
       return res
         .status(400)
@@ -1747,7 +1841,10 @@ app.post("/monerium/siwe/complete", async (req: any, res: any) => {
       const alchemyAdd = await addAddressesToAlchemyWebhook([
         entry.walletAddress,
       ]);
-      console.log("ℹ️ Alchemy webhook address sync (SIWE complete)", alchemyAdd);
+      console.log(
+        "ℹ️ Alchemy webhook address sync (SIWE complete)",
+        alchemyAdd,
+      );
     }
     moneriumPkceStore.delete(state);
 
@@ -1865,7 +1962,7 @@ app.post("/monerium/oauth/start", async (req: any, res: any) => {
       code_challenge_method: "S256",
       scope: moneriumScope,
       state,
-      skip_kyc: "true",
+      skip_kyc: "false",
       prompt: "login",
     };
 
@@ -2499,7 +2596,8 @@ app.post("/monerium/wallet/link", async (req: any, res: any) => {
     if (linkedConfirmed) {
       await updateMoneriumTokenWallet(userId, address);
       // Also re-persist token with wallet so a missing row still gets address when possible.
-      const existing = moneriumTokenStore.get(userId) ?? (await loadMoneriumToken(userId));
+      const existing =
+        moneriumTokenStore.get(userId) ?? (await loadMoneriumToken(userId));
       if (existing) {
         await persistMoneriumToken(userId, existing, address);
       }
@@ -3263,9 +3361,7 @@ app.post("/monerium/orders/send", async (req: any, res: any) => {
       const created = summarizeMoneriumOrder(data);
       const nested = readMoneriumOrdersArray(data).map(summarizeMoneriumOrder);
       const orderId =
-        created.id?.trim() ||
-        nested.find((o) => o.id)?.id?.trim() ||
-        "";
+        created.id?.trim() || nested.find((o) => o.id)?.id?.trim() || "";
       if (orderId) {
         const linked = await linkInvoiceToMoneriumOrder({
           invoiceId: Number(invoiceIdRaw),
@@ -3684,7 +3780,9 @@ const resolveOrdersForTransfer = async (params: {
         if (summarized.id) {
           orders.push(summarized);
         } else {
-          const nested = readMoneriumOrdersArray(byId).map(summarizeMoneriumOrder);
+          const nested = readMoneriumOrdersArray(byId).map(
+            summarizeMoneriumOrder,
+          );
           orders.push(...nested.filter((o) => o.id));
         }
       } catch (error) {
@@ -3890,7 +3988,9 @@ app.post("/monerium/chain/transfers", async (req: any, res: any) => {
         : undefined;
     const rawBody: Buffer | string =
       req.rawBody ??
-      (typeof req.body === "string" ? req.body : JSON.stringify(req.body ?? {}));
+      (typeof req.body === "string"
+        ? req.body
+        : JSON.stringify(req.body ?? {}));
 
     const valid = verifyAlchemySignature({
       rawBody,
@@ -3900,7 +4000,9 @@ app.post("/monerium/chain/transfers", async (req: any, res: any) => {
     if (!valid) {
       return res
         .status(401)
-        .json(makeError("ALCHEMY_SIGNATURE_INVALID", "Invalid Alchemy signature."));
+        .json(
+          makeError("ALCHEMY_SIGNATURE_INVALID", "Invalid Alchemy signature."),
+        );
     }
 
     const payload =
@@ -3940,7 +4042,9 @@ app.post("/monerium/chain/transfers", async (req: any, res: any) => {
           walletAddress: transfer.walletAddress,
         });
 
-        const settleList = Array.isArray(resolved.settle) ? resolved.settle : [];
+        const settleList = Array.isArray(resolved.settle)
+          ? resolved.settle
+          : [];
         // Skip generic money toast only when an invoice was actually settled (or already PAID).
         const skipAccountToast = settleList.some(
           (s) =>
@@ -4005,14 +4109,16 @@ app.post("/monerium/chain/transfers", async (req: any, res: any) => {
     });
   } catch (error) {
     console.error("❌ Alchemy chain transfers webhook failed:", error);
-    return res.status(500).json(
-      makeError(
-        "ALCHEMY_WEBHOOK_FAILED",
-        error instanceof Error ? error.message : "Unknown error",
-        error,
-        500,
-      ),
-    );
+    return res
+      .status(500)
+      .json(
+        makeError(
+          "ALCHEMY_WEBHOOK_FAILED",
+          error instanceof Error ? error.message : "Unknown error",
+          error,
+          500,
+        ),
+      );
   }
 });
 
@@ -4057,12 +4163,7 @@ app.post("/monerium/alchemy/sync-addresses", async (req: any, res: any) => {
       return res
         .status(500)
         .json(
-          makeError(
-            "MONERIUM_TOKENS_FETCH_FAILED",
-            error.message,
-            error,
-            500,
-          ),
+          makeError("MONERIUM_TOKENS_FETCH_FAILED", error.message, error, 500),
         );
     }
 
@@ -4083,14 +4184,16 @@ app.post("/monerium/alchemy/sync-addresses", async (req: any, res: any) => {
     });
   } catch (error) {
     console.error("❌ Alchemy sync-addresses failed:", error);
-    return res.status(500).json(
-      makeError(
-        "ALCHEMY_SYNC_FAILED",
-        error instanceof Error ? error.message : "Unknown error",
-        error,
-        500,
-      ),
-    );
+    return res
+      .status(500)
+      .json(
+        makeError(
+          "ALCHEMY_SYNC_FAILED",
+          error instanceof Error ? error.message : "Unknown error",
+          error,
+          500,
+        ),
+      );
   }
 });
 
@@ -4154,9 +4257,7 @@ app.post("/monerium/notify/test", async (req: any, res: any) => {
           .eq("userId", Number(userIdRaw))
           .maybeSingle();
         if (data?.id != null) privateUserId = String(data.id);
-        else
-          lookupDetail =
-            "No private_users row for this userId.";
+        else lookupDetail = "No private_users row for this userId.";
       }
     }
 
@@ -4164,12 +4265,10 @@ app.post("/monerium/notify/test", async (req: any, res: any) => {
       return res.status(400).json(
         makeError(
           "NOTIFY_TARGET_MISSING",
-          lookupDetail ||
-            "Provide walletAddress, privateUserId, or userId.",
+          lookupDetail || "Provide walletAddress, privateUserId, or userId.",
           {
             walletAddress: walletAddress || null,
-            hint:
-              "Check monerium_tokens.walletAddress in Supabase (lowercase 0x...). Alchemy list address may differ from this test wallet.",
+            hint: "Check monerium_tokens.walletAddress in Supabase (lowercase 0x...). Alchemy list address may differ from this test wallet.",
           },
         ),
       );
@@ -4184,17 +4283,21 @@ app.post("/monerium/notify/test", async (req: any, res: any) => {
           : "0xtest000000000000000000000000000000000000000000000000000000000000",
     });
 
-    return res.status(200).json({ ok: true, data: { privateUserId, notification } });
+    return res
+      .status(200)
+      .json({ ok: true, data: { privateUserId, notification } });
   } catch (error) {
     console.error("❌ notify/test failed:", error);
-    return res.status(500).json(
-      makeError(
-        "NOTIFY_TEST_FAILED",
-        error instanceof Error ? error.message : "Unknown error",
-        error,
-        500,
-      ),
-    );
+    return res
+      .status(500)
+      .json(
+        makeError(
+          "NOTIFY_TEST_FAILED",
+          error instanceof Error ? error.message : "Unknown error",
+          error,
+          500,
+        ),
+      );
   }
 });
 

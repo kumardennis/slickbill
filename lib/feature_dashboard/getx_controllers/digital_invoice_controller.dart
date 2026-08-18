@@ -5,6 +5,7 @@ import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
 import 'package:slickbill/feature_public/models/public_invoice_model.dart';
 import 'package:slickbill/feature_dashboard/models/public_invoice_claim_model.dart';
 import 'package:slickbill/feature_dashboard/repos/digital_invoices_repo.dart';
+import 'package:slickbill/feature_send/models/direct_share_draft.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class DigitalInvoiceController extends GetxController {
@@ -44,6 +45,19 @@ class DigitalInvoiceController extends GetxController {
 
   void requestReceivedListRefresh() {
     receivedListRefreshRequest.value++;
+  }
+
+  /// Prefill the Username (direct share) tab after Duplicate.
+  final Rxn<DirectShareDraft> directShareDraft = Rxn();
+
+  void setDirectShareDraft(DirectShareDraft draft) {
+    directShareDraft.value = draft;
+  }
+
+  DirectShareDraft? consumeDirectShareDraft() {
+    final draft = directShareDraft.value;
+    directShareDraft.value = null;
+    return draft;
   }
 
   // ==================== PRIVATE INVOICE METHODS ====================

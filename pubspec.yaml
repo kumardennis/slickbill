@@ -1,7 +1,7 @@
 name: slickbill
 description: A new Flutter project.
 publish_to: "none"
-version: 0.1.0+10
+version: 0.1.0+11
 
 environment:
   sdk: ">=3.0.1 <4.0.0"

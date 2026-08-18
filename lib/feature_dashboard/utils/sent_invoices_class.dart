@@ -138,4 +138,83 @@ class SentInvoicesClass {
       print(err);
     }
   }
+
+  Future<String?> remindInvoice(InvoiceModel invoice) async {
+    final receiverUserId = invoice.receivers.privateUsers?.userId;
+    if (receiverUserId == null || receiverUserId <= 0) {
+      Get.snackbar('Oops..', 'Receiver is missing');
+      return null;
+    }
+
+    final senderName =
+        '${userController.user.value.firstName ?? ''} ${userController.user.value.lastName ?? ''}'
+            .trim();
+    final amount = NumberFormat.currency(symbol: '€').format(invoice.amount);
+    final due = invoice.deadline.length >= 10
+        ? invoice.deadline.substring(0, 10)
+        : invoice.deadline;
+    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
+    final isOverdue = due.isNotEmpty && due.compareTo(today) < 0;
+    final isDueToday = due == today;
+
+    final title = isDueToday ? 'Payment due today' : 'Payment reminder';
+    final body = isOverdue
+        ? '${senderName.isEmpty ? 'Someone' : senderName} is waiting for $amount. This slickbill is overdue (due $due).'
+        : isDueToday
+            ? '${senderName.isEmpty ? 'Someone' : senderName} is waiting for $amount. Due today.'
+            : '${senderName.isEmpty ? 'Someone' : senderName} is waiting for $amount${due.isNotEmpty ? '. Due $due' : ''}.';
+
+    try {
+      final response = await Supabase.instance.client.functions.invoke(
+        'notifications/send-notification',
+        headers: {
+          'Authorization': 'Bearer ${userController.user.value.accessToken}'
+        },
+        body: {
+          'userId': receiverUserId,
+          'type': 'payment_reminder',
+          'invoiceId': invoice.id,
+          'title': title,
+          'body': body,
+        },
+      );
+
+      final data = response.data;
+      if (data is! Map || data['isRequestSuccessfull'] != true) {
+        Get.snackbar('Oops..', _errorText(data is Map ? data['error'] : data));
+        return null;
+      }
+
+      final remindedAt = DateTime.now().toUtc().toIso8601String();
+      try {
+        await Supabase.instance.client.from('digital_invoices').update({
+          'lastRemindedAt': remindedAt,
+        }).eq('id', invoice.id);
+      } catch (err) {
+        print('lastRemindedAt update skipped: $err');
+      }
+
+      return remindedAt;
+    } catch (err) {
+      print(err);
+      Get.snackbar('Oops..', _errorText(err));
+      return null;
+    }
+  }
+
+  String _errorText(dynamic error) {
+    if (error == null) return 'Could not send reminder';
+    if (error is String) {
+      final trimmed = error.trim();
+      if (trimmed.isEmpty || trimmed == '{}') return 'Could not send reminder';
+      return trimmed;
+    }
+    if (error is Map) {
+      final message = error['message'] ?? error['error'] ?? error['details'];
+      if (message != null) return _errorText(message);
+    }
+    final text = error.toString().trim();
+    if (text.isEmpty || text == '{}') return 'Could not send reminder';
+    return text;
+  }
 }

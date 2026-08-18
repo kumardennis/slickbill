@@ -52,10 +52,17 @@ function localdevHandler(req: Request, connInfo: ConnInfo) {
   try {
     return handler(req, connInfo);
   } catch (err) {
-    return new Response(JSON.stringify({ error: err }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    });
+    return new Response(
+      JSON.stringify({
+        isRequestSuccessfull: false,
+        data: null,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 200,
+      },
+    );
   }
 }
 

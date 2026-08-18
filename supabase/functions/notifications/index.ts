@@ -6,11 +6,13 @@ import {
 import { corsHeaders } from "../_shared/cors.ts";
 
 import { handler as send_notification } from "./send-notification/handler.ts";
+import { handler as send_due_reminders } from "./send-due-reminders/handler.ts";
 
 console.log("Setting up notifications");
 
 const handlers = {
   "send-notification": send_notification,
+  "send-due-reminders": send_due_reminders,
 };
 
 const apiHandler: Handler = async (req, connInfo) => {

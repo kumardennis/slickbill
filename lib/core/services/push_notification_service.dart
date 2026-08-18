@@ -365,6 +365,8 @@ class PushNotificationService {
         return 'Payment in process';
       case 'MONERIUM_ACCOUNT_TRANSFER':
         return 'You got money in Slickbills';
+      case 'payment_reminder':
+        return 'Payment reminder';
       default:
         return null;
     }
@@ -384,6 +386,8 @@ class PushNotificationService {
         return 'Your invoice payment is currently processing.';
       case 'MONERIUM_ACCOUNT_TRANSFER':
         return 'You got money in Slickbills.';
+      case 'payment_reminder':
+        return 'You have an unpaid slickbill waiting.';
       default:
         return null;
     }
@@ -404,6 +408,7 @@ class PushNotificationService {
       case 'invoice_received':
       case 'SLICKBILL_PROCESSING':
       case 'monerium_payment_processing':
+      case 'payment_reminder':
         final parsedInvoiceId = int.tryParse('$invoiceId');
         if (parsedInvoiceId == null) {
           Get.offAllNamed('/home-screen');
@@ -424,7 +429,6 @@ class PushNotificationService {
         break;
       case 'SLICKBILL_PAID':
       case 'invoice_claimed':
-      case 'payment_reminder':
         Get.offAllNamed('/home-screen');
         break;
       default:

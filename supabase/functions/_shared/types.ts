@@ -73,6 +73,7 @@ export type Database = {
           invoiceNo: string | null
           isObsolete: boolean | null
           isSeen: boolean | null
+          lastRemindedAt: string | null
           originalInvoiceNo: string | null
           paidOnDate: string | null
           privateGroupId: number | null
@@ -99,6 +100,7 @@ export type Database = {
           invoiceNo?: string | null
           isObsolete?: boolean | null
           isSeen?: boolean | null
+          lastRemindedAt?: string | null
           originalInvoiceNo?: string | null
           paidOnDate?: string | null
           privateGroupId?: number | null
@@ -125,6 +127,7 @@ export type Database = {
           invoiceNo?: string | null
           isObsolete?: boolean | null
           isSeen?: boolean | null
+          lastRemindedAt?: string | null
           originalInvoiceNo?: string | null
           paidOnDate?: string | null
           privateGroupId?: number | null

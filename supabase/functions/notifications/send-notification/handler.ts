@@ -74,6 +74,10 @@ export const handler = async (req: Request) => {
           finalTitle = finalTitle ?? "You got money in Slickbills";
           finalBody = finalBody ?? "You got money in Slickbills.";
           break;
+        case "payment_reminder":
+          finalTitle = finalTitle ?? "Payment reminder";
+          finalBody = finalBody ?? "You have an unpaid slickbill waiting.";
+          break;
         default:
           finalTitle = finalTitle ?? "Notification";
           finalBody = finalBody ?? "You have a new notification.";

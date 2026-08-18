@@ -15,7 +15,9 @@ class InputFieldAmount extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    var amountController = useTextEditingController();
+    var amountController = useTextEditingController(
+      text: receiverUser.amount > 0 ? receiverUser.amount.toString() : '',
+    );
 
     bool isNumeric(String value) {
       return num.tryParse(value) != null;

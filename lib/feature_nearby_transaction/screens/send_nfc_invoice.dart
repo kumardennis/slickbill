@@ -36,7 +36,11 @@ class SendNfcInvoice extends HookWidget {
 
     SendInvoicesClass sendInvoicesClass = SendInvoicesClass();
 
-    final tabController = useTabController(initialLength: 3);
+    final tabController = useTabController(
+      initialLength: 3,
+      initialIndex:
+          digitalInvoiceController.directShareDraft.value != null ? 2 : 0,
+    );
     final currentTab = useState(0);
 
     var receiverUserId = useState<String>('');
@@ -71,6 +75,24 @@ class SendNfcInvoice extends HookWidget {
 
       return null;
     }, [dueDateController.text]);
+
+    useEffect(() {
+      final draft = digitalInvoiceController.consumeDirectShareDraft();
+      if (draft == null) return null;
+
+      descriptionController.text = draft.description;
+      referenceNumberController.text = draft.referenceNo;
+      category.value = draft.category;
+      directReceivers.value = [draft.receiver];
+
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (tabController.index != 2) {
+          tabController.animateTo(2);
+        }
+      });
+
+      return null;
+    }, const []);
 
     Future createInvoice() async {
       if (receiverUserId.value.isNotEmpty) {
