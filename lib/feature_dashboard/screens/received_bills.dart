@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:get/get.dart';
+import 'package:intl/intl.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
+import 'package:slickbill/feature_dashboard/models/invoice_list_query.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
 import 'package:slickbill/feature_dashboard/utils/payment_class.dart';
 import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
+import 'package:slickbill/feature_dashboard/utils/invoice_csv_exporter.dart';
 import 'package:slickbill/feature_dashboard/widgets/invoice_card.dart';
+import 'package:slickbill/feature_dashboard/widgets/invoice_list_filter_bar.dart';
 import 'package:slickbill/feature_dashboard/widgets/received_invoice_sheet.dart';
 import 'package:slickbill/feature_dashboard/widgets/statistics_card.dart';
 import 'package:slickbill/feature_auth/services/monerium_service.dart';
@@ -33,49 +37,40 @@ class ReceivedBills extends HookWidget {
     final supabase = Supabase.instance.client;
 
     final isLoading = useState<bool>(false);
+    final hasLoaded = useState<bool>(false);
     final invoices = useState<List<InvoiceModel>?>([]);
     final pending = useState<double?>(0.0);
     final paidThisMonth = useState<double?>(0.0);
     final callInProgress = useState<bool>(false);
-
-    void recomputeSummaryFromInvoices(List<InvoiceModel>? rows) {
-      final items = rows ?? <InvoiceModel>[];
-
-      final pendingSum = items.where((i) {
-        final normalized = i.status.trim().toUpperCase();
-        return normalized == 'UNPAID' || normalized == 'PROCESSING';
-      }).fold<double>(0.0, (sum, i) => sum + i.amount);
-
-      final now = DateTime.now();
-      final paidThisMonthSum = items.where((i) {
-        final isPaid = i.status.trim().toUpperCase() == 'PAID';
-        if (!isPaid) return false;
-        final paidOnDate = i.paidOnDate;
-        if (paidOnDate == null || paidOnDate.trim().isEmpty) return false;
-        try {
-          final date = DateTime.parse(paidOnDate);
-          return date.year == now.year && date.month == now.month;
-        } catch (_) {
-          return false;
-        }
-      }).fold<double>(0.0, (sum, i) => sum + i.amount);
-
-      pending.value = pendingSum;
-      paidThisMonth.value = paidThisMonthSum;
-    }
+    final filter = useState(InvoiceListQuery(
+      month: currentInvoiceMonth(),
+      status: InvoiceStatusFilter.all,
+    ));
+    final fetchRef = useRef<Future<void> Function()>(() async {});
 
     Future<void> getInvoices() async {
       if (!context.mounted) return;
       isLoading.value = true;
+      final current = filter.value;
 
-      final response = await receivedInvoicesClass.getPrivateReceivedInvoices();
+      final results = await Future.wait([
+        receivedInvoicesClass.getPrivateReceivedInvoices(query: current),
+        receivedInvoicesClass.getOpenInvoicesSum(),
+        receivedInvoicesClass.getPaidInMonth(current.monthStart),
+      ]);
       if (!context.mounted) return;
 
-      invoices.value = response;
-      recomputeSummaryFromInvoices(response);
-
+      final rows = results[0] as List<InvoiceModel>?;
+      if (rows != null) {
+        invoices.value = rows;
+      }
+      pending.value = results[1] as double? ?? 0.0;
+      paidThisMonth.value = results[2] as double? ?? 0.0;
       isLoading.value = false;
+      hasLoaded.value = true;
     }
+
+    fetchRef.value = getInvoices;
 
     Future<void> updateInvoiceStatus(
       InvoiceModel invoice,
@@ -628,10 +623,13 @@ class ReceivedBills extends HookWidget {
       Future.microtask(() async {
         await getInvoices();
       });
+      return null;
+    }, [filter.value.month.year, filter.value.month.month, filter.value.status]);
 
+    useEffect(() {
       final refreshWorker =
           ever<int>(invoiceController.receivedListRefreshRequest, (_) {
-        getInvoices();
+        fetchRef.value();
       });
 
       final changes = supabase
@@ -645,7 +643,7 @@ class ReceivedBills extends HookWidget {
               column: 'receiverPrivateUserId',
               value: userController.user.value.privateUserId.toString(),
             ),
-            callback: (payload) => getInvoices(),
+            callback: (payload) => fetchRef.value(),
           )
           .subscribe();
 
@@ -657,59 +655,99 @@ class ReceivedBills extends HookWidget {
       };
     }, [userController.user.value.privateUserId]);
 
-    return RefreshIndicator(
-        color: Theme.of(context).colorScheme.light,
-        backgroundColor: Theme.of(context).colorScheme.blue,
-        onRefresh: () async {
-          await getInvoices();
-        },
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(0.0, 20.0, 20.0, 20.0),
-            child: isLoading.value
-                ? const Center(
-                    child: CircularProgressIndicator(),
-                  )
-                : invoices.value == null
-                    ? Text('lbl_NoInvoices'.tr)
+    final monthName =
+        DateFormat.MMMM().format(filter.value.monthStart);
+    final rows = invoices.value ?? <InvoiceModel>[];
+
+    return Column(
+      children: [
+        InvoiceListFilterBar(
+          query: filter.value,
+          onChanged: (next) => filter.value = next,
+          exportEnabled: rows.isNotEmpty,
+          onExport: () {
+            InvoiceCsvExporter.exportReceived(
+              invoices: rows,
+              query: filter.value,
+            );
+          },
+        ),
+        if (isLoading.value && hasLoaded.value)
+          LinearProgressIndicator(
+            minHeight: 2,
+            color: Theme.of(context).colorScheme.blue,
+            backgroundColor:
+                Theme.of(context).colorScheme.blue.withOpacity(0.15),
+          ),
+        Expanded(
+          child: RefreshIndicator(
+            color: Theme.of(context).colorScheme.light,
+            backgroundColor: Theme.of(context).colorScheme.blue,
+            onRefresh: getInvoices,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(0.0, 12.0, 20.0, 20.0),
+                child: !hasLoaded.value && isLoading.value
+                    ? const Padding(
+                        padding: EdgeInsets.only(top: 48),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
                     : Column(
                         children: [
                           StatisticsCard(
                             pendingAmount: pending.value,
                             paidAmount: paidThisMonth.value,
-                            pendingLabel: 'lbl_Pending'.tr,
-                            paidLabel: 'lbl_PaidThisMonth'.tr,
+                            pendingLabel: 'lbl_PendingToPay'.tr,
+                            paidLabel: 'lbl_PaidInMonth'.trParams({
+                              'month': monthName,
+                            }),
                           ),
-                          const SizedBox(
-                            height: 20,
-                          ),
-                          Column(
-                            children: invoices.value!
-                                .map((invoice) => Padding(
-                                      padding: const EdgeInsets.only(top: 20.0),
-                                      child: GestureDetector(
-                                        onTap: () async {
-                                          await openInvoice(invoice);
-                                        },
-                                        child: InvoiceCard(
-                                            amount: invoice.amount,
-                                            invoiceNo: invoice.invoiceNo,
-                                            date: invoice.createdAt,
-                                            dueDate: invoice.deadline,
-                                            paidOnDate: invoice.paidOnDate,
-                                            description: invoice.description,
-                                            senderOrReeceiverName:
-                                                '${invoice.senders?.privateUsers?.firstName} ${invoice.senders?.privateUsers?.lastName ?? ''}',
-                                            status: invoice.status,
-                                            isSeen: invoice.isSeen),
-                                      ),
-                                    ))
-                                .toList(),
-                          ),
+                          const SizedBox(height: 12),
+                          if (rows.isEmpty)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(20, 24, 0, 0),
+                              child: Text(
+                                'lbl_NoInvoicesInMonth'.trParams({
+                                  'month': monthName,
+                                }),
+                              ),
+                            )
+                          else
+                            Column(
+                              children: rows
+                                  .map((invoice) => Padding(
+                                        padding:
+                                            const EdgeInsets.only(top: 20.0),
+                                        child: GestureDetector(
+                                          onTap: () async {
+                                            await openInvoice(invoice);
+                                          },
+                                          child: InvoiceCard(
+                                              amount: invoice.amount,
+                                              invoiceNo: invoice.invoiceNo,
+                                              date: invoice.createdAt,
+                                              dueDate: invoice.deadline,
+                                              paidOnDate: invoice.paidOnDate,
+                                              description: invoice.description,
+                                              senderOrReeceiverName:
+                                                  invoice.displaySenderName,
+                                              status: invoice.status,
+                                              isSeen: invoice.isSeen,
+                                              isFromBusiness:
+                                                  invoice.isFromBusiness),
+                                        ),
+                                      ))
+                                  .toList(),
+                            ),
                         ],
                       ),
+              ),
+            ),
           ),
-        ));
+        ),
+      ],
+    );
   }
 }
 

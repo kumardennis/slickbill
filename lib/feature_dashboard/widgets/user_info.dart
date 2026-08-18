@@ -13,6 +13,21 @@ class UserInfo extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
+    final user = userController.user.value;
+    final personalName = [
+      user.firstName,
+      user.lastName,
+    ]
+        .whereType<String>()
+        .map((part) => part.trim())
+        .where((part) => part.isNotEmpty)
+        .join(' ');
+    final displayName = personalName.isNotEmpty
+        ? personalName
+        : (user.fullName?.trim().isNotEmpty == true ? user.fullName! : "No user");
+    final avatarLetter =
+        displayName.isNotEmpty ? displayName[0].toUpperCase() : "U";
+
     // Placeholder for user info widget
     return Container(
       width: double.infinity,
@@ -87,14 +102,7 @@ class UserInfo extends HookWidget {
                   ),
                   child: Center(
                     child: Text(
-                      (userController.user.value.fullName?.isNotEmpty == true
-                              ? userController.user.value.fullName![0]
-                              : userController
-                                          .user.value.firstName?.isNotEmpty ==
-                                      true
-                                  ? userController.user.value.firstName![0]
-                                  : "U")
-                          .toUpperCase(),
+                      avatarLetter,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 32,
@@ -111,9 +119,7 @@ class UserInfo extends HookWidget {
 
             // Name with enhanced styling
             Text(
-              userController.user.value.fullName ??
-                  userController.user.value.firstName ??
-                  "No user",
+              displayName,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 color: Colors.white,
@@ -166,43 +172,75 @@ class UserInfo extends HookWidget {
 
             const SizedBox(height: 16),
 
-            // Optional: Add user type badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: userController.user.value.isPrivate
-                    ? Theme.of(context).colorScheme.lightGreen.withOpacity(0.2)
-                    : Theme.of(context).colorScheme.yellow.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    userController.user.value.isPrivate
-                        ? Icons.person
-                        : Icons.business,
-                    color: userController.user.value.isPrivate
-                        ? Theme.of(context).colorScheme.lightGreen
-                        : Theme.of(context).colorScheme.yellow,
-                    size: 14,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    userController.user.value.isPrivate
-                        ? 'Private'
-                        : 'Business',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: userController.user.value.isPrivate
-                              ? Theme.of(context).colorScheme.lightGreen
-                              : Theme.of(context).colorScheme.yellow,
+            if (user.isBusiness) ...[
+              if ((user.publicName?.trim().isNotEmpty ?? false))
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Text(
+                    user.publicName!.trim(),
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          color: Colors.white,
                           fontWeight: FontWeight.w600,
-                          fontSize: 12,
                         ),
                   ),
-                ],
+                ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.yellow.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.business,
+                      color: Theme.of(context).colorScheme.yellow,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'lbl_Business'.tr,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.yellow,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                    ),
+                  ],
+                ),
               ),
-            ),
+            ] else
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color:
+                      Theme.of(context).colorScheme.lightGreen.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.person,
+                      color: Theme.of(context).colorScheme.lightGreen,
+                      size: 14,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'lbl_Private'.tr,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.lightGreen,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),

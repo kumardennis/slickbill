@@ -83,6 +83,7 @@ export type Database = {
           referenceNo: string | null
           senderIban: string | null
           senderId: number | null
+          senderIsBusiness: boolean
           senderName: string | null
           senderPrivateUserId: number | null
           status: string
@@ -110,6 +111,7 @@ export type Database = {
           referenceNo?: string | null
           senderIban?: string | null
           senderId?: number | null
+          senderIsBusiness?: boolean
           senderName?: string | null
           senderPrivateUserId?: number | null
           status?: string
@@ -137,6 +139,7 @@ export type Database = {
           referenceNo?: string | null
           senderIban?: string | null
           senderId?: number | null
+          senderIsBusiness?: boolean
           senderName?: string | null
           senderPrivateUserId?: number | null
           status?: string
@@ -290,7 +293,9 @@ export type Database = {
           iban: string | null
           ibans: Json | null
           id: number
+          isBusiness: boolean
           lastName: string | null
+          publicName: string | null
           userId: number | null
         }
         Insert: {
@@ -300,7 +305,9 @@ export type Database = {
           iban?: string | null
           ibans?: Json | null
           id?: number
+          isBusiness?: boolean
           lastName?: string | null
+          publicName?: string | null
           userId?: number | null
         }
         Update: {
@@ -310,7 +317,9 @@ export type Database = {
           iban?: string | null
           ibans?: Json | null
           id?: number
+          isBusiness?: boolean
           lastName?: string | null
+          publicName?: string | null
           userId?: number | null
         }
         Relationships: [
@@ -345,6 +354,7 @@ export type Database = {
           receiverPrivateUserId: number | null
           referenceNo: string | null
           senderIban: string | null
+          senderIsBusiness: boolean
           senderName: string | null
           senderPrivateUserId: number | null
           status: string
@@ -372,6 +382,7 @@ export type Database = {
           receiverPrivateUserId?: number | null
           referenceNo?: string | null
           senderIban?: string | null
+          senderIsBusiness?: boolean
           senderName?: string | null
           senderPrivateUserId?: number | null
           status?: string
@@ -399,6 +410,7 @@ export type Database = {
           receiverPrivateUserId?: number | null
           referenceNo?: string | null
           senderIban?: string | null
+          senderIsBusiness?: boolean
           senderName?: string | null
           senderPrivateUserId?: number | null
           status?: string

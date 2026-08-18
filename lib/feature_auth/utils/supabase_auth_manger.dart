@@ -93,6 +93,12 @@ class SupabaseAuthManger {
 
     final parsedIbans = _parseIbans(ibansData);
 
+    final privateRow =
+        privateUserResponse.isNotEmpty ? privateUserResponse[0] : null;
+    final businessRow =
+        businessUserResponse.isNotEmpty ? businessUserResponse[0] : null;
+    final privatePublicName = privateRow?['publicName'] as String?;
+
     final clientUserClassed = ClientUserModel(
       id: userRecordResponse[0]['id'],
       username: userRecordResponse[0]['username'],
@@ -100,6 +106,7 @@ class SupabaseAuthManger {
       authUserId: userRecordResponse[0]['authUserId'],
       accessToken: tokenToUse,
       isPrivate: privateUserResponse.length > 0,
+      isBusiness: privateRow?['isBusiness'] == true,
       privateUserId:
           privateUserResponse.length > 0 ? privateUserResponse[0]['id'] : null,
       businessUserId: businessUserResponse.length > 0
@@ -124,9 +131,10 @@ class SupabaseAuthManger {
       fullName: businessUserResponse.length > 0
           ? businessUserResponse[0]['fullName']
           : null,
-      publicName: businessUserResponse.length > 0
-          ? businessUserResponse[0]['publicName']
-          : null,
+      publicName: (privatePublicName != null &&
+              privatePublicName.trim().isNotEmpty)
+          ? privatePublicName
+          : businessRow?['publicName'],
       strigaUserId: userRecordResponse[0]['strigaUserId'],
       strigaWalletId: userRecordResponse[0]['strigaWalletId'],
       cdpWalletId: userRecordResponse[0]['cdpWalletId'],

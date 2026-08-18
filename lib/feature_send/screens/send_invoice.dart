@@ -251,8 +251,8 @@ class SendInvoice extends HookWidget {
           deadline: DateTime.parse(dueDateController.text),
           referenceNo: referenceNumberController.text,
           category: category.value,
-          senderName:
-              '${userController.user.value.firstName} ${userController.user.value.lastName}',
+          senderName: userController.user.value.requestDisplayName,
+          senderIsBusiness: userController.user.value.isBusiness,
           senderIban: userController.user.value.iban,
           senderPrivateUserId: userController.user.value.privateUserId,
         );

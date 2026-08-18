@@ -26,6 +26,7 @@ class InvoiceModel {
     required this.txHash,
     this.moneriumOrderId,
     this.lastRemindedAt,
+    this.senderIsBusiness = false,
   });
   late final int id;
   late final String createdAt;
@@ -52,6 +53,7 @@ class InvoiceModel {
   late final String? txHash;
   late final String? moneriumOrderId;
   late final String? lastRemindedAt;
+  late final bool senderIsBusiness;
 
   InvoiceModel.fromJson(Map<String, dynamic> json) {
     id = json['id'];
@@ -80,6 +82,7 @@ class InvoiceModel {
     txHash = json['txHash'];
     moneriumOrderId = json['moneriumOrderId'];
     lastRemindedAt = json['lastRemindedAt'];
+    senderIsBusiness = json['senderIsBusiness'] == true;
   }
 
   Map<String, dynamic> toJson() {
@@ -106,7 +109,22 @@ class InvoiceModel {
     _data['txHash'] = txHash;
     _data['moneriumOrderId'] = moneriumOrderId;
     _data['lastRemindedAt'] = lastRemindedAt;
+    _data['senderIsBusiness'] = senderIsBusiness;
     return _data;
+  }
+
+  bool get isFromBusiness => senderIsBusiness;
+
+  String get displaySenderName {
+    final snapshotted = senderName.trim();
+    if (snapshotted.isNotEmpty) return snapshotted;
+    return senders?.privateUsers?.displayName.trim() ?? '';
+  }
+
+  String get displayReceiverName {
+    final business = receivers.businessUsers?.publicName.trim();
+    if (business != null && business.isNotEmpty) return business;
+    return receivers.privateUsers?.displayName.trim() ?? '';
   }
 }
 
@@ -156,6 +174,8 @@ class PrivateUsers {
     required this.userId,
     required this.iban,
     required this.bankAccountName,
+    this.isBusiness = false,
+    this.publicName,
     this.users,
   });
   late final int id;
@@ -165,6 +185,8 @@ class PrivateUsers {
   late final int userId;
   late final String? iban;
   late final String bankAccountName;
+  late final bool isBusiness;
+  late final String? publicName;
   late final SupabaseUserModel? users;
 
   PrivateUsers.fromJson(Map<String, dynamic> json) {
@@ -175,6 +197,8 @@ class PrivateUsers {
     userId = json['userId'] ?? 0;
     iban = json['iban'];
     bankAccountName = json['bankAccountName'] ?? "";
+    isBusiness = json['isBusiness'] == true;
+    publicName = json['publicName'] as String?;
     users = json['users'] != null
         ? SupabaseUserModel.fromJson(json['users'])
         : null;
@@ -189,8 +213,18 @@ class PrivateUsers {
     _data['userId'] = userId;
     _data['iban'] = iban;
     _data['bankAccountName'] = bankAccountName;
+    _data['isBusiness'] = isBusiness;
+    _data['publicName'] = publicName;
     _data['users'] = users?.toJson();
     return _data;
+  }
+
+  String get displayName {
+    if (isBusiness) {
+      final public = publicName?.trim() ?? '';
+      if (public.isNotEmpty) return public;
+    }
+    return '$firstName $lastName'.trim();
   }
 }
 

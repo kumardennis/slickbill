@@ -1,3 +1,4 @@
+import 'package:slickbill/feature_dashboard/models/invoice_list_query.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:slickbill/feature_public/models/public_invoice_model.dart';
@@ -116,6 +117,7 @@ class DigitalInvoiceRepository {
     String? description,
     int? rawInvoiceId,
     String? senderName,
+    bool senderIsBusiness = false,
     DateTime? deadline,
     String? invoiceNo,
     String? originalInvoiceNo,
@@ -135,6 +137,7 @@ class DigitalInvoiceRepository {
       'description': description,
       'rawInvoiceId': rawInvoiceId,
       'senderName': senderName,
+      'senderIsBusiness': senderIsBusiness,
       'deadline': deadline?.toIso8601String(),
       'invoiceNo': invoiceNo,
       'originalInvoiceNo': originalInvoiceNo,
@@ -255,6 +258,7 @@ class DigitalInvoiceRepository {
         'deadline': publicInvoice.deadline,
         'senderIban': publicInvoice.senderIban,
         'senderName': publicInvoice.senderName,
+        'senderIsBusiness': publicInvoice.senderIsBusiness,
         'referenceNo': publicInvoice.referenceNo,
         'invoiceNo':
             '${claimerPrivateUserId}${DateTime.now().millisecondsSinceEpoch}',
@@ -322,9 +326,10 @@ class DigitalInvoiceRepository {
 
   /// Get all public invoices created by a user (by senderPrivateUserId)
   Future<List<PublicInvoiceModel>> getPublicInvoicesBySender(
-      int senderPrivateUserId) async {
+      int senderPrivateUserId,
+      {InvoiceListQuery? query}) async {
     try {
-      final response = await _client
+      var request = _client
           .from('public_digital_invoices')
           .select('''
           *,
@@ -344,7 +349,9 @@ class DigitalInvoiceRepository {
                   firstName,
                   lastName,
                   bankAccountName,
-                  iban
+                  iban,
+                  isBusiness,
+                  publicName
                 ),
                 business_users(
                   *
@@ -359,24 +366,57 @@ class DigitalInvoiceRepository {
                   firstName,
                   lastName,
                   bankAccountName,
-                  iban
+                  iban,
+                  isBusiness,
+                  publicName
                 )
               )
             )
           )
         ''')
           .eq('senderPrivateUserId', senderPrivateUserId)
-          .not('publicToken', 'is', null) // Filter out null tokens
-          .order('created_at', ascending: false);
+          .not('publicToken', 'is', null);
+
+      if (query != null) {
+        switch (query.status) {
+          case InvoiceStatusFilter.all:
+            request = request.or(
+              'and(created_at.gte."${query.createdFrom}",created_at.lt."${query.createdTo}"),status.in.(UNPAID,PROCESSING,PENDING)',
+            );
+            break;
+          case InvoiceStatusFilter.unpaid:
+            request = request.eq('status', 'UNPAID');
+            break;
+          case InvoiceStatusFilter.processing:
+            request = request.eq('status', 'PROCESSING');
+            break;
+          case InvoiceStatusFilter.paid:
+            final range = query.paidOnDateRange;
+            request = request
+                .eq('status', 'PAID')
+                .gte('paidOnDate', range[0])
+                .lte('paidOnDate', range[1]);
+            break;
+        }
+      }
+
+      final response = await request.order('created_at', ascending: false);
 
       print('Public invoices raw response: $response');
 
       return (response as List)
-          .where((invoice) => invoice['publicToken'] != null) // Extra safety
+          .where((invoice) => invoice['publicToken'] != null)
           .map((invoice) {
         print(
             'Processing invoice: ${invoice['id']}, token: ${invoice['publicToken']}');
         return PublicInvoiceModel.fromJson(invoice);
+      }).where((invoice) {
+        if (query == null) return true;
+        return query.matches(
+          status: invoice.status,
+          createdAt: invoice.createdAt.toIso8601String(),
+          paidOnDate: invoice.paidOnDate,
+        );
       }).toList();
     } catch (e, stackTrace) {
       print('Error fetching public invoices by sender: $e');

@@ -329,6 +329,39 @@ class UserController extends GetxController {
     }
   }
 
+  Future<bool> updateBusinessProfile({
+    required bool isBusiness,
+    String? publicName,
+  }) async {
+    try {
+      final privateUserId = user.value.privateUserId;
+      if (privateUserId == null) {
+        return false;
+      }
+
+      final trimmedPublicName = publicName?.trim();
+      final response = await _userRepo.updateBusinessProfile(
+        privateUserId: privateUserId,
+        isBusiness: isBusiness,
+        publicName: trimmedPublicName,
+      );
+
+      if (response == null) {
+        return false;
+      }
+
+      user.value = user.value.copyWith(
+        isBusiness: isBusiness,
+        publicName: trimmedPublicName ?? user.value.publicName,
+      );
+      await saveUserData();
+      return true;
+    } catch (e) {
+      print('Error updating business profile: $e');
+      return false;
+    }
+  }
+
   Future<void> clearUserData() async {
     try {
       await _googleAuthService.signOut();

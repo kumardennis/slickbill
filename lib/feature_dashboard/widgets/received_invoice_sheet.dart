@@ -12,6 +12,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../feature_auth/utils/money_formatter.dart';
 import '../models/invoice_model.dart';
+import 'from_business_badge.dart';
 
 class ReceivedInvoiceSheet extends HookWidget {
   final InvoiceModel invoice;
@@ -219,8 +220,7 @@ class ReceivedInvoiceSheet extends HookWidget {
     final shouldShowRecheck = normalizedStatus != 'PAID';
     final sender = displayedInvoice.senders;
     final senderPrivateUsers = sender?.privateUsers;
-    final senderFirstName = senderPrivateUsers?.firstName ?? '';
-    final senderLastName = senderPrivateUsers?.lastName ?? '';
+    final senderDisplayName = displayedInvoice.displaySenderName;
     final senderIban = senderPrivateUsers?.iban ?? '-';
     final senderAccountHolder =
         senderPrivateUsers?.bankAccountName.isNotEmpty == true
@@ -273,6 +273,10 @@ class ReceivedInvoiceSheet extends HookWidget {
                             .headlineMedium
                             ?.copyWith(fontWeight: FontWeight.w600),
                       ),
+                      if (displayedInvoice.isFromBusiness) ...[
+                        const SizedBox(height: 6),
+                        const FromBusinessBadge(),
+                      ],
                       Text(
                           DateFormat('EEE, dd MMM yyyy').format(
                               DateTime.parse(displayedInvoice.createdAt)),
@@ -281,7 +285,7 @@ class ReceivedInvoiceSheet extends HookWidget {
                               .bodySmall
                               ?.copyWith(
                                   color: Theme.of(context).colorScheme.gray)),
-                      Text('$senderFirstName $senderLastName',
+                      Text(senderDisplayName,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context).textTheme.displayMedium),
                     ],

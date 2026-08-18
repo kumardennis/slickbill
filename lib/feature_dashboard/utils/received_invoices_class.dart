@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../feature_auth/getx_controllers/user_controller.dart';
+import '../models/invoice_list_query.dart';
 import '../models/invoice_model.dart';
 
 class ReceivedInvoicesClass {
@@ -11,17 +12,31 @@ class ReceivedInvoicesClass {
   Future<List<InvoiceModel>?> getPrivateReceivedInvoices({
     int? id,
     bool silent = false,
+    InvoiceListQuery? query,
+    bool openOnly = false,
+    DateTime? paidInMonth,
   }) async {
     print("=====BILS=====");
     print(userController.user.value.privateUserId);
     try {
+      final body = <String, dynamic>{
+        "privateUserId": userController.user.value.privateUserId,
+        if (id != null) "invoiceId": id,
+        if (openOnly) "openOnly": true,
+        if (query != null) ...query.toRequestBody(),
+        if (paidInMonth != null) ...{
+          "status": "PAID",
+          "paidOnDateRange": InvoiceListQuery(
+            month: paidInMonth,
+            status: InvoiceStatusFilter.paid,
+          ).paidOnDateRange,
+        },
+      };
+
       final response = await Supabase.instance.client.functions
           .invoke('invoices/get-private-user-received-invoices', headers: {
         'Authorization': 'Bearer ${userController.user.value.accessToken}'
-      }, body: {
-        "privateUserId": userController.user.value.privateUserId,
-        if (id != null) "invoiceId": id,
-      });
+      }, body: body);
 
       final data = await response.data;
 
@@ -29,6 +44,16 @@ class ReceivedInvoicesClass {
         List<InvoiceModel> invoices = (data['data'] as List)
             .map((e) => InvoiceModel.fromJson(e))
             .toList();
+
+        if (query != null) {
+          invoices = invoices
+              .where((invoice) => query.matches(
+                    status: invoice.status,
+                    createdAt: invoice.createdAt,
+                    paidOnDate: invoice.paidOnDate,
+                  ))
+              .toList();
+        }
 
         print(invoices);
 
@@ -43,6 +68,24 @@ class ReceivedInvoicesClass {
       print(err);
       return null;
     }
+  }
+
+  Future<double?> getOpenInvoicesSum() async {
+    final invoices = await getPrivateReceivedInvoices(
+      openOnly: true,
+      silent: true,
+    );
+    if (invoices == null) return null;
+    return invoices.fold<double>(0.0, (sum, invoice) => sum + invoice.amount);
+  }
+
+  Future<double?> getPaidInMonth(DateTime month) async {
+    final invoices = await getPrivateReceivedInvoices(
+      paidInMonth: month,
+      silent: true,
+    );
+    if (invoices == null) return null;
+    return invoices.fold<double>(0.0, (sum, invoice) => sum + invoice.amount);
   }
 
   Future<double?> getPendingInvoicesSum() async {

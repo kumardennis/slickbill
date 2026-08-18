@@ -13,6 +13,7 @@ import 'package:slickbill/feature_dashboard/widgets/monerium_balance_card.dart';
 import 'package:slickbill/feature_dashboard/widgets/monerium_kyc_status_card.dart';
 import 'package:slickbill/feature_dashboard/widgets/user_info.dart';
 import 'package:slickbill/feature_dashboard/widgets/wallet_info.dart';
+import 'package:slickbill/feature_dashboard/widgets/business_profile_card.dart';
 import 'package:slickbill/shared_widgets/custom_appbar.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -102,6 +103,7 @@ class Profile extends HookWidget {
                 children: [
                   MoneriumBalanceCard(user: user),
                   UserInfo(),
+                  const BusinessProfileCard(),
                   const WalletInfo(),
                   MoneriumKycStatusCard(userId: moneriumUserId),
                   const SizedBox(height: 20),

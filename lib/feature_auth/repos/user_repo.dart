@@ -272,4 +272,29 @@ class UserRepo {
       rethrow;
     }
   }
+
+  Future<Map<String, dynamic>?> updateBusinessProfile({
+    required int privateUserId,
+    required bool isBusiness,
+    String? publicName,
+  }) async {
+    try {
+      final payload = <String, dynamic>{'isBusiness': isBusiness};
+      if (publicName != null) {
+        payload['publicName'] = publicName;
+      }
+
+      final response = await _client
+          .from('private_users')
+          .update(payload)
+          .eq('id', privateUserId)
+          .select()
+          .single();
+
+      return response;
+    } catch (e) {
+      debugPrint('Error updating business profile: $e');
+      rethrow;
+    }
+  }
 }

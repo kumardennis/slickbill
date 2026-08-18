@@ -113,6 +113,7 @@ class ClientUserModel {
   final String? fullName;
   final String? publicName;
   final bool isPrivate;
+  final bool isBusiness;
   final String? strigaUserId;
   final String? strigaWalletId;
   final String? cdpWalletId;
@@ -135,6 +136,7 @@ class ClientUserModel {
     this.fullName,
     this.publicName,
     required this.isPrivate,
+    this.isBusiness = false,
     this.strigaUserId,
     this.strigaWalletId,
     this.cdpWalletId,
@@ -158,6 +160,7 @@ class ClientUserModel {
         fullName = null,
         publicName = null,
         isPrivate = true,
+        isBusiness = false,
         strigaUserId = null,
         strigaWalletId = null,
         cdpWalletId = null,
@@ -184,7 +187,8 @@ class ClientUserModel {
       lastName: json['lastName'] as String?,
       fullName: json['fullName'] as String?,
       publicName: json['publicName'] as String?,
-      isPrivate: json['isPrivate'] as bool,
+      isPrivate: json['isPrivate'] as bool? ?? true,
+      isBusiness: json['isBusiness'] as bool? ?? false,
       strigaUserId: json['strigaUserId'] as String?,
       strigaWalletId: json['strigaWalletId'] as String?,
       cdpWalletId: json['cdpWalletId'] as String?,
@@ -211,6 +215,7 @@ class ClientUserModel {
       'fullName': fullName,
       'publicName': publicName,
       'isPrivate': isPrivate,
+      'isBusiness': isBusiness,
       'strigaUserId': strigaUserId,
       'strigaWalletId': strigaWalletId,
       'cdpWalletId': cdpWalletId,
@@ -235,6 +240,7 @@ class ClientUserModel {
     String? fullName,
     String? publicName,
     bool? isPrivate,
+    bool? isBusiness,
     String? strigaUserId,
     String? sringaWalletId,
     String? cdpWalletId,
@@ -257,12 +263,28 @@ class ClientUserModel {
       fullName: fullName ?? this.fullName,
       publicName: publicName ?? this.publicName,
       isPrivate: isPrivate ?? this.isPrivate,
+      isBusiness: isBusiness ?? this.isBusiness,
       strigaUserId: strigaUserId ?? this.strigaUserId,
       strigaWalletId: strigaWalletId ?? this.strigaWalletId,
       cdpWalletId: cdpWalletId ?? this.cdpWalletId,
       metamaskWalletAddress:
           metamaskWalletAddress ?? this.metamaskWalletAddress,
     );
+  }
+
+  /// Name shown on requests: public business name, else first + last.
+  String get requestDisplayName {
+    if (isBusiness) {
+      final public = publicName?.trim() ?? '';
+      if (public.isNotEmpty) return public;
+    }
+    final personal = [firstName, lastName]
+        .whereType<String>()
+        .map((value) => value.trim())
+        .where((value) => value.isNotEmpty)
+        .join(' ');
+    if (personal.isNotEmpty) return personal;
+    return username.trim();
   }
 }
 

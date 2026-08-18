@@ -19,8 +19,8 @@ class SendInvoicesClass {
         'Authorization': 'Bearer ${userController.user.value.accessToken}'
       }, body: {
         "privateUserId": userController.user.value.privateUserId,
-        "senderName":
-            '${userController.user.value.firstName} ${userController.user.value.lastName}',
+        "senderName": userController.user.value.requestDisplayName,
+        "senderIsBusiness": userController.user.value.isBusiness,
 
         "senderIban": currentBankController.current.value.iban,
 
@@ -63,8 +63,8 @@ class SendInvoicesClass {
         'Authorization': 'Bearer ${userController.user.value.accessToken}'
       }, body: {
         "privateUserId": userController.user.value.privateUserId,
-        "senderName":
-            '${userController.user.value.firstName} ${userController.user.value.lastName?[0].toUpperCase()}',
+        "senderName": userController.user.value.requestDisplayName,
+        "senderIsBusiness": userController.user.value.isBusiness,
 
         "senderIban": currentBankController.current.value.iban.isNotEmpty
             ? currentBankController.current.value.iban
@@ -102,7 +102,8 @@ class SendInvoicesClass {
       senderName,
       senderIban,
       receiverUserAmount,
-      category) async {
+      category,
+      [senderIsBusiness]) async {
     try {
       var normalizedSenderIban = (senderIban ?? '').toString().trim();
 
@@ -151,6 +152,7 @@ class SendInvoicesClass {
       }, body: {
         "privateUserId": senderPrivateUserId,
         "senderName": senderName,
+        "senderIsBusiness": senderIsBusiness == true,
         "senderIban": normalizedSenderIban,
         "receiverUserId": userController.user.value.id,
         "receiverPrivateUserId": userController.user.value.privateUserId,
@@ -197,8 +199,8 @@ class SendInvoicesClass {
         'Authorization': 'Bearer ${userController.user.value.accessToken}'
       }, body: {
         "privateUserId": userController.user.value.privateUserId,
-        "senderName":
-            '${userController.user.value.firstName} ${userController.user.value.lastName?[0].toUpperCase()}',
+        "senderName": userController.user.value.requestDisplayName,
+        "senderIsBusiness": userController.user.value.isBusiness,
         "senderIban": currentBankController.current.value.iban,
         "receiverUsers": receivers,
         "description": description,

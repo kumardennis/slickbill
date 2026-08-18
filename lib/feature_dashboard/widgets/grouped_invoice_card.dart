@@ -30,11 +30,10 @@ class GroupedInvoiceCard extends StatelessWidget {
           dueDate: i.deadline,
           paidOnDate: i.paidOnDate,
           description: i.description,
-          senderOrReeceiverName: i.receivers.businessUsers != null
-              ? '${i.receivers.businessUsers?.publicName}'
-              : '${i.receivers.privateUsers?.firstName} ${i.receivers.privateUsers?.lastName}',
+          senderOrReeceiverName: i.displayReceiverName,
           status: i.status,
           isSeen: i.isSeen,
+          isFromBusiness: i.isFromBusiness,
         ),
       );
     }
@@ -189,11 +188,10 @@ class GroupedInvoiceCard extends StatelessWidget {
                       dueDate: i.deadline,
                       paidOnDate: i.paidOnDate,
                       description: i.description,
-                      senderOrReeceiverName: i.receivers.businessUsers != null
-                          ? '${i.receivers.businessUsers?.publicName}'
-                          : '${i.receivers.privateUsers?.firstName} ${i.receivers.privateUsers?.lastName}',
+                      senderOrReeceiverName: i.displayReceiverName,
                       status: i.status,
                       isSeen: i.isSeen,
+                      isFromBusiness: i.isFromBusiness,
                     ),
                   ),
                 ),

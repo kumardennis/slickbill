@@ -206,7 +206,9 @@ class ReceivedBills extends HookWidget {
                                         senderOrReeceiverName:
                                             invoice.senderName,
                                         status: invoice.status,
-                                        isSeen: invoice.isSeen),
+                                        isSeen: invoice.isSeen,
+                                        isFromBusiness:
+                                            invoice.isFromBusiness),
                                   ),
                                 ))
                             .toList(),

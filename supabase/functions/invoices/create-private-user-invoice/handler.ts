@@ -18,6 +18,7 @@ export const handler = async (req: Request) => {
       privateUserId,
       senderName,
       senderIban,
+      senderIsBusiness: senderIsBusinessFromBody,
       receiverPrivateUserId,
       receiverUserId,
       receiverIsPrivate,
@@ -46,6 +47,16 @@ export const handler = async (req: Request) => {
         headers: { "Content-Type": "application/json" },
       });
     }
+
+    const { data: senderProfile } = await supabase
+      .from("private_users")
+      .select("isBusiness")
+      .eq("id", privateUserId)
+      .maybeSingle();
+
+    const senderIsBusiness = typeof senderIsBusinessFromBody === "boolean"
+      ? senderIsBusinessFromBody
+      : senderProfile?.isBusiness === true;
 
     const { data: senderData, error: senderError } = await supabase
       .from("senders")
@@ -101,6 +112,7 @@ export const handler = async (req: Request) => {
           description,
           senderName,
           senderIban,
+          senderIsBusiness,
           deadline: dueDate,
           invoiceNo: `${privateUserId}${Date.now()}`,
           referenceNo,
@@ -128,12 +140,6 @@ export const handler = async (req: Request) => {
       error: digitalInvoiceError,
     };
 
-    const { data: sender, error: _senderError2 } = await supabase
-      .from("private_users")
-      .select("firstName, lastName")
-      .eq("id", privateUserId)
-      .single();
-
     const { data: receiverUser } = await supabase
       .from("users")
       .select("fcm_token")
@@ -145,8 +151,8 @@ export const handler = async (req: Request) => {
       await sendFcmPush({
         token: fcmToken,
         title: "New Slickbill!",
-        body: sender?.firstName
-          ? `${sender?.firstName} sent you a slickbill!`
+        body: senderName
+          ? `${senderName} sent you a slickbill!`
           : "You received a new slickbill!",
         data: {
           type: "NEW_SLICKBILL",

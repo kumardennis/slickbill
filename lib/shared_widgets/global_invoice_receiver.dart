@@ -233,6 +233,7 @@ class GlobalReceiveService {
       final senderIban = normalizeString(jsonObject['senderIban']);
       final amount = jsonObject['amount'];
       final category = normalizeString(jsonObject['category']);
+      final senderIsBusiness = jsonObject['senderIsBusiness'] == true;
 
       final missingFields = <String>[
         if (description.isEmpty) 'description',
@@ -267,6 +268,7 @@ class GlobalReceiveService {
         senderIban,
         amount,
         category,
+        senderIsBusiness,
       );
 
       if (invoiceId == null) {

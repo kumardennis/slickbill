@@ -23,6 +23,7 @@ import 'package:slickbill/feature_send/models/receiver_user_model.dart';
 import 'package:slickbill/feature_send/models/users_by_username_model.dart';
 import 'package:slickbill/feature_send/screens/quick_share.dart';
 import 'package:slickbill/feature_send/utils/send_invoices_class.dart';
+import 'package:slickbill/shared_widgets/custom_appbar.dart';
 
 class SendNfcInvoice extends HookWidget {
   const SendNfcInvoice({super.key});
@@ -187,6 +188,7 @@ class SendNfcInvoice extends HookWidget {
           jsonObject['senderIban'],
           jsonObject['amount'],
           jsonObject['category'],
+          jsonObject['senderIsBusiness'] == true,
         );
 
         navigationController.changeIndex(0);
@@ -276,8 +278,8 @@ class SendNfcInvoice extends HookWidget {
         'dueDate': dueDateController.text,
         'referenceNumber': referenceNumberController.text,
         'senderPrivateUserId': userController.user.value.privateUserId,
-        'senderName':
-            '${userController.user.value.firstName} ${userController.user.value.lastName}',
+        'senderName': userController.user.value.requestDisplayName,
+        'senderIsBusiness': userController.user.value.isBusiness,
         'senderIban': senderIban,
         'amount': receiverUserAmount.value,
         'category': category.value,
@@ -347,8 +349,8 @@ class SendNfcInvoice extends HookWidget {
           deadline: DateTime.parse(dueDateController.text),
           referenceNo: referenceNumberController.text,
           category: category.value,
-          senderName:
-              '${userController.user.value.firstName} ${userController.user.value.lastName}',
+          senderName: userController.user.value.requestDisplayName,
+          senderIsBusiness: userController.user.value.isBusiness,
           senderIban: userController.user.value.iban,
           senderPrivateUserId: userController.user.value.privateUserId,
         );
@@ -414,65 +416,52 @@ class SendNfcInvoice extends HookWidget {
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.light,
-      appBar: AppBar(
-        title: Text(
-          'Invoice Exchange',
-          style: TextStyle(
-            color: Theme.of(context).colorScheme.dark,
+      appBar: CustomAppbar(
+        title: 'hd_Exchange',
+        appbarIcon: null,
+        showSettings: true,
+        tabBar: TabBar(
+          controller: tabController,
+          labelColor: Theme.of(context).colorScheme.blue,
+          unselectedLabelColor: Theme.of(context).colorScheme.darkGray,
+          indicatorColor: Theme.of(context).colorScheme.blue,
+          indicatorWeight: 3,
+          labelStyle: const TextStyle(
             fontWeight: FontWeight.bold,
+            fontSize: 14,
           ),
-        ),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: Size.fromHeight(60),
-          child: Container(
-            color: Colors.white,
-            child: TabBar(
-              controller: tabController,
-              labelColor: Theme.of(context).colorScheme.blue,
-              unselectedLabelColor: Theme.of(context).colorScheme.darkGray,
-              indicatorColor: Theme.of(context).colorScheme.blue,
-              indicatorWeight: 3,
-              labelStyle: const TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
+          tabs: const [
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FaIcon(FontAwesomeIcons.userGroup, size: 14),
+                  SizedBox(width: 6),
+                  Text('In-app QR'),
+                ],
               ),
-              tabs: const [
-                Tab(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      FaIcon(FontAwesomeIcons.userGroup, size: 14),
-                      SizedBox(width: 6),
-                      Text('In-app QR'),
-                    ],
-                  ),
-                ),
-                Tab(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      FaIcon(FontAwesomeIcons.qrcode, size: 14),
-                      SizedBox(width: 6),
-                      Text('Public QR'),
-                    ],
-                  ),
-                ),
-                // ✅ Tab 3: Direct Share - More compact
-                Tab(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      FaIcon(FontAwesomeIcons.paperPlane, size: 14),
-                      SizedBox(width: 6),
-                      Text('Username'),
-                    ],
-                  ),
-                ),
-              ],
             ),
-          ),
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FaIcon(FontAwesomeIcons.qrcode, size: 14),
+                  SizedBox(width: 6),
+                  Text('Public QR'),
+                ],
+              ),
+            ),
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  FaIcon(FontAwesomeIcons.paperPlane, size: 14),
+                  SizedBox(width: 6),
+                  Text('Username'),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
       body: TabBarView(

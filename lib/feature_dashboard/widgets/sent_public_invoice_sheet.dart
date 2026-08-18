@@ -11,6 +11,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../feature_auth/utils/money_formatter.dart';
 import '../models/invoice_model.dart';
+import 'from_business_badge.dart';
 
 class SentPublicInvoiceSheet extends HookWidget {
   final PublicInvoiceModel invoice;
@@ -158,6 +159,10 @@ class SentPublicInvoiceSheet extends HookWidget {
                             .headlineMedium
                             ?.copyWith(fontWeight: FontWeight.w600),
                       ),
+                      if (invoice.isFromBusiness) ...[
+                        const SizedBox(height: 6),
+                        const FromBusinessBadge(),
+                      ],
                       Text('lbl_OriginalInvoiceNo'.tr,
                           style: Theme.of(context)
                               .textTheme
@@ -237,12 +242,18 @@ class SentPublicInvoiceSheet extends HookWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(invoice.senderName ?? "-",
+                      Text(invoice.displaySenderName.isNotEmpty
+                              ? invoice.displaySenderName
+                              : "-",
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context)
                               .textTheme
                               .displayMedium
                               ?.copyWith(fontWeight: FontWeight.w600)),
+                      if (invoice.isFromBusiness) ...[
+                        const SizedBox(height: 4),
+                        const FromBusinessBadge(),
+                      ],
                       Text('lbl_AccountHolder'.tr,
                           style: Theme.of(context)
                               .textTheme
@@ -255,8 +266,15 @@ class SentPublicInvoiceSheet extends HookWidget {
                 GestureDetector(
                   onTap: () async {
                     await Clipboard.setData(
-                        ClipboardData(text: invoice.senderName ?? "-"));
-                    Get.snackbar('inf_Copied'.tr, invoice.senderName ?? "-");
+                        ClipboardData(
+                            text: invoice.displaySenderName.isNotEmpty
+                                ? invoice.displaySenderName
+                                : "-"));
+                    Get.snackbar(
+                        'inf_Copied'.tr,
+                        invoice.displaySenderName.isNotEmpty
+                            ? invoice.displaySenderName
+                            : "-");
                   },
                   child: FaIcon(
                     FontAwesomeIcons.copy,
