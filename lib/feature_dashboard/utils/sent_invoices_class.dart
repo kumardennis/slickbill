@@ -3,19 +3,36 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../feature_auth/getx_controllers/user_controller.dart';
+import '../models/invoice_list_query.dart';
 import '../models/invoice_model.dart';
 
 class SentInvoicesClass {
   final UserController userController = Get.find();
 
-  Future<List<InvoiceModel>?> getPrivateSentInvoices() async {
+  Future<List<InvoiceModel>?> getPrivateSentInvoices({
+    InvoiceListQuery? query,
+    bool openOnly = false,
+    DateTime? paidInMonth,
+    bool silent = false,
+  }) async {
     try {
+      final body = <String, dynamic>{
+        "privateUserId": userController.user.value.privateUserId,
+        if (openOnly) "openOnly": true,
+        if (query != null) ...query.toRequestBody(),
+        if (paidInMonth != null) ...{
+          "status": "PAID",
+          "paidOnDateRange": InvoiceListQuery(
+            month: paidInMonth,
+            status: InvoiceStatusFilter.paid,
+          ).paidOnDateRange,
+        },
+      };
+
       final response = await Supabase.instance.client.functions
           .invoke('invoices/get-private-user-sent-invoices', headers: {
         'Authorization': 'Bearer ${userController.user.value.accessToken}'
-      }, body: {
-        "privateUserId": userController.user.value.privateUserId
-      });
+      }, body: body);
 
       final data = await response.data;
 
@@ -24,17 +41,47 @@ class SentInvoicesClass {
             .map((e) => InvoiceModel.fromJson(e))
             .toList();
 
+        if (query != null) {
+          invoices = invoices
+              .where((invoice) => query.matches(
+                    status: invoice.status,
+                    createdAt: invoice.createdAt,
+                    paidOnDate: invoice.paidOnDate,
+                  ))
+              .toList();
+        }
+
         print(invoices);
 
         return invoices;
       } else {
-        Get.snackbar('Oops..', data['error'].toString());
+        if (!silent) {
+          Get.snackbar('Oops..', data['error'].toString());
+        }
         return null;
       }
     } catch (err) {
       print(err);
       return null;
     }
+  }
+
+  Future<double?> getOpenInvoicesSum() async {
+    final invoices = await getPrivateSentInvoices(
+      openOnly: true,
+      silent: true,
+    );
+    if (invoices == null) return null;
+    return invoices.fold<double>(0.0, (sum, invoice) => sum + invoice.amount);
+  }
+
+  Future<double?> getPaidInMonth(DateTime month) async {
+    final invoices = await getPrivateSentInvoices(
+      paidInMonth: month,
+      silent: true,
+    );
+    if (invoices == null) return null;
+    return invoices.fold<double>(0.0, (sum, invoice) => sum + invoice.amount);
   }
 
   Future<double?> getPendingInvoicesSum() async {
@@ -146,9 +193,7 @@ class SentInvoicesClass {
       return null;
     }
 
-    final senderName =
-        '${userController.user.value.firstName ?? ''} ${userController.user.value.lastName ?? ''}'
-            .trim();
+    final senderName = userController.user.value.requestDisplayName;
     final amount = NumberFormat.currency(symbol: '€').format(invoice.amount);
     final due = invoice.deadline.length >= 10
         ? invoice.deadline.substring(0, 10)

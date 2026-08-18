@@ -209,13 +209,12 @@ class SentBills extends HookWidget {
                                         dueDate: invoice.deadline,
                                         paidOnDate: invoice.paidOnDate,
                                         description: invoice.description,
-                                        senderOrReeceiverName: invoice
-                                                    .receivers.businessUsers !=
-                                                null
-                                            ? '${invoice.receivers.businessUsers?.publicName}'
-                                            : '${invoice.receivers.privateUsers?.firstName} ${invoice.receivers.privateUsers?.lastName}',
+                                        senderOrReeceiverName:
+                                            invoice.displayReceiverName,
                                         status: invoice.status,
-                                        isSeen: invoice.isSeen),
+                                        isSeen: invoice.isSeen,
+                                        isFromBusiness:
+                                            invoice.isFromBusiness),
                                   ),
                                 ))
                             .toList(),

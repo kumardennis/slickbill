@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/core/services/view_tracking_service.dart';
+import 'package:slickbill/feature_dashboard/models/invoice_list_query.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
 import 'package:slickbill/feature_public/models/public_invoice_model.dart';
 import 'package:slickbill/feature_dashboard/models/public_invoice_claim_model.dart';
@@ -220,6 +221,7 @@ class DigitalInvoiceController extends GetxController {
     String? description,
     int? rawInvoiceId,
     String? senderName,
+    bool senderIsBusiness = false,
     DateTime? deadline,
     String? invoiceNo,
     String? originalInvoiceNo,
@@ -239,6 +241,7 @@ class DigitalInvoiceController extends GetxController {
         description: description,
         rawInvoiceId: rawInvoiceId,
         senderName: senderName,
+        senderIsBusiness: senderIsBusiness,
         deadline: deadline,
         invoiceNo: invoiceNo,
         originalInvoiceNo: originalInvoiceNo,
@@ -263,10 +266,16 @@ class DigitalInvoiceController extends GetxController {
   }
 
   /// Load public invoices created by user
-  Future<void> loadPublicInvoices(int senderId) async {
+  Future<void> loadPublicInvoices(
+    int senderId, {
+    InvoiceListQuery? query,
+  }) async {
     try {
       isLoading.value = true;
-      final invoices = await _repository.getPublicInvoicesBySender(senderId);
+      final invoices = await _repository.getPublicInvoicesBySender(
+        senderId,
+        query: query,
+      );
       publicInvoices.value = invoices;
     } catch (e) {
       Get.snackbar('Error', 'Failed to load public invoices: $e');

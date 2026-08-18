@@ -16,6 +16,7 @@ import '../../feature_send/models/direct_share_draft.dart';
 import '../../feature_send/models/receiver_user_model.dart';
 import '../../constants.dart';
 import '../models/invoice_model.dart';
+import 'from_business_badge.dart';
 
 class SentInvoiceSheet extends HookWidget {
   final InvoiceModel invoice;
@@ -159,6 +160,10 @@ class SentInvoiceSheet extends HookWidget {
                           .headlineMedium
                           ?.copyWith(fontWeight: FontWeight.w600),
                     ),
+                    if (invoice.isFromBusiness) ...[
+                      const SizedBox(height: 6),
+                      const FromBusinessBadge(),
+                    ],
                     Text(
                         invoice.createdAt != ''
                             ? DateFormat('EEE, dd MMM yyyy')
@@ -167,7 +172,7 @@ class SentInvoiceSheet extends HookWidget {
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: Theme.of(context).colorScheme.gray)),
                     Text(
-                        '${invoice.receivers.privateUsers!.firstName} ${invoice.receivers.privateUsers!.lastName}',
+                        invoice.displayReceiverName,
                         style: Theme.of(context).textTheme.displayMedium),
                   ],
                 ),

@@ -5,6 +5,9 @@ import 'package:intl/intl.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
+import 'package:slickbill/feature_dashboard/models/invoice_list_query.dart';
+import 'package:slickbill/feature_dashboard/widgets/invoice_list_filter_bar.dart';
+import 'package:slickbill/feature_dashboard/utils/invoice_csv_exporter.dart';
 import 'package:slickbill/feature_dashboard/widgets/sent_public_invoice_sheet.dart';
 import 'package:slickbill/feature_public/models/public_invoice_model.dart';
 import 'package:flutter/services.dart';
@@ -21,14 +24,20 @@ class PublicInvoices extends HookWidget {
   @override
   Widget build(BuildContext context) {
     var isLoading = useState<bool>(false);
+    var hasLoaded = useState<bool>(false);
     var publicInvoices = useState<List<PublicInvoiceModel>>([]);
     var expandedInvoices = useState<Set<int>>({});
+    final filter = useState(InvoiceListQuery(
+      month: currentInvoiceMonth(),
+      status: InvoiceStatusFilter.all,
+    ));
 
     Future<void> loadPublicInvoices() async {
       isLoading.value = true;
       try {
         await invoiceController.loadPublicInvoices(
           userController.user.value.privateUserId!,
+          query: filter.value,
         );
         publicInvoices.value = invoiceController.publicInvoices;
       } catch (e) {
@@ -40,13 +49,14 @@ class PublicInvoices extends HookWidget {
         );
       } finally {
         isLoading.value = false;
+        hasLoaded.value = true;
       }
     }
 
     useEffect(() {
       loadPublicInvoices();
       return null;
-    }, []);
+    }, [filter.value.month.year, filter.value.month.month, filter.value.status]);
 
     void toggleExpanded(int invoiceId) {
       final newSet = Set<int>.from(expandedInvoices.value);
@@ -377,54 +387,68 @@ class PublicInvoices extends HookWidget {
       );
     }
 
+    final monthName = DateFormat.MMMM().format(filter.value.monthStart);
+
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.light,
-      body: RefreshIndicator(
-        color: Theme.of(context).colorScheme.blue,
-        onRefresh: loadPublicInvoices,
-        child: isLoading.value
-            ? Center(
-                child: CircularProgressIndicator(
-                  color: Theme.of(context).colorScheme.blue,
-                ),
-              )
-            : publicInvoices.value.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.link_off,
-                          size: 64,
-                          color: Theme.of(context).colorScheme.gray,
-                        ),
-                        SizedBox(height: 16),
-                        Text(
-                          'No Shareable Links Yet',
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineMedium
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.dark,
-                                fontWeight: FontWeight.bold,
-                              ),
-                        ),
-                        SizedBox(height: 8),
-                        Text(
-                          'Create a shareable link from Send Invoice',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.darkGray,
-                              ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  )
-                : ListView.builder(
-                    padding: EdgeInsets.fromLTRB(0, 20, 20, 0),
+      body: Column(
+        children: [
+          InvoiceListFilterBar(
+            query: filter.value,
+            onChanged: (next) => filter.value = next,
+            exportEnabled: publicInvoices.value.isNotEmpty,
+            onExport: () {
+              InvoiceCsvExporter.exportPublic(
+                invoices: publicInvoices.value,
+                query: filter.value,
+              );
+            },
+          ),
+          if (isLoading.value && hasLoaded.value)
+            LinearProgressIndicator(
+              minHeight: 2,
+              color: Theme.of(context).colorScheme.blue,
+              backgroundColor:
+                  Theme.of(context).colorScheme.blue.withOpacity(0.15),
+            ),
+          Expanded(
+            child: RefreshIndicator(
+              color: Theme.of(context).colorScheme.blue,
+              onRefresh: loadPublicInvoices,
+              child: !hasLoaded.value && isLoading.value
+                  ? Center(
+                      child: CircularProgressIndicator(
+                        color: Theme.of(context).colorScheme.blue,
+                      ),
+                    )
+                  : publicInvoices.value.isEmpty
+                      ? ListView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          children: [
+                            const SizedBox(height: 80),
+                            Icon(
+                              Icons.link_off,
+                              size: 64,
+                              color: Theme.of(context).colorScheme.gray,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'lbl_NoInvoicesInMonth'.trParams({
+                                'month': monthName,
+                              }),
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .headlineMedium
+                                  ?.copyWith(
+                                    color: Theme.of(context).colorScheme.dark,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                            ),
+                          ],
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(0, 20, 20, 0),
                     itemCount: publicInvoices.value.length,
                     itemBuilder: (context, index) {
                       final publicInvoice = publicInvoices.value[index];
@@ -835,14 +859,14 @@ class PublicInvoices extends HookWidget {
                                     ...publicInvoice.claimedInvoices!
                                         .map((claimed) {
                                       final receiverName = claimed
-                                                  .digitalInvoices
-                                                  ?.receivers
-                                                  .privateUsers !=
-                                              null
-                                          ? '${claimed.digitalInvoices?.receivers.privateUsers?.firstName} ${claimed.digitalInvoices?.receivers.privateUsers?.lastName}'
-                                          : claimed.digitalInvoices?.receivers
-                                                  .businessUsers?.publicName ??
-                                              'Unknown';
+                                              .digitalInvoices
+                                              ?.displayReceiverName
+                                              .trim()
+                                              .isNotEmpty ==
+                                          true
+                                          ? claimed.digitalInvoices!
+                                              .displayReceiverName
+                                          : 'Unknown';
 
                                       return GestureDetector(
                                         onTap: () => showInvoiceDetails(
@@ -980,6 +1004,9 @@ class PublicInvoices extends HookWidget {
                       );
                     },
                   ),
+            ),
+          ),
+        ],
       ),
     );
   }

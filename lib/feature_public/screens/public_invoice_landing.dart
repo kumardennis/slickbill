@@ -7,6 +7,7 @@ import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/utils/supabase_auth_manger.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
 import 'package:slickbill/feature_public/models/public_invoice_model.dart';
+import 'package:slickbill/feature_dashboard/widgets/from_business_badge.dart';
 import 'package:slickbill/feature_public/screens/public_invoice_view.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:universal_html/html.dart' as html;
@@ -669,12 +670,24 @@ class PublicInvoiceLanding extends HookWidget {
                                   ),
                                 ),
                                 const SizedBox(height: 20),
-                                if (invoice.senderName != null)
+                                if (invoice.displaySenderName.isNotEmpty)
                                   _buildDetailRow(
                                     context,
                                     'From',
-                                    invoice.senderName!,
+                                    invoice.displaySenderName,
                                     copyable: true,
+                                  ),
+                                if (invoice.isFromBusiness)
+                                  const Padding(
+                                    padding: EdgeInsets.only(bottom: 16),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        SizedBox.shrink(),
+                                        FromBusinessBadge(),
+                                      ],
+                                    ),
                                   ),
                                 if (invoice.senderIban != null)
                                   _buildDetailRow(

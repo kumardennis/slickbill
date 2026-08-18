@@ -8,14 +8,15 @@ import {
   errorResponseData,
 } from "../../_shared/confirmedRequiredParams.ts";
 import { corsHeaders } from "../../_shared/cors.ts";
+import { applyInvoiceListFilters } from "../../_shared/invoiceListFilters.ts";
 import { createSupabase } from "../../_shared/supabaseClient.ts";
 
 export const handler = async (req: Request) => {
   const supabase = createSupabase(req);
 
   try {
-    const { privateUserId, status, paidOnDateRange, invoiceId } =
-      await req.json();
+    const body = await req.json();
+    const { privateUserId } = body;
 
     if (!confirmedRequiredParams([privateUserId])) {
       return new Response(JSON.stringify(errorResponseData), {
@@ -23,35 +24,21 @@ export const handler = async (req: Request) => {
       });
     }
 
-    const oneYearAgo = new Date();
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-
     const query = supabase
       .from("digital_invoices")
       .select(
         "*, senders(* , private_users(*, users(*))), receivers!inner(* , private_users(*, users(*)), business_users(*))",
       )
       .eq("receivers.privateUserId", privateUserId)
-      .eq("isObsolete", false)
-      .gte("created_at", oneYearAgo.toISOString())
-      .order("created_at", { ascending: false });
+      .eq("isObsolete", false);
 
-    if (status) {
-      query.eq("status", status);
-    }
-
-    if (invoiceId) {
-      query.eq("id", invoiceId);
-    }
-
-    if (paidOnDateRange) {
-      query
-        .gte("paidOnDate", paidOnDateRange[0])
-        .lte("paidOnDate", paidOnDateRange[1]);
-    }
+    const filteredQuery = applyInvoiceListFilters(query, body).order(
+      "created_at",
+      { ascending: false },
+    );
 
     const { data: digitalInvoiceData, error: digitalInvoiceError } =
-      await query;
+      await filteredQuery;
 
     if (digitalInvoiceError) {
       const responseData = {

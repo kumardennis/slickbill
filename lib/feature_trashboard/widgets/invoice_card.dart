@@ -8,6 +8,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_auth/utils/money_formatter.dart';
+import 'package:slickbill/feature_dashboard/widgets/from_business_badge.dart';
 
 class InvoiceCard extends HookWidget {
   final String invoiceNo;
@@ -19,6 +20,7 @@ class InvoiceCard extends HookWidget {
   final String status;
   final bool isSeen;
   final double amount;
+  final bool isFromBusiness;
 
   const InvoiceCard(
       {super.key,
@@ -30,7 +32,8 @@ class InvoiceCard extends HookWidget {
       required this.senderOrReeceiverName,
       required this.status,
       required this.isSeen,
-      required this.amount});
+      required this.amount,
+      this.isFromBusiness = false});
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +42,7 @@ class InvoiceCard extends HookWidget {
     bool dateIsPassed = DateTime.now().isAfter(DateTime.parse(dueDate));
 
     return (Container(
-      height: 180,
+      height: 200,
       decoration: BoxDecoration(
           gradient: LinearGradient(
               colors: [
@@ -79,6 +82,10 @@ class InvoiceCard extends HookWidget {
                         .headlineMedium
                         ?.copyWith(fontWeight: FontWeight.w600),
                   ),
+                  if (isFromBusiness) ...[
+                    const SizedBox(height: 6),
+                    const FromBusinessBadge(),
+                  ],
                   Text(
                       DateFormat('EEE, dd MMM yyyy')
                           .format(DateTime.parse(date!)),

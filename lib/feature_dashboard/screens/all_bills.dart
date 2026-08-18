@@ -23,7 +23,7 @@ class AllBills extends HookWidget {
   Widget build(BuildContext context) {
     final tabController = useTabController(initialLength: 3);
     NavigationController navigationController = Get.find();
-    UserController userController = Get.put(UserController());
+    Get.put(UserController());
     final PaymentSetupController paymentSetupController =
         Get.put(PaymentSetupController());
 
@@ -39,8 +39,7 @@ class AllBills extends HookWidget {
 
     return (Scaffold(
       appBar: CustomAppbar(
-        title:
-            '${'hd_YourSlickBills'.tr} @${userController.user.value.username}',
+        title: 'hd_Bills',
         appbarIcon: IconButton(
           icon: FaIcon(
             FontAwesomeIcons.trash,

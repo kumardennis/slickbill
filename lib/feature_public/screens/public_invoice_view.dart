@@ -10,6 +10,7 @@ import 'package:slickbill/core/services/view_tracking_service.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/utils/money_formatter.dart';
 import 'package:slickbill/feature_public/models/public_invoice_model.dart';
+import 'package:slickbill/feature_dashboard/widgets/from_business_badge.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -319,6 +320,22 @@ class PublicInvoiceView extends HookWidget {
                   ),
 
                   const SizedBox(height: 50),
+
+                  if (inv.displaySenderName.isNotEmpty) ...[
+                    _buildCopyableField(
+                      context,
+                      label: 'From',
+                      value: inv.displaySenderName,
+                    ),
+                    if (inv.isFromBusiness) ...[
+                      const SizedBox(height: 8),
+                      const Align(
+                        alignment: Alignment.centerLeft,
+                        child: FromBusinessBadge(),
+                      ),
+                    ],
+                    const SizedBox(height: 30),
+                  ],
 
                   // IBAN
                   _buildCopyableField(

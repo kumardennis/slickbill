@@ -211,7 +211,11 @@ class OpenAndCreateSelfInvoice extends HookWidget {
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.light,
-      appBar: CustomAppbar(title: 'hd_CreateASlickbill'.tr, appbarIcon: null),
+      appBar: const CustomAppbar(
+        title: 'hd_Upload',
+        appbarIcon: null,
+        showSettings: true,
+      ),
       body: SingleChildScrollView(
         child: Column(
           children: [

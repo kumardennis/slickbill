@@ -22,6 +22,7 @@ export const handler = async (req: Request) => {
     const {
       privateUserId,
       senderName,
+      senderIsBusiness: senderIsBusinessFromBody,
       receiverUsers,
 
       description,
@@ -67,11 +68,15 @@ export const handler = async (req: Request) => {
     }
 
     if (groupData != null) {
-      const { data: sender, error: _senderError2 } = await supabase
+      const { data: senderProfile } = await supabase
         .from("private_users")
-        .select("firstName, lastName")
+        .select("isBusiness")
         .eq("id", privateUserId)
-        .single();
+        .maybeSingle();
+
+      const senderIsBusiness = typeof senderIsBusinessFromBody === "boolean"
+        ? senderIsBusinessFromBody
+        : senderProfile?.isBusiness === true;
 
       for (const receiverUser of receiverUsers) {
         const { data: senderData, error: senderError } = await supabase
@@ -121,6 +126,7 @@ export const handler = async (req: Request) => {
               amount: receiverUser.amount,
               description,
               senderName,
+              senderIsBusiness,
               deadline: dueDate,
               invoiceNo: `${privateUserId}${Date.now()}`,
               referenceNo,
@@ -154,8 +160,8 @@ export const handler = async (req: Request) => {
           await sendFcmPush({
             token: fcmToken,
             title: "New Slickbill!",
-            body: sender?.firstName
-              ? `${sender?.firstName} sent you a slickbill!`
+            body: senderName
+              ? `${senderName} sent you a slickbill!`
               : "You received a new slickbill!",
             data: {
               type: "NEW_SLICKBILL",

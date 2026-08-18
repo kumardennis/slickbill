@@ -9,6 +9,7 @@ import 'package:slickbill/color_scheme.dart';
 
 import '../../feature_auth/utils/money_formatter.dart';
 import '../../feature_dashboard/models/invoice_model.dart';
+import '../../feature_dashboard/widgets/from_business_badge.dart';
 
 class ReceivedInvoiceSheet extends HookWidget {
   final InvoiceModel invoice;
@@ -55,6 +56,10 @@ class ReceivedInvoiceSheet extends HookWidget {
                           .headlineMedium
                           ?.copyWith(fontWeight: FontWeight.w600),
                     ),
+                    if (invoice.isFromBusiness) ...[
+                      const SizedBox(height: 6),
+                      const FromBusinessBadge(),
+                    ],
                     Text(
                         DateFormat('EEE, dd MMM yyyy')
                             .format(DateTime.parse(invoice.createdAt!)),

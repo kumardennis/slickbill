@@ -28,6 +28,7 @@ class PublicInvoiceModel {
   final bool isObsolete;
   final String? paidOnDate;
   final List<ClaimedInvoice>? claimedInvoices;
+  final bool senderIsBusiness;
 
   PublicInvoiceModel({
     required this.id,
@@ -54,6 +55,7 @@ class PublicInvoiceModel {
     required this.isObsolete,
     this.paidOnDate,
     this.claimedInvoices,
+    this.senderIsBusiness = false,
   });
 
   factory PublicInvoiceModel.fromJson(Map<String, dynamic> json) {
@@ -100,6 +102,8 @@ class PublicInvoiceModel {
 
     final isObsolete = json['isObsolete'] ?? json['is_obsolete'] ?? false;
     final paidOnDate = json['paidOnDate'] ?? json['paid_on_date'];
+    final senderIsBusiness = json['senderIsBusiness'] == true ||
+        json['sender_is_business'] == true;
 
     // ✅ parse sender/receiver objects returned by the query aliases
     final senderJson = json['sender'];
@@ -149,6 +153,7 @@ class PublicInvoiceModel {
       isObsolete: isObsolete,
       paidOnDate: paidOnDate,
       claimedInvoices: claimedInvoices,
+      senderIsBusiness: senderIsBusiness,
     );
   }
 
@@ -175,10 +180,19 @@ class PublicInvoiceModel {
       'updatedAt': updatedAt.toIso8601String(),
       'isObsolete': isObsolete,
       'paidOnDate': paidOnDate,
+      'senderIsBusiness': senderIsBusiness,
       // include joined objects if you want
       'sender': sender?.toJson(),
       'receiver': receiver?.toJson(),
     };
+  }
+
+  bool get isFromBusiness => senderIsBusiness;
+
+  String get displaySenderName {
+    final snapshotted = senderName?.trim() ?? '';
+    if (snapshotted.isNotEmpty) return snapshotted;
+    return sender?.displayName.trim() ?? '';
   }
 
   /// Last external bank payer from Monerium settle
