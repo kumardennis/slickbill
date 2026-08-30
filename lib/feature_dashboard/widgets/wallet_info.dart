@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:get/get.dart';
@@ -34,16 +36,6 @@ class WalletInfo extends HookWidget {
     final PaymentSetupController paymentSetupController =
         Get.put(PaymentSetupController());
     final isMounted = useIsMounted();
-    final setupComplete = useState(
-      paymentSetupController.step.value == PaymentSetupStep.complete,
-    );
-
-    useEffect(() {
-      final worker = ever(paymentSetupController.step, (PaymentSetupStep step) {
-        setupComplete.value = step == PaymentSetupStep.complete;
-      });
-      return worker.dispose;
-    }, []);
 
     Future<bool> isAddressLinkedOnMonerium({
       required String userId,
@@ -158,66 +150,99 @@ class WalletInfo extends HookWidget {
       }).toList(growable: false);
     }
 
+    String? extractMoneriumIbanFromRow(dynamic row) {
+      if (row is String && row.trim().isNotEmpty) {
+        return row.trim();
+      }
+      if (row is! Map) {
+        return null;
+      }
+
+      final map = Map<String, dynamic>.from(row);
+      final candidates = [
+        map['iban'],
+        map['ibanNumber'],
+        map['iban_number'],
+      ];
+
+      for (final candidate in candidates) {
+        if (candidate is String && candidate.trim().isNotEmpty) {
+          return candidate.trim();
+        }
+        if (candidate is Map) {
+          final nested = candidate['iban'] ?? candidate['ibanNumber'];
+          if (nested is String && nested.trim().isNotEmpty) {
+            return nested.trim();
+          }
+        }
+      }
+
+      return null;
+    }
+
+    String? getMoneriumAccountHolderFromRow(dynamic row) {
+      if (row is! Map) {
+        return null;
+      }
+
+      final map = Map<String, dynamic>.from(row);
+      final directCandidates = [
+        map['accountHolderName'],
+        map['account_holder_name'],
+        map['accountHolder'],
+        map['account_holder'],
+        map['bankAccountName'],
+        map['bank_account_name'],
+        map['name'],
+      ];
+
+      for (final candidate in directCandidates) {
+        if (candidate is String && candidate.trim().isNotEmpty) {
+          return candidate.trim();
+        }
+      }
+
+      final account = map['account'];
+      if (account is Map) {
+        final nested = Map<String, dynamic>.from(account);
+        final nestedCandidates = [
+          nested['holderName'],
+          nested['holder_name'],
+          nested['accountHolderName'],
+          nested['account_holder_name'],
+          nested['name'],
+        ];
+        for (final candidate in nestedCandidates) {
+          if (candidate is String && candidate.trim().isNotEmpty) {
+            return candidate.trim();
+          }
+        }
+      }
+
+      return null;
+    }
+
     Future<List<dynamic>> refreshMoneriumIbansNow({
       required String userId,
       String? walletAddress,
     }) async {
       final ibansResponse = await MoneriumService.getIbans(userId: userId);
-      final ibans = MoneriumService.extractIbans(ibansResponse['data']);
+      var ibans = MoneriumService.extractIbansFromResponse(ibansResponse);
       final filteredIbans = filterIbansForWallet(
         ibans: ibans,
         walletAddress: walletAddress,
       );
 
+      final sourceRows = filteredIbans.isNotEmpty ? filteredIbans : ibans;
+
       final moneriumBankAccounts = <BankAccount>[];
-      for (final row in filteredIbans) {
-        String? moneriumIban;
-        if (row is Map<String, dynamic>) {
-          final value = row['iban'];
-          if (value is String && value.trim().isNotEmpty) {
-            moneriumIban = value.trim();
-          }
-        }
+      for (final row in sourceRows) {
+        final moneriumIban = extractMoneriumIbanFromRow(row);
         if (moneriumIban == null || moneriumIban.isEmpty) {
           continue;
         }
 
-        String? accountHolderName;
-        if (row is Map<String, dynamic>) {
-          final directCandidates = [
-            row['accountHolderName'],
-            row['account_holder_name'],
-            row['accountHolder'],
-            row['account_holder'],
-            row['bankAccountName'],
-            row['bank_account_name'],
-            row['name'],
-          ];
-
-          for (final candidate in directCandidates) {
-            if (candidate is String && candidate.trim().isNotEmpty) {
-              accountHolderName = candidate.trim();
-              break;
-            }
-          }
-
-          final account = row['account'];
-          if (accountHolderName == null && account is Map<String, dynamic>) {
-            final nestedCandidates = [
-              account['holderName'],
-              account['holder_name'],
-              account['accountHolderName'],
-              account['account_holder_name'],
-              account['name'],
-            ];
-            for (final candidate in nestedCandidates) {
-              if (candidate is String && candidate.trim().isNotEmpty) {
-                accountHolderName = candidate.trim();
-                break;
-              }
-            }
-          }
-        }
+        final accountHolderName = getMoneriumAccountHolderFromRow(row);
 
         moneriumBankAccounts.add(
           BankAccount(
@@ -230,7 +255,41 @@ class WalletInfo extends HookWidget {
       }
 
       if (moneriumBankAccounts.isNotEmpty) {
-        await userController.upsertIbansJson(moneriumBankAccounts);
+        final user = userController.user.value;
+        final ibanEmpty = user.iban == null || user.iban!.trim().isEmpty;
+        final ibansEmpty = user.ibans == null ||
+            user.ibans!.every((account) => account.iban.trim().isEmpty);
+        final accountNameEmpty = user.bankAccountName == null ||
+            user.bankAccountName!.trim().isEmpty;
+
+        if (ibanEmpty || ibansEmpty || accountNameEmpty) {
+          final first = moneriumBankAccounts.first;
+          final holderName =
+              (first.bankAccountName != null &&
+                      first.bankAccountName!.trim().isNotEmpty)
+                  ? first.bankAccountName!.trim()
+                  : ([user.firstName, user.lastName]
+                          .whereType<String>()
+                          .map((value) => value.trim())
+                          .where((value) => value.isNotEmpty)
+                          .join(' ')
+                          .trim()
+                          .isNotEmpty
+                      ? [user.firstName, user.lastName]
+                          .whereType<String>()
+                          .map((value) => value.trim())
+                          .where((value) => value.isNotEmpty)
+                          .join(' ')
+                      : user.username);
+
+          await userController.updatePrimaryIbanColumn(
+            iban: first.iban,
+            bankName: first.bankName,
+            bankAccountName: holderName,
+          );
+        } else {
+          await userController.upsertIbansJson(moneriumBankAccounts);
+        }
         await paymentSetupController.markIbanReady();
       }
 
@@ -273,84 +332,7 @@ class WalletInfo extends HookWidget {
       await paymentSetupController.refresh();
     }
 
-    String? getMoneriumAccountHolderFromRow(dynamic row) {
-      if (row is! Map<String, dynamic>) {
-        return null;
-      }
-
-      final directCandidates = [
-        row['accountHolderName'],
-        row['account_holder_name'],
-        row['accountHolder'],
-        row['account_holder'],
-        row['bankAccountName'],
-        row['bank_account_name'],
-        row['name'],
-      ];
-
-      for (final candidate in directCandidates) {
-        if (candidate is String && candidate.trim().isNotEmpty) {
-          return candidate.trim();
-        }
-      }
-
-      final account = row['account'];
-      if (account is Map<String, dynamic>) {
-        final nestedCandidates = [
-          account['holderName'],
-          account['holder_name'],
-          account['accountHolderName'],
-          account['account_holder_name'],
-          account['name'],
-        ];
-        for (final candidate in nestedCandidates) {
-          if (candidate is String && candidate.trim().isNotEmpty) {
-            return candidate.trim();
-          }
-        }
-      }
-
-      return null;
-    }
-
-    Future<String?> pickWeb3AuthProvider() async {
-      return showModalBottomSheet<String>(
-        context: context,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-        ),
-        builder: (sheetContext) {
-          return SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 12),
-                Text(
-                  'Choose Web3Auth provider',
-                  style: Theme.of(sheetContext).textTheme.titleMedium,
-                ),
-                const SizedBox(height: 8),
-                ListTile(
-                  leading: const Icon(Icons.g_mobiledata),
-                  title: const Text('Google'),
-                  onTap: () => Navigator.of(sheetContext).pop('google'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.facebook),
-                  title: const Text('Facebook'),
-                  onTap: () => Navigator.of(sheetContext).pop('facebook'),
-                ),
-                const SizedBox(height: 12),
-              ],
-            ),
-          );
-        },
-      );
-    }
-
-    Future<void> handleConnectMetamask({
-      String loginProvider = 'google',
-    }) async {
+    Future<void> handleConnectMetamask() async {
       if (!isMounted()) return;
       debugPrint('[WalletConnectUI] connect tap received');
       isConnectingMetamask.value = true;
@@ -360,7 +342,6 @@ class WalletInfo extends HookWidget {
         debugPrint('[WalletConnectUI] calling connectWalletAddress()');
         final address = await MetamaskWalletService.connectWalletAddress(
           accessToken: userController.user.value.accessToken,
-          loginProvider: loginProvider,
         );
         debugPrint(
             '[WalletConnectUI] connectWalletAddress() returned empty=${address == null || address.isEmpty}');
@@ -389,8 +370,8 @@ class WalletInfo extends HookWidget {
         await paymentSetupController.refresh();
 
         Get.snackbar(
-          'Success',
-          'Web3Auth wallet connected and saved.',
+          'Wallet connected',
+          'Next: set up payments to get your IBAN.',
           backgroundColor: Theme.of(context).colorScheme.green,
           colorText: Colors.white,
           duration: const Duration(seconds: 3),
@@ -471,8 +452,7 @@ class WalletInfo extends HookWidget {
           throw Exception('Monerium session was not established.');
         }
 
-        // Refresh IBANs if they already exist, but never auto-link here.
-        final ibans = await refreshMoneriumIbansNow(
+        var ibans = await refreshMoneriumIbansNow(
           userId: userId,
           walletAddress: walletAddress,
         );
@@ -488,24 +468,112 @@ class WalletInfo extends HookWidget {
             userId: userId,
             linked: true,
           );
+          unawaited(
+            MoneriumService.registerWalletForTracking(
+              userId: userId,
+              walletAddress: walletAddress,
+            ),
+          );
           await paymentSetupController.markIbanReady();
           Get.snackbar(
-            'Monerium Ready',
-            'Slickbills/Monerium iban found',
+            'Payments ready',
+            'Your Monerium IBAN is set up.',
             backgroundColor: Theme.of(context).colorScheme.green,
             colorText: Colors.white,
             duration: const Duration(seconds: 3),
           );
-        } else {
-          await paymentSetupController.markMoneriumConnected();
-          Get.snackbar(
-            'Monerium Connected',
-            'Next: link your wallet address, then request an IBAN.',
-            backgroundColor: Theme.of(context).colorScheme.green,
-            colorText: Colors.white,
-            duration: const Duration(seconds: 3),
+          return;
+        }
+
+        await paymentSetupController.markMoneriumConnected();
+
+        var linked = await isAddressLinkedOnMonerium(
+          userId: userId,
+          walletAddress: walletAddress,
+        );
+        if (!linked) {
+          linked = await linkAddressWithVerification(
+            userId: userId,
+            walletAddress: walletAddress,
           );
         }
+
+        if (!isMounted()) return;
+        isAddressLinked.value = linked;
+        if (linked) {
+          unawaited(
+            MoneriumService.registerWalletForTracking(
+              userId: userId,
+              walletAddress: walletAddress,
+            ),
+          );
+          await paymentSetupController.markAddressLinked(userId: userId);
+        }
+
+        ibans = await refreshMoneriumIbansNow(
+          userId: userId,
+          walletAddress: walletAddress,
+        );
+        if (!isMounted()) return;
+        moneriumIbans.value = ibans;
+
+        if (ibans.isNotEmpty) {
+          await paymentSetupController.markIbanReady();
+          Get.snackbar(
+            'Payments ready',
+            'Your Monerium IBAN is set up.',
+            backgroundColor: Theme.of(context).colorScheme.green,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 3),
+          );
+          return;
+        }
+
+        if (!linked) {
+          Get.snackbar(
+            'Finish in Monerium',
+            'Sign in succeeded, but wallet linking is still pending. Complete any Monerium KYC prompt, then tap Set up payments again.',
+            backgroundColor: Colors.orange.shade700,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 5),
+          );
+          return;
+        }
+
+        final requestResponse = await MoneriumService.requestIban(
+          userId: userId,
+          address: walletAddress,
+        );
+        ibans = await refreshMoneriumIbansNow(
+          userId: userId,
+          walletAddress: walletAddress,
+        );
+        if (!isMounted()) return;
+        moneriumIbans.value = ibans;
+        isAddressLinked.value = true;
+
+        if (ibans.isNotEmpty) {
+          await paymentSetupController.markIbanReady();
+          Get.snackbar(
+            'Payments ready',
+            'Your Monerium IBAN is set up.',
+            backgroundColor: Theme.of(context).colorScheme.green,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 3),
+          );
+          return;
+        }
+
+        final alreadyExists = requestResponse['alreadyExists'] == true;
+        Get.snackbar(
+          alreadyExists ? 'IBAN pending' : 'Almost done',
+          alreadyExists
+              ? 'Monerium has an IBAN, but it is not visible yet. Tap Set up payments again in a few seconds.'
+              : 'IBAN requested. If Monerium asked for KYC, finish that, then tap Set up payments again.',
+          backgroundColor: Colors.orange.shade700,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 5),
+        );
       } catch (e) {
         if (!isMounted()) return;
         Get.snackbar(
@@ -632,6 +700,7 @@ class WalletInfo extends HookWidget {
       }
     }
 
+    // ignore: unused_element
     Future<void> handleLinkAddressOnly() async {
       if (!isMounted()) return;
 
@@ -665,9 +734,8 @@ class WalletInfo extends HookWidget {
 
       try {
         final userId = resolveMoneriumUserId();
-        final session = await MoneriumService.getStoredSession(userId: userId);
         final hasSessionToken =
-            (session?['accessToken']?.toString().trim().isNotEmpty ?? false);
+            await MoneriumService.hasActiveSession(userId: userId);
 
         if (!hasSessionToken) {
           if (!isMounted()) return;
@@ -721,6 +789,7 @@ class WalletInfo extends HookWidget {
       }
     }
 
+    // ignore: unused_element
     Future<void> handleRequestIban() async {
       if (!isMounted()) return;
 
@@ -754,9 +823,8 @@ class WalletInfo extends HookWidget {
 
       try {
         final userId = resolveMoneriumUserId();
-        final session = await MoneriumService.getStoredSession(userId: userId);
         final hasSessionToken =
-            (session?['accessToken']?.toString().trim().isNotEmpty ?? false);
+            await MoneriumService.hasActiveSession(userId: userId);
 
         if (!hasSessionToken) {
           if (!isMounted()) return;
@@ -869,15 +937,15 @@ class WalletInfo extends HookWidget {
               // Keep local flag if live lookup fails.
             }
           }
+
+          await refreshMoneriumIbansNow(
+            userId: userId,
+            walletAddress: metamaskWalletAddress.value,
+          );
         }
 
-        await refreshMoneriumIbansNow(
-          userId: userId,
-          walletAddress: metamaskWalletAddress.value,
-        );
-
         if (!isMounted()) return;
-        isMoneriumConnected.value = hasSession || moneriumIbans.value.isNotEmpty;
+        isMoneriumConnected.value = hasSession;
         isAddressLinked.value = linked || moneriumIbans.value.isNotEmpty;
         await paymentSetupController.refresh();
       } catch (e) {
@@ -910,18 +978,12 @@ class WalletInfo extends HookWidget {
                         ? null
                         : () async {
                             Navigator.of(sheetContext).pop();
-                            final provider = await pickWeb3AuthProvider();
-                            if (provider == null || provider.isEmpty) {
-                              return;
-                            }
-                            await handleConnectMetamask(
-                              loginProvider: provider,
-                            );
+                            await handleConnectMetamask();
                           },
                     child: Text(
                       metamaskWalletAddress.value == null
-                          ? 'Connect Web3Auth Wallet'
-                          : 'Reconnect Web3Auth Wallet',
+                          ? 'Connect wallet'
+                          : 'Reconnect wallet',
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -935,16 +997,6 @@ class WalletInfo extends HookWidget {
                             );
                           },
                     child: const Text('Reconnect Monerium'),
-                  ),
-                  const SizedBox(height: 8),
-                  OutlinedButton(
-                    onPressed: isConnectingMonerium.value
-                        ? null
-                        : () async {
-                            Navigator.of(sheetContext).pop();
-                            await handleLinkAddressOnly();
-                          },
-                    child: const Text('Link Address'),
                   ),
                 ],
               ),
@@ -1027,13 +1079,7 @@ class WalletInfo extends HookWidget {
     }
 
     String extractIbanText(dynamic ibanRow) {
-      if (ibanRow is Map<String, dynamic>) {
-        final iban = ibanRow['iban'];
-        if (iban is String && iban.trim().isNotEmpty) {
-          return iban.trim();
-        }
-      }
-      return 'Unknown IBAN';
+      return extractMoneriumIbanFromRow(ibanRow) ?? 'Unknown IBAN';
     }
 
     String extractIbanMeta(dynamic ibanRow) {
@@ -1074,8 +1120,14 @@ class WalletInfo extends HookWidget {
       return null;
     }, []);
 
-    final hasMoneriumIban =
-        moneriumIbans.value.isNotEmpty || setupComplete.value;
+    final user = userController.user.value;
+    final alreadySetUp = PaymentSetupController.userHasMoneriumIban(user) ||
+        moneriumIbans.value.isNotEmpty ||
+        paymentSetupController.hasMoneriumIban.value;
+    final showSetupWizard = !alreadySetUp;
+    final showReconnect = alreadySetUp &&
+        (metamaskWalletAddress.value?.trim().isNotEmpty ?? false) &&
+        !isMoneriumConnected.value;
 
     return Column(
       children: [
@@ -1152,7 +1204,7 @@ class WalletInfo extends HookWidget {
                             ),
                       ),
                     ),
-                    hasMoneriumIban
+                    alreadySetUp && isMoneriumConnected.value
                         ? IconButton(
                             onPressed: showWalletActionsSheet,
                             icon: const Icon(Icons.tune, color: Colors.white),
@@ -1172,7 +1224,7 @@ class WalletInfo extends HookWidget {
                 ),
               ),
 
-              if (!hasMoneriumIban) ...[
+              if (showSetupWizard) ...[
                 const SizedBox(height: 16),
                 Text(
                   'Payment setup',
@@ -1187,7 +1239,7 @@ class WalletInfo extends HookWidget {
                   stepNumber: 1,
                   title: 'Connect wallet',
                   subtitle: metamaskWalletAddress.value == null
-                      ? 'Attach your Web3Auth / MetaMask wallet'
+                      ? 'Create a new wallet, or use MetaMask / WalletConnect'
                       : 'Wallet connected',
                   isDone: metamaskWalletAddress.value != null,
                   isActive: metamaskWalletAddress.value == null,
@@ -1198,74 +1250,46 @@ class WalletInfo extends HookWidget {
                       : 'Reconnect',
                   onPressed: isConnectingMetamask.value
                       ? null
-                      : () async {
-                          final provider = await pickWeb3AuthProvider();
-                          if (provider == null || provider.isEmpty) {
-                            return;
-                          }
-                          await handleConnectMetamask(loginProvider: provider);
-                        },
+                      : handleConnectMetamask,
                 ),
                 _buildSetupStep(
                   context: context,
                   stepNumber: 2,
-                  title: 'Connect Monerium',
-                  subtitle: isMoneriumConnected.value
-                      ? 'Monerium account connected'
-                      : 'Sign in to Monerium (no wallet signature yet)',
-                  isDone: isMoneriumConnected.value,
-                  isActive: metamaskWalletAddress.value != null &&
-                      !isMoneriumConnected.value,
+                  title: 'Set up payments',
+                  subtitle: isAddressLinked.value &&
+                          moneriumIbans.value.isEmpty
+                      ? 'Finish Monerium KYC if asked, then tap again for your IBAN'
+                      : 'Sign in to Monerium. We will link your wallet and request an IBAN',
+                  isDone: false,
+                  isActive: metamaskWalletAddress.value != null,
                   isEnabled: metamaskWalletAddress.value != null &&
                       !isConnectingMonerium.value,
-                  isLoading: isConnectingMonerium.value &&
-                      !isMoneriumConnected.value,
-                  buttonLabel: isMoneriumConnected.value
-                      ? 'Reconnect'
-                      : 'Connect Monerium',
+                  isLoading: isConnectingMonerium.value,
+                  buttonLabel: 'Continue',
                   onPressed: metamaskWalletAddress.value == null ||
                           isConnectingMonerium.value
                       ? null
-                      : () => handleMoneriumConnect(
-                            forceBrowserReconnect: isMoneriumConnected.value,
-                          ),
+                      : () => handleMoneriumConnect(),
+                  isLast: true,
                 ),
+              ],
+
+              if (showReconnect) ...[
+                const SizedBox(height: 16),
                 _buildSetupStep(
                   context: context,
-                  stepNumber: 3,
-                  title: 'Link address',
-                  subtitle: isAddressLinked.value
-                      ? 'Wallet address linked on Monerium'
-                      : 'Sign a message to prove wallet ownership',
-                  isDone: isAddressLinked.value,
-                  isActive: isMoneriumConnected.value && !isAddressLinked.value,
-                  isEnabled: isMoneriumConnected.value &&
-                      !isConnectingMonerium.value,
-                  isLoading: isConnectingMonerium.value &&
-                      isMoneriumConnected.value &&
-                      !isAddressLinked.value,
-                  buttonLabel: 'Link Address',
-                  onPressed: !isMoneriumConnected.value ||
-                          isConnectingMonerium.value
-                      ? null
-                      : handleLinkAddressOnly,
-                ),
-                _buildSetupStep(
-                  context: context,
-                  stepNumber: 4,
-                  title: 'Request IBAN',
-                  subtitle: isAddressLinked.value
-                      ? 'Request your Monerium IBAN for payments'
-                      : 'Available after your address is linked',
+                  stepNumber: 2,
+                  title: 'Reconnect Monerium',
+                  subtitle:
+                      'Your payments are already set up. Sign in to load your IBAN and balance.',
                   isDone: false,
-                  isActive: isAddressLinked.value,
-                  isEnabled:
-                      isAddressLinked.value && !isConnectingMonerium.value,
-                  isLoading: isConnectingMonerium.value && isAddressLinked.value,
-                  buttonLabel: 'Request IBAN',
-                  onPressed: !isAddressLinked.value || isConnectingMonerium.value
+                  isActive: true,
+                  isEnabled: !isConnectingMonerium.value,
+                  isLoading: isConnectingMonerium.value,
+                  buttonLabel: 'Reconnect',
+                  onPressed: isConnectingMonerium.value
                       ? null
-                      : handleRequestIban,
+                      : () => handleMoneriumConnect(),
                   isLast: true,
                 ),
               ],

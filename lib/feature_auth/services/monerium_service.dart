@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:slickbill/feature_auth/services/app_callback_in_app_browser.dart';
 import 'package:slickbill/feature_auth/services/metamask_wallet_service.dart';
 import 'package:slickbill/services/coinbase/coinbase_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -34,7 +35,7 @@ class MoneriumService {
 
   static bool _isSessionExpiringSoon(Map<String, dynamic>? session) {
     if (session == null) {
-      return false;
+      return true;
     }
 
     final rawExpiresAt = session['expiresAt'];
@@ -43,56 +44,99 @@ class MoneriumService {
         : int.tryParse(rawExpiresAt?.toString() ?? '');
 
     if (expiresAtMs == null || expiresAtMs <= 0) {
-      return false;
+      return true;
     }
 
     const skewMs = 30 * 1000;
     return expiresAtMs - DateTime.now().millisecondsSinceEpoch <= skewMs;
   }
 
-  static Future<Map<String, dynamic>?> _ensureActiveSession(
-      String userId) async {
-    final session = await _loadSession(userId);
-    if (session == null) {
+  static bool _isReauthRequired(Object error) {
+    final text = error.toString().toUpperCase();
+    return text.contains('MONERIUM_REAUTH_REQUIRED') ||
+        text.contains('INVALID_GRANT');
+  }
+
+  static final Map<String, Future<Map<String, dynamic>?>> _refreshInFlight = {};
+
+  static Future<Map<String, dynamic>?> _sessionFromRefreshResponse({
+    required String userId,
+    required Map<String, dynamic> refreshed,
+    Map<String, dynamic>? previous,
+  }) async {
+    final data = refreshed['data'];
+    if (data is! Map<String, dynamic>) {
       return null;
     }
 
-    final refreshToken = session['refreshToken']?.toString().trim() ?? '';
-    if (!_isSessionExpiringSoon(session) || refreshToken.isEmpty) {
-      return session;
+    final accessToken = data['accessToken']?.toString().trim() ?? '';
+    if (accessToken.isEmpty) {
+      return null;
     }
 
+    final session = {
+      ...?previous,
+      'userId': userId,
+      'accessToken': accessToken,
+      if (data['refreshToken'] != null)
+        'refreshToken': data['refreshToken'].toString(),
+      if (data['expiresAt'] != null)
+        'expiresAt': data['expiresAt'] is int
+            ? data['expiresAt']
+            : int.tryParse(data['expiresAt'].toString()),
+    };
+    await _saveSession(session);
+    return session;
+  }
+
+  static Future<Map<String, dynamic>?> _ensureActiveSession(
+      String userId) async {
+    final inflight = _refreshInFlight[userId];
+    if (inflight != null) {
+      return inflight;
+    }
+
+    final future = () async {
+      final session = await _loadSession(userId);
+      if (_hasUsableAccessToken(session)) {
+        return session;
+      }
+
+      try {
+        _log(
+            '_ensureActiveSession(): refreshing session for userId=$userId (local=${session != null})');
+        final refreshed = await _postJson(
+          '/monerium/oauth/refresh',
+          body: {
+            'userId': userId,
+          },
+        );
+        final saved = await _sessionFromRefreshResponse(
+          userId: userId,
+          refreshed: refreshed,
+          previous: session,
+        );
+        if (_hasUsableAccessToken(saved)) {
+          return saved;
+        }
+      } catch (error) {
+        _log(
+            '_ensureActiveSession(): refresh failed for userId=$userId: $error');
+        if (_isReauthRequired(error)) {
+          await clearStoredSession(userId: userId);
+        }
+      }
+
+      return null;
+    }();
+
+    _refreshInFlight[userId] = future;
     try {
-      _log('_ensureActiveSession(): refreshing session for userId=$userId');
-      final refreshed = await _postJson(
-        '/monerium/oauth/refresh',
-        body: {
-          'userId': userId,
-          'moneriumRefreshToken': refreshToken,
-        },
-      );
-
-      final data = refreshed['data'];
-      final refreshedSession = {
-        ...session,
-        'userId': userId,
-        if (data is Map<String, dynamic>) ...{
-          if (data['accessToken'] != null)
-            'accessToken': data['accessToken'].toString(),
-          if (data['refreshToken'] != null)
-            'refreshToken': data['refreshToken'].toString(),
-          if (data['expiresAt'] != null)
-            'expiresAt': data['expiresAt'] is int
-                ? data['expiresAt']
-                : int.tryParse(data['expiresAt'].toString()),
-        },
-      };
-
-      await _saveSession(refreshedSession);
-      return refreshedSession;
-    } catch (error) {
-      _log('_ensureActiveSession(): refresh failed for userId=$userId: $error');
-      return session;
+      return await future;
+    } finally {
+      if (identical(_refreshInFlight[userId], future)) {
+        _refreshInFlight.remove(userId);
+      }
     }
   }
 
@@ -156,8 +200,6 @@ class MoneriumService {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_sessionKey(userId));
-    await prefs.remove(_addressLinkedKey(userId));
-    await prefs.remove(_balanceConfirmedKey(userId));
     _log('Cleared stored Monerium session for userId=$userId');
   }
 
@@ -208,8 +250,76 @@ class MoneriumService {
   }
 
   static Future<bool> hasActiveSession({required String userId}) async {
-    final session = await getStoredSession(userId: userId);
+    final session = await _ensureActiveSession(userId);
     return _hasUsableAccessToken(session);
+  }
+
+  /// Restores a session from the server when possible, otherwise starts OAuth.
+  static Future<Map<String, dynamic>> ensureConnected({
+    required String userId,
+    required String email,
+    VoidCallback? onWillOpenLogin,
+  }) async {
+    final local = await _ensureActiveSession(userId);
+    if (_hasUsableAccessToken(local)) {
+      return local!;
+    }
+
+    _log('ensureConnected(): starting Monerium OAuth for userId=$userId');
+    onWillOpenLogin?.call();
+    return connect(userId: userId, email: email);
+  }
+
+  static AppCallbackInAppBrowser? _authBrowser;
+
+  static Future<void> _closeAuthTab() async {
+    try {
+      await _authBrowser?.close();
+    } catch (_) {}
+    _authBrowser = null;
+    try {
+      await closeInAppWebView();
+    } catch (_) {}
+  }
+
+  static Future<bool> _openAuthTab(Uri uri) async {
+    if (kIsWeb) {
+      return launchUrl(uri, mode: LaunchMode.platformDefault);
+    }
+
+    // iOS SFSafariViewController (url_launcher custom tab) does not return
+    // custom-scheme callbacks like slickbill://, so the sheet never closes.
+    // Intercept those URLs in WKWebView and dismiss the browser ourselves.
+    if (defaultTargetPlatform == TargetPlatform.iOS) {
+      _authBrowser = AppCallbackInAppBrowser(
+        onCallback: (callbackUri) {
+          onAuthCallbackUri(callbackUri);
+        },
+        onClosedWithoutCallback: () {
+          final completer = _pendingOAuthCompleter;
+          if (completer != null && !completer.isCompleted) {
+            completer.completeError(
+              Exception('Monerium connect was cancelled.'),
+            );
+          }
+        },
+      );
+      await AppCallbackInAppBrowser.open(uri, _authBrowser!);
+      _log('opened Monerium auth in in-app browser');
+      return true;
+    }
+
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      if (opened) {
+        _log('opened Monerium auth in custom tab');
+        return true;
+      }
+    } catch (error) {
+      _log('custom tab failed, falling back to browser: $error');
+    }
+
+    return launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   static String _callbackUriForPlatform() {
@@ -275,11 +385,8 @@ class MoneriumService {
             },
           );
 
-          _log('Opening Monerium SIWE flow in external browser');
-          final opened = await launchUrl(
-            siweUri,
-            mode: LaunchMode.externalApplication,
-          );
+          _log('Opening Monerium SIWE flow');
+          final opened = await _openAuthTab(siweUri);
 
           if (!opened) {
             throw Exception('Unable to open Monerium SIWE URL.');
@@ -323,7 +430,7 @@ class MoneriumService {
             'email': email,
             'redirectUri': redirectUri,
             'appRedirectUri': appRedirectUri ?? _callbackUriForPlatform(),
-            'appAutoRedirect': false,
+            'appAutoRedirect': true,
             'forceLogin': forceLogin,
           },
         );
@@ -341,11 +448,8 @@ class MoneriumService {
           throw Exception('Monerium auth URL missing from backend response.');
         }
 
-        _log('Opening Monerium OAuth in external browser');
-        final opened = await launchUrl(
-          Uri.parse(authUrl),
-          mode: LaunchMode.externalApplication,
-        );
+        _log('Opening Monerium OAuth');
+        final opened = await _openAuthTab(Uri.parse(authUrl));
 
         if (!opened) {
           throw Exception('Unable to open Monerium OAuth URL.');
@@ -401,6 +505,7 @@ class MoneriumService {
     }
 
     _log('onAuthCallbackUri() received: $uri');
+    unawaited(_closeAuthTab());
 
     final completer = _pendingOAuthCompleter;
     if (completer == null || completer.isCompleted) {
@@ -457,6 +562,44 @@ class MoneriumService {
     );
   }
 
+  static String _walletRegisteredKey(String userId, String walletAddress) =>
+      'monerium_wallet_registered_${userId}_${walletAddress.toLowerCase()}';
+
+  static Future<void> registerWalletForTracking({
+    required String userId,
+    required String walletAddress,
+  }) async {
+    final address = walletAddress.trim();
+    if (userId.trim().isEmpty || userId == '0' || address.isEmpty) {
+      return;
+    }
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final key = _walletRegisteredKey(userId, address);
+      if (prefs.getBool(key) == true) {
+        return;
+      }
+
+      await _ensureActiveSession(userId);
+      final result = await _postJson(
+        '/monerium/wallet/register',
+        body: {
+          'userId': userId,
+          'walletAddress': address,
+        },
+      );
+      if (result['ok'] == true) {
+        await prefs.setBool(key, true);
+        _log('registerWalletForTracking(): registered $address for $userId');
+      } else {
+        _log('registerWalletForTracking(): server returned ${result['data']}');
+      }
+    } catch (error) {
+      _log('registerWalletForTracking() failed: $error');
+    }
+  }
+
   static Future<Map<String, dynamic>> linkWallet({
     required String userId,
     required String address,
@@ -467,7 +610,7 @@ class MoneriumService {
   }) async {
     final session = await _ensureActiveSession(userId);
     _log(
-        'linkWallet(): sending token override=${session?['accessToken'] != null} for userId=$userId');
+        'linkWallet(): sessionReady=${_hasUsableAccessToken(session)} for userId=$userId');
     final resolvedChain = (chain != null && chain.trim().isNotEmpty)
         ? chain
         : _configuredWalletChain;
@@ -484,12 +627,6 @@ class MoneriumService {
         if (resolvedChain.trim().isNotEmpty) 'chain': resolvedChain,
         'message': message,
         'signature': signature,
-        if (session?['accessToken'] != null)
-          'moneriumAccessToken': session?['accessToken'],
-        if (session?['refreshToken'] != null)
-          'moneriumRefreshToken': session?['refreshToken'],
-        if (session?['expiresAt'] != null)
-          'moneriumExpiresAt': session?['expiresAt'],
       },
     );
 
@@ -515,21 +652,12 @@ class MoneriumService {
     required String userId,
   }) async {
     final session = await _ensureActiveSession(userId);
-    final accessToken = session?['accessToken']?.toString();
-    final refreshToken = session?['refreshToken']?.toString();
-    final expiresAt = session?['expiresAt']?.toString();
     _log(
-        'getIbans(): sending token override=${accessToken != null && accessToken.isNotEmpty} for userId=$userId');
+        'getIbans(): sessionReady=${_hasUsableAccessToken(session)} for userId=$userId');
     return _getJson(
       '/monerium/ibans',
       query: {
         'userId': userId,
-        if (accessToken != null && accessToken.isNotEmpty)
-          'moneriumAccessToken': accessToken,
-        if (refreshToken != null && refreshToken.isNotEmpty)
-          'moneriumRefreshToken': refreshToken,
-        if (expiresAt != null && expiresAt.isNotEmpty)
-          'moneriumExpiresAt': expiresAt,
       },
     );
   }
@@ -545,7 +673,7 @@ class MoneriumService {
         : _configuredWalletChain;
 
     _log(
-        'requestIban(): sending token override=${session?['accessToken'] != null} for userId=$userId');
+        'requestIban(): sessionReady=${_hasUsableAccessToken(session)} for userId=$userId');
 
     return _postJson(
       '/monerium/ibans/request',
@@ -553,12 +681,6 @@ class MoneriumService {
         'userId': userId,
         'address': address,
         if (resolvedChain.trim().isNotEmpty) 'chain': resolvedChain,
-        if (session?['accessToken'] != null)
-          'moneriumAccessToken': session?['accessToken'],
-        if (session?['refreshToken'] != null)
-          'moneriumRefreshToken': session?['refreshToken'],
-        if (session?['expiresAt'] != null)
-          'moneriumExpiresAt': session?['expiresAt'],
       },
     );
   }
@@ -570,9 +692,6 @@ class MoneriumService {
     String? currency,
   }) async {
     final session = await _ensureActiveSession(userId);
-    final accessToken = session?['accessToken']?.toString();
-    final refreshToken = session?['refreshToken']?.toString();
-    final expiresAt = session?['expiresAt']?.toString();
     final resolvedChain = (chain != null && chain.trim().isNotEmpty)
         ? chain.trim()
         : _configuredWalletChain;
@@ -580,7 +699,7 @@ class MoneriumService {
         (currency != null && currency.trim().isNotEmpty) ? currency.trim() : '';
 
     _log(
-        'getBalances(): sending token override=${accessToken != null && accessToken.isNotEmpty} for userId=$userId');
+        'getBalances(): sessionReady=${_hasUsableAccessToken(session)} for userId=$userId');
 
     return _getJson(
       '/monerium/balances',
@@ -589,12 +708,6 @@ class MoneriumService {
         'address': address,
         if (resolvedChain.isNotEmpty) 'chain': resolvedChain,
         if (resolvedCurrency.isNotEmpty) 'currency': resolvedCurrency,
-        if (accessToken != null && accessToken.isNotEmpty)
-          'moneriumAccessToken': accessToken,
-        if (refreshToken != null && refreshToken.isNotEmpty)
-          'moneriumRefreshToken': refreshToken,
-        if (expiresAt != null && expiresAt.isNotEmpty)
-          'moneriumExpiresAt': expiresAt,
       },
     );
   }
@@ -604,23 +717,14 @@ class MoneriumService {
     String? address,
   }) async {
     final session = await _ensureActiveSession(userId);
-    final accessToken = session?['accessToken']?.toString();
-    final refreshToken = session?['refreshToken']?.toString();
-    final expiresAt = session?['expiresAt']?.toString();
     _log(
-        'getLinkedAddresses(): sending token override=${accessToken != null && accessToken.isNotEmpty} for userId=$userId');
+        'getLinkedAddresses(): sessionReady=${_hasUsableAccessToken(session)} for userId=$userId');
     return _getJson(
       '/monerium/wallet/addresses',
       query: {
         'userId': userId,
         if (address != null && address.trim().isNotEmpty)
           'address': address.trim(),
-        if (accessToken != null && accessToken.isNotEmpty)
-          'moneriumAccessToken': accessToken,
-        if (refreshToken != null && refreshToken.isNotEmpty)
-          'moneriumRefreshToken': refreshToken,
-        if (expiresAt != null && expiresAt.isNotEmpty)
-          'moneriumExpiresAt': expiresAt,
       },
     );
   }
@@ -630,21 +734,14 @@ class MoneriumService {
     String? profile,
   }) async {
     final session = await _ensureActiveSession(userId);
-    final accessToken = session?['accessToken']?.toString();
-    final refreshToken = session?['refreshToken']?.toString();
-    final expiresAt = session?['expiresAt']?.toString();
+    _log(
+        'getProfileStatus(): sessionReady=${_hasUsableAccessToken(session)} for userId=$userId');
 
     return _getJson(
       '/monerium/profile',
       query: {
         'userId': userId,
         if (profile != null && profile.trim().isNotEmpty) 'profile': profile,
-        if (accessToken != null && accessToken.isNotEmpty)
-          'moneriumAccessToken': accessToken,
-        if (refreshToken != null && refreshToken.isNotEmpty)
-          'moneriumRefreshToken': refreshToken,
-        if (expiresAt != null && expiresAt.isNotEmpty)
-          'moneriumExpiresAt': expiresAt,
       },
     );
   }
@@ -657,7 +754,8 @@ class MoneriumService {
     String? recipientName,
     String? reference,
     String? walletAddress,
-  }) {
+  }) async {
+    await _ensureActiveSession(userId);
     return _postJson(
       '/monerium/orders/redeem',
       body: {
@@ -677,20 +775,13 @@ class MoneriumService {
     required String orderId,
   }) async {
     final session = await _ensureActiveSession(userId);
-    final accessToken = session?['accessToken']?.toString();
-    final refreshToken = session?['refreshToken']?.toString();
-    final expiresAt = session?['expiresAt']?.toString();
+    _log(
+        'getOrder(): sessionReady=${_hasUsableAccessToken(session)} for userId=$userId');
 
     return _getJson(
       '/monerium/orders/$orderId',
       query: {
         'userId': userId,
-        if (accessToken != null && accessToken.isNotEmpty)
-          'moneriumAccessToken': accessToken,
-        if (refreshToken != null && refreshToken.isNotEmpty)
-          'moneriumRefreshToken': refreshToken,
-        if (expiresAt != null && expiresAt.isNotEmpty)
-          'moneriumExpiresAt': expiresAt,
       },
     );
   }
@@ -705,9 +796,8 @@ class MoneriumService {
     String? profile,
   }) async {
     final session = await _ensureActiveSession(userId);
-    final accessToken = session?['accessToken']?.toString();
-    final refreshToken = session?['refreshToken']?.toString();
-    final expiresAt = session?['expiresAt']?.toString();
+    _log(
+        'getOrders(): sessionReady=${_hasUsableAccessToken(session)} for userId=$userId');
 
     return _getJson(
       '/monerium/orders',
@@ -721,12 +811,6 @@ class MoneriumService {
           'address': address.trim(),
         if (profile != null && profile.trim().isNotEmpty)
           'profile': profile.trim(),
-        if (accessToken != null && accessToken.isNotEmpty)
-          'moneriumAccessToken': accessToken,
-        if (refreshToken != null && refreshToken.isNotEmpty)
-          'moneriumRefreshToken': refreshToken,
-        if (expiresAt != null && expiresAt.isNotEmpty)
-          'moneriumExpiresAt': expiresAt,
       },
     );
   }
@@ -1024,7 +1108,7 @@ class MoneriumService {
     final session = await _ensureActiveSession(userId);
 
     _log(
-        'createSendMoneyOrder(): sending token override=${session?['accessToken'] != null} for userId=$userId');
+        'createSendMoneyOrder(): sessionReady=${_hasUsableAccessToken(session)} for userId=$userId');
 
     return _postJson(
       '/monerium/orders/send',
@@ -1033,12 +1117,6 @@ class MoneriumService {
         'order': order,
         if (invoiceId != null && invoiceId.trim().isNotEmpty)
           'invoiceId': invoiceId.trim(),
-        if (session?['accessToken'] != null)
-          'moneriumAccessToken': session?['accessToken'],
-        if (session?['refreshToken'] != null)
-          'moneriumRefreshToken': session?['refreshToken'],
-        if (session?['expiresAt'] != null)
-          'moneriumExpiresAt': session?['expiresAt'],
       },
     );
   }
@@ -1079,6 +1157,57 @@ class MoneriumService {
     );
   }
 
+  static Future<Map<String, dynamic>> createWithdrawOrder({
+    required String userId,
+    required Map<String, dynamic> order,
+  }) async {
+    final session = await _ensureActiveSession(userId);
+    _log(
+        'createWithdrawOrder(): sessionReady=${_hasUsableAccessToken(session)} for userId=$userId');
+
+    return _postJson(
+      '/monerium/orders/withdraw',
+      body: {
+        'userId': userId,
+        'order': order,
+      },
+    );
+  }
+
+  static Future<Map<String, dynamic>> createWithdrawOrderWithSignature({
+    required String userId,
+    required String walletAddress,
+    required Map<String, dynamic> order,
+  }) async {
+    await _ensureActiveSession(userId);
+
+    final resolvedMessage =
+        (order['message']?.toString().trim().isNotEmpty ?? false)
+            ? order['message'].toString().trim()
+            : MetamaskWalletService.moneriumOwnershipMessage;
+
+    final signature = await MetamaskWalletService.signAddressOwnershipMessage(
+      address: walletAddress,
+      message: resolvedMessage,
+    );
+
+    final signedOrder = <String, dynamic>{
+      ...order,
+      'message': resolvedMessage,
+      'signature': signature,
+    };
+
+    if (signedOrder['address'] == null ||
+        signedOrder['address'].toString().trim().isEmpty) {
+      signedOrder['address'] = walletAddress;
+    }
+
+    return createWithdrawOrder(
+      userId: userId,
+      order: signedOrder,
+    );
+  }
+
   static String? get lastOAuthStatus => _lastOAuthStatus;
   static String? get lastOAuthMessage => _lastOAuthMessage;
 
@@ -1100,6 +1229,20 @@ class MoneriumService {
           return candidate;
         }
       }
+    }
+
+    return const [];
+  }
+
+  static List<dynamic> extractIbansFromResponse(Map<String, dynamic> response) {
+    final ibans = extractIbans(response['data']);
+    if (ibans.isNotEmpty) {
+      return ibans;
+    }
+
+    final firstIbanRow = response['firstIbanRow'];
+    if (firstIbanRow != null) {
+      return [firstIbanRow];
     }
 
     return const [];

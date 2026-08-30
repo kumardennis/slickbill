@@ -56,7 +56,7 @@ class PublicInvoices extends HookWidget {
     useEffect(() {
       loadPublicInvoices();
       return null;
-    }, [filter.value.month.year, filter.value.month.month, filter.value.status]);
+    }, [filter.value.month.year, filter.value.month.month, filter.value.status, filter.value.allTime]);
 
     void toggleExpanded(int invoiceId) {
       final newSet = Set<int>.from(expandedInvoices.value);
@@ -433,9 +433,11 @@ class PublicInvoices extends HookWidget {
                             ),
                             const SizedBox(height: 16),
                             Text(
-                              'lbl_NoInvoicesInMonth'.trParams({
-                                'month': monthName,
-                              }),
+                              filter.value.emptyListNeedsMonth
+                                  ? filter.value.emptyListLabelKey.trParams({
+                                      'month': monthName,
+                                    })
+                                  : filter.value.emptyListLabelKey.tr,
                               textAlign: TextAlign.center,
                               style: Theme.of(context)
                                   .textTheme

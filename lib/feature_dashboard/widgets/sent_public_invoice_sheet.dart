@@ -161,7 +161,9 @@ class SentPublicInvoiceSheet extends HookWidget {
                       ),
                       if (invoice.isFromBusiness) ...[
                         const SizedBox(height: 6),
-                        const FromBusinessBadge(),
+                        const FromBusinessBadge(
+                          perspective: BusinessBadgePerspective.sentAsBusiness,
+                        ),
                       ],
                       Text('lbl_OriginalInvoiceNo'.tr,
                           style: Theme.of(context)
@@ -252,7 +254,9 @@ class SentPublicInvoiceSheet extends HookWidget {
                               ?.copyWith(fontWeight: FontWeight.w600)),
                       if (invoice.isFromBusiness) ...[
                         const SizedBox(height: 4),
-                        const FromBusinessBadge(),
+                        const FromBusinessBadge(
+                          perspective: BusinessBadgePerspective.sentAsBusiness,
+                        ),
                       ],
                       Text('lbl_AccountHolder'.tr,
                           style: Theme.of(context)

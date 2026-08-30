@@ -108,11 +108,9 @@ class ReceivedInvoiceSheet extends HookWidget {
           initialStatusCheckInProgress.value = true;
         }
         try {
-          final session = await MoneriumService.getStoredSession(
+          final hasSession = await MoneriumService.hasActiveSession(
             userId: moneriumUserId,
           );
-          final hasSession = session != null &&
-              (session['accessToken']?.toString().trim() ?? '').isNotEmpty;
 
           if (!hasSession) {
             hasMoneriumSession.value = false;

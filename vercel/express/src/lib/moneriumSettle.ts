@@ -3,7 +3,7 @@ import { notifyUserViaSupabase } from "./notifyUser.js";
 import {
   amountsEqual2dp,
   normalizeIban,
-  parseSbInvoiceIdFromMemo,
+  parseSbInvoiceIdFromOrder,
   type MoneriumOrderSummary,
 } from "./moneriumOrderSummary.js";
 
@@ -117,7 +117,8 @@ const notifyPayerPaymentSuccess = async (params: {
   invoiceId: number;
 }) => {
   const appUserId = await resolveAppUserId(params.payerPrivateUserId);
-  if (!appUserId) {
+  const targetUserId = appUserId ?? asNumberId(params.payerPrivateUserId);
+  if (!targetUserId) {
     console.warn("⚠️ Payer success notify skipped: no app userId", {
       invoiceId: params.invoiceId,
       payerPrivateUserId: params.payerPrivateUserId ?? null,
@@ -125,7 +126,7 @@ const notifyPayerPaymentSuccess = async (params: {
     return false;
   }
   const result = await notifyUserViaSupabase({
-    userId: appUserId,
+    userId: targetUserId,
     type: "SLICKBILL_PAYMENT_SUCCESS",
     title: "Payment successful",
     body: "Your slickbill payment went through.",
@@ -299,6 +300,7 @@ const findByAmountAndIban = async (
       .in("status", Array.from(OPEN_STATUSES))
       .limit(50);
     for (const row of (data ?? []) as PrivateInvoiceRow[]) {
+      if ((row.moneriumOrderId ?? "").trim()) continue;
       if (
         amountsEqual2dp(row.amount, amount) &&
         normalizeIban(row.senderIban) === normalizedIban
@@ -837,11 +839,18 @@ export const settleInvoiceFromOrder = async (params: {
   }
 
   if (!match) {
-    const sbId = parseSbInvoiceIdFromMemo(order.memo);
+    const sbId = parseSbInvoiceIdFromOrder(order);
     if (sbId) {
       const privateRow = await findPrivateById(sbId);
       if (privateRow) {
         match = { table: "digital_invoices", row: privateRow };
+        console.log("ℹ️ Matched invoice by in-app sb id", {
+          invoiceId: sbId,
+          orderId: order.id,
+          kind: order.kind,
+          memo: order.memo,
+          referenceNumber: order.referenceNumber,
+        });
       } else {
         const publicRow = await findPublicById(sbId);
         if (publicRow) {
@@ -852,8 +861,9 @@ export const settleInvoiceFromOrder = async (params: {
   }
 
   if (!match) {
-    // Amount+IBAN is only reliable on redeem (counterpart = invoice recipient IBAN).
-    if ((order.kind ?? "").toLowerCase() === "redeem") {
+    // Amount+IBAN is only for external-bank payments (no in-app order id / sb marker).
+    const inPlatform = Boolean(parseSbInvoiceIdFromOrder(order));
+    if (!inPlatform && (order.kind ?? "").toLowerCase() === "redeem") {
       match = await findByAmountAndIban(
         order.amount,
         order.counterpartIban,
@@ -923,6 +933,8 @@ export const settleInvoicesFromOrders = async (params: {
   orders: MoneriumOrderSummary[];
   txHash: string;
   privateUserId?: string | null;
+  kind?: "mint" | "burn" | "transfer";
+  amountHint?: string | null;
 }): Promise<SettleResult[]> => {
   const results: SettleResult[] = [];
   for (const order of params.orders) {
@@ -938,52 +950,214 @@ export const settleInvoicesFromOrders = async (params: {
     return results;
   }
 
-  // Fallback: payer has PROCESSING invoice(s) — match by order id, then
-  // single open PROCESSING + single redeem order (common Slickbills→Slickbills pay).
+  // Payer-side burn: match PROCESSING invoices by the stored Monerium order id.
   const open = await findProcessingPrivateForPayer(params.privateUserId);
-  if (open.length === 0 || params.orders.length === 0) {
-    return results;
-  }
-
-  for (const order of params.orders) {
-    if (!order.id) continue;
-    const row = open.find(
-      (invoice) =>
-        (invoice.moneriumOrderId ?? "").trim() === order.id!.trim(),
-    );
-    if (!row) continue;
-    if (results.some((r) => r.invoiceId === row.id && isPrivatePaidResult(r))) {
-      continue;
+  if (open.length > 0 && params.orders.length > 0) {
+    for (const order of params.orders) {
+      if (!order.id) continue;
+      const row = open.find(
+        (invoice) =>
+          (invoice.moneriumOrderId ?? "").trim() === order.id!.trim(),
+      );
+      if (!row) continue;
+      if (results.some((r) => r.invoiceId === row.id && isPrivatePaidResult(r))) {
+        continue;
+      }
+      const settled = await settlePrivatePaid({
+        row,
+        order,
+        txHash: params.txHash,
+      });
+      results.push({ ...settled, detail: settled.detail ?? "fallback_order_id" });
     }
-    const settled = await settlePrivatePaid({
-      row,
-      order,
-      txHash: params.txHash,
-    });
-    results.push({ ...settled, detail: settled.detail ?? "fallback_order_id" });
   }
 
   if (results.some(isPrivatePaidResult)) {
     return results;
   }
 
-  if (open.length === 1 && params.orders.length === 1) {
-    const order = params.orders[0]!;
-    const kind = (order.kind ?? "").toLowerCase();
-    if (!kind || kind === "redeem") {
-      const settled = await settlePrivatePaid({
-        row: open[0]!,
-        order,
-        txHash: params.txHash,
-      });
-      results.push({
-        ...settled,
-        detail: settled.detail ?? "fallback_single_processing",
-      });
+  // Payee mint from an external bank: unique amount, and only invoices that
+  // were not paid in-app (no moneriumOrderId). Skip if this mint already
+  // carries an in-app invoice marker — do not guess by amount.
+  const inPlatformMint = params.orders.some((order) =>
+    Boolean(parseSbInvoiceIdFromOrder(order)),
+  );
+  if (params.kind === "mint" && !inPlatformMint) {
+    const incoming = await settleIncomingMintForOwner({
+      ownerPrivateUserId: params.privateUserId,
+      txHash: params.txHash,
+      amountHint: params.amountHint,
+    });
+    if (incoming) {
+      results.push(incoming);
     }
   }
 
   return results;
+};
+
+const findOpenSentPrivateForOwner = async (
+  ownerPrivateUserId: number,
+): Promise<PrivateInvoiceRow[]> => {
+  const table = invoicesTable();
+  if (!table) return [];
+  const { data, error } = await table
+    .select(
+      "id, status, amount, referenceNo, senderIban, moneriumOrderId, senderPrivateUserId, receiverPrivateUserId, data",
+    )
+    .eq("senderPrivateUserId", ownerPrivateUserId)
+    .in("status", Array.from(OPEN_STATUSES))
+    .order("id", { ascending: false })
+    .limit(20);
+  if (error || !Array.isArray(data)) return [];
+  return data as PrivateInvoiceRow[];
+};
+
+const findOpenPublicSentForOwner = async (
+  ownerPrivateUserId: number,
+): Promise<PublicInvoiceRow[]> => {
+  const table = publicInvoicesTable();
+  if (!table) return [];
+  const { data, error } = await table
+    .select(
+      "id, status, amount, referenceNo, senderIban, senderPrivateUserId, externalPaymentCount, data, paidOnDate",
+    )
+    .eq("senderPrivateUserId", ownerPrivateUserId)
+    .in("status", Array.from(OPEN_STATUSES))
+    .order("id", { ascending: false })
+    .limit(20);
+  if (error || !Array.isArray(data)) return [];
+  return data as PublicInvoiceRow[];
+};
+
+const parseEuroAmountHint = (raw?: string | null): string | null => {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (trimmed.includes(".")) {
+    const n = Number(trimmed);
+    return Number.isFinite(n) ? n.toFixed(2) : null;
+  }
+  if (/^\d+$/.test(trimmed) && trimmed.length >= 16) {
+    const n = Number(trimmed) / 1e18;
+    return Number.isFinite(n) ? n.toFixed(2) : null;
+  }
+  const n = Number(trimmed);
+  return Number.isFinite(n) ? n.toFixed(2) : null;
+};
+
+const syntheticIncomingOrder = (params: {
+  row: { moneriumOrderId?: string | null; amount: number | null; referenceNo: string | null };
+  txHash: string;
+  amountHint: string | null;
+}): MoneriumOrderSummary => ({
+  id: params.row.moneriumOrderId ?? null,
+  kind: "issue",
+  state: "processed",
+  amount:
+    params.amountHint ??
+    (params.row.amount != null ? String(params.row.amount) : null),
+  currency: "eur",
+  memo: null,
+  referenceNumber: params.row.referenceNo,
+  address: null,
+  counterpartIban: null,
+  counterpartName: null,
+  txHashes: [params.txHash],
+  raw: { source: "incoming_mint_fallback" },
+});
+
+/**
+ * Alchemy mint hits the payee wallet. In-app pays are matched by invoice id /
+ * number on the Monerium order. This path is external-bank only: unique amount
+ * on sent invoices that have no in-app Monerium order id.
+ */
+export async function settleIncomingMintForOwner(params: {
+  ownerPrivateUserId?: string | null;
+  txHash: string;
+  amountHint?: string | null;
+}): Promise<SettleResult | null> {
+  const ownerId = asNumberId(params.ownerPrivateUserId);
+  if (!ownerId) return null;
+
+  const euro = parseEuroAmountHint(params.amountHint);
+  const privateOpen = (await findOpenSentPrivateForOwner(ownerId)).filter(
+    (row) => !(row.moneriumOrderId ?? "").trim(),
+  );
+  const privateHits = euro
+    ? privateOpen.filter((row) => amountsEqual2dp(row.amount, euro))
+    : [];
+
+  let privateRow: PrivateInvoiceRow | null = null;
+  if (privateHits.length === 1) {
+    privateRow = privateHits[0]!;
+  } else if (
+    privateOpen.length === 1 &&
+    (euro == null || amountsEqual2dp(privateOpen[0]!.amount, euro))
+  ) {
+    privateRow = privateOpen[0]!;
+  }
+
+  if (privateRow) {
+    console.log("ℹ️ Incoming mint matched sent private invoice", {
+      invoiceId: privateRow.id,
+      ownerPrivateUserId: ownerId,
+      amountHint: euro,
+      txHash: params.txHash,
+    });
+    const settled = await settlePrivatePaid({
+      row: privateRow,
+      order: syntheticIncomingOrder({
+        row: privateRow,
+        txHash: params.txHash,
+        amountHint: euro,
+      }),
+      txHash: params.txHash,
+    });
+    return { ...settled, detail: settled.detail ?? "incoming_mint_owner" };
+  }
+
+  const publicOpen = await findOpenPublicSentForOwner(ownerId);
+  const publicHits = euro
+    ? publicOpen.filter((row) => amountsEqual2dp(row.amount, euro))
+    : [];
+
+  let publicRow: PublicInvoiceRow | null = null;
+  if (publicHits.length === 1) {
+    publicRow = publicHits[0]!;
+  } else if (
+    publicOpen.length === 1 &&
+    (euro == null || amountsEqual2dp(publicOpen[0]!.amount, euro))
+  ) {
+    publicRow = publicOpen[0]!;
+  }
+
+  if (publicRow) {
+    console.log("ℹ️ Incoming mint matched sent public invoice", {
+      invoiceId: publicRow.id,
+      ownerPrivateUserId: ownerId,
+      amountHint: euro,
+      txHash: params.txHash,
+    });
+    const settled = await settlePublicPaid({
+      row: publicRow,
+      order: syntheticIncomingOrder({
+        row: publicRow,
+        txHash: params.txHash,
+        amountHint: euro,
+      }),
+    });
+    return { ...settled, detail: settled.detail ?? "incoming_mint_owner_public" };
+  }
+
+  console.log("ℹ️ Incoming mint did not match an open sent invoice", {
+    ownerPrivateUserId: ownerId,
+    amountHint: euro,
+    privateOpen: privateOpen.length,
+    publicOpen: publicOpen.length,
+    txHash: params.txHash,
+  });
+  return null;
 };
 
 /** PROCESSING invoices for a payer (receiver) — used when txHash order list is empty. */

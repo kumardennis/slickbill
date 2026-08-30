@@ -6,6 +6,7 @@ Map<String, String> authLocales_EN = {
   'btn_SignUp': 'Sign up',
   'lbl_Private': 'Private',
   'lbl_Business': 'Business',
+  'lbl_SentAsBusiness': 'Sent as business',
   'lbl_Email': 'Email',
   'lbl_FirstName': 'First name',
   'lbl_LastName': 'Last name',

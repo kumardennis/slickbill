@@ -21,6 +21,7 @@ class InvoiceCard extends HookWidget {
   final bool isSeen;
   final double amount;
   final bool isFromBusiness;
+  final BusinessBadgePerspective businessBadgePerspective;
 
   const InvoiceCard(
       {super.key,
@@ -33,7 +34,9 @@ class InvoiceCard extends HookWidget {
       required this.status,
       required this.isSeen,
       required this.amount,
-      this.isFromBusiness = false});
+      this.isFromBusiness = false,
+      this.businessBadgePerspective =
+          BusinessBadgePerspective.fromBusiness});
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +87,9 @@ class InvoiceCard extends HookWidget {
                   ),
                   if (isFromBusiness) ...[
                     const SizedBox(height: 6),
-                    const FromBusinessBadge(),
+                    FromBusinessBadge(
+                      perspective: businessBadgePerspective,
+                    ),
                   ],
                   Text(
                       DateFormat('EEE, dd MMM yyyy')

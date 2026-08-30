@@ -201,6 +201,28 @@ export const loadMoneriumTokenByWallet = async (
   };
 };
 
+export const deleteMoneriumToken = async (
+  privateUserId: string,
+): Promise<void> => {
+  const table = tokens();
+  if (!table || !privateUserId.trim()) {
+    return;
+  }
+
+  const { error } = await table
+    .delete()
+    .eq("privateUserId", privateUserId.trim());
+
+  if (error) {
+    console.error("❌ Failed to delete monerium_tokens", {
+      privateUserId,
+      message: error.message,
+    });
+  } else {
+    console.log("🗑️ monerium_tokens deleted", { privateUserId });
+  }
+};
+
 export const getMoneriumTokenStatus = async (privateUserId: string) => {
   const table = tokens();
   if (!table) {

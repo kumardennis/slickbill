@@ -7,14 +7,20 @@ import {
   errorResponseData,
 } from "../../_shared/confirmedRequiredParams.ts";
 import { corsHeaders } from "../../_shared/cors.ts";
-import { createSupabase } from "../../_shared/supabaseClient.ts";
+import {
+  createSupabase,
+  createSupabaseService,
+  isServiceRoleRequest,
+} from "../../_shared/supabaseClient.ts";
 import { sendFcmPush } from "../../_shared/fcm.ts";
 
 export const handler = async (req: Request) => {
-  const supabase = createSupabase(req);
+  const supabase = isServiceRoleRequest(req)
+    ? createSupabaseService()
+    : createSupabase(req);
 
   try {
-    const { userId, type, invoiceId, title, body } = await req.json();
+    const { userId, type, invoiceId, title, body, token } = await req.json();
 
     if (!confirmedRequiredParams([userId, type, invoiceId])) {
       return new Response(JSON.stringify(errorResponseData), {
@@ -22,22 +28,50 @@ export const handler = async (req: Request) => {
       });
     }
 
-    // Fetch user's FCM token
-    const { data: userData, error: userError } = await supabase
-      .from("users")
-      .select("fcm_token")
-      .eq("id", userId)
-      .single();
+    const providedToken =
+      typeof token === "string" && token.trim().length > 0
+        ? token.trim()
+        : "";
 
-    if (userError || !userData?.fcm_token) {
-      const responseData = {
-        isRequestSuccessfull: false,
-        data: null,
-        error: userError ?? "User not found or no FCM token",
-      };
-      return new Response(JSON.stringify(responseData), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    let fcmToken = providedToken;
+    if (!fcmToken) {
+      const appUserId = Number(userId);
+      const idFilter = Number.isFinite(appUserId) ? appUserId : userId;
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("id, fcm_token")
+        .eq("id", idFilter)
+        .maybeSingle();
+
+      if (userData) {
+        fcmToken = (userData.fcm_token as string | null)?.trim() ?? "";
+      } else if (Number.isFinite(appUserId) && appUserId > 0) {
+        const { data: privateUser } = await supabase
+          .from("private_users")
+          .select("userId")
+          .eq("id", appUserId)
+          .maybeSingle();
+        const mappedUserId = Number(privateUser?.userId);
+        if (Number.isFinite(mappedUserId) && mappedUserId > 0) {
+          const { data: mappedUser } = await supabase
+            .from("users")
+            .select("fcm_token")
+            .eq("id", mappedUserId)
+            .maybeSingle();
+          fcmToken = (mappedUser?.fcm_token as string | null)?.trim() ?? "";
+        }
+      }
+
+      if (!fcmToken) {
+        const responseData = {
+          isRequestSuccessfull: false,
+          data: null,
+          error: userError ?? "User not found or no FCM token",
+        };
+        return new Response(JSON.stringify(responseData), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
     }
 
     // Determine title and body based on type
@@ -84,12 +118,11 @@ export const handler = async (req: Request) => {
       }
     }
 
-    // Send FCM notification
     await sendFcmPush({
-      token: userData.fcm_token,
+      token: fcmToken,
       title: finalTitle,
       body: finalBody,
-      data: { type, invoiceId },
+      data: { type, invoiceId: String(invoiceId) },
     });
 
     const responseData = {

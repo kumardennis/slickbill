@@ -18,11 +18,11 @@ import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_con
 import 'package:slickbill/feature_navigation/getx_controllers/navigation_controller.dart';
 import 'package:slickbill/feature_nearby_transaction/widgets/big_input_amount.dart';
 import 'package:slickbill/feature_self_create/widgets/input_field.dart';
-import 'package:slickbill/feature_self_create/widgets/input_field_amount.dart';
 import 'package:slickbill/feature_send/models/receiver_user_model.dart';
 import 'package:slickbill/feature_send/models/users_by_username_model.dart';
 import 'package:slickbill/feature_send/screens/quick_share.dart';
 import 'package:slickbill/feature_send/utils/send_invoices_class.dart';
+import 'package:slickbill/feature_send/widgets/compact_receiver_row.dart';
 import 'package:slickbill/shared_widgets/custom_appbar.dart';
 
 class SendNfcInvoice extends HookWidget {
@@ -953,14 +953,6 @@ Widget _buildDirectShareTab({
       directReceivers.value.every((e) => e.amount > 0) &&
       !isSendingDirectInvoice.value;
 
-  void changeReceiverAmount(int id, double amount) {
-    final updated = [...directReceivers.value];
-    final i = updated.indexWhere((e) => e.id == id);
-    if (i == -1) return;
-    updated[i].amount = amount;
-    directReceivers.value = updated;
-  }
-
   return SingleChildScrollView(
     child: Padding(
       padding: const EdgeInsets.all(20),
@@ -975,6 +967,7 @@ Widget _buildDirectShareTab({
           ),
           const SizedBox(height: 12),
           TypeAheadField<UsersByUsername>(
+            debounceDuration: const Duration(milliseconds: 280),
             suggestionsCallback: (pattern) => getOptions(pattern),
             builder: (context, controller, focusNode) {
               return TextField(
@@ -984,7 +977,7 @@ Widget _buildDirectShareTab({
                   color: Theme.of(context).colorScheme.dark,
                 ),
                 decoration: InputDecoration(
-                  hintText: '@username',
+                  hintText: 'lbl_SearchUsers'.tr,
                   prefixIcon: const Icon(Icons.alternate_email),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(16),
@@ -996,7 +989,7 @@ Widget _buildDirectShareTab({
               return ListTile(
                 title: Text('@${suggestion.users.username}'),
                 subtitle:
-                    Text('${suggestion.firstName} ${suggestion.lastName}'),
+                    Text('${suggestion.firstName} ${suggestion.lastName}'.trim()),
               );
             },
             onSelected: (suggestion) {
@@ -1033,64 +1026,41 @@ Widget _buildDirectShareTab({
           ),
           const SizedBox(height: 12),
           if (directReceivers.value.isNotEmpty)
-            Column(
-              children: directReceivers.value.map((receiverUser) {
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border:
-                        Border.all(color: Theme.of(context).colorScheme.blue),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${receiverUser.firstName} ${receiverUser.lastName}',
-                              style: TextStyle(
-                                fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.dark,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          GestureDetector(
-                            onTap: () {
-                              directReceivers.value = directReceivers.value
-                                  .where((e) => e.id != receiverUser.id)
-                                  .toList();
-                            },
-                            child: const Icon(Icons.close,
-                                size: 16, color: Colors.red),
-                          ),
-                        ],
-                      ),
-                      Text('@${receiverUser.username}',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.darkGray,
-                            fontSize: 12,
-                          )),
-                      const SizedBox(height: 10),
-                      InputFieldAmount(
-                        receiverUser: receiverUser,
-                        changeReceiverAmount: (int id, double amount) {
-                          final updated = [...directReceivers.value];
-                          final i = updated.indexWhere((e) => e.id == id);
-                          if (i == -1) return;
-                          updated[i].amount = amount;
-                          directReceivers.value = updated; // IMPORTANT
-                        },
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.blue.withOpacity(0.35),
+                ),
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              child: Column(
+                children: [
+                  for (var i = 0; i < directReceivers.value.length; i++)
+                    Builder(
+                      builder: (context) {
+                        final receiver = directReceivers.value[i];
+                        return CompactReceiverRow(
+                          receiverUser: receiver,
+                          showDivider: i < directReceivers.value.length - 1,
+                          onAmountChanged: (int id, double amount) {
+                            final updated = [...directReceivers.value];
+                            final idx = updated.indexWhere((e) => e.id == id);
+                            if (idx == -1) return;
+                            updated[idx].amount = amount;
+                            directReceivers.value = updated;
+                          },
+                          onRemove: () {
+                            directReceivers.value = directReceivers.value
+                                .where((e) => e.id != receiver.id)
+                                .toList();
+                          },
+                        );
+                      },
+                    ),
+                ],
+              ),
             ),
           const SizedBox(height: 20),
           InputField(

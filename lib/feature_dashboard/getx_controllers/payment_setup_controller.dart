@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:get/get.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/models/user_model.dart';
@@ -6,8 +8,7 @@ import 'package:slickbill/feature_auth/services/monerium_service.dart';
 enum PaymentSetupStep {
   connectWallet,
   connectMonerium,
-  linkAddress,
-  requestIban,
+  reconnectMonerium,
   complete,
 }
 
@@ -64,13 +65,18 @@ class PaymentSetupController extends GetxController {
 
   Future<void> refresh() async {
     isRefreshing.value = true;
+    String userId = '0';
+    String? trackAddress;
     try {
       final userController = Get.find<UserController>();
       final user = userController.user.value;
       final address = user.metamaskWalletAddress?.trim();
+      trackAddress = (address != null && address.isNotEmpty)
+          ? address
+          : user.cdpWalletId?.trim();
       final walletReady = address != null && address.isNotEmpty;
       final ibanReady = userHasMoneriumIban(user);
-      final userId = resolveMoneriumUserId(user);
+      userId = resolveMoneriumUserId(user);
       final balanceReady = userId.isNotEmpty && userId != '0'
           ? await MoneriumService.isBalanceConfirmedFlag(userId: userId)
           : false;
@@ -85,14 +91,6 @@ class PaymentSetupController extends GetxController {
         return;
       }
 
-      // Successful Monerium balance (or saved Monerium IBAN) means fully set up.
-      if (ibanReady || balanceReady) {
-        hasMoneriumSession.value = true;
-        isAddressLinked.value = true;
-        step.value = PaymentSetupStep.complete;
-        return;
-      }
-
       final sessionReady = userId.isNotEmpty && userId != '0'
           ? await MoneriumService.hasActiveSession(userId: userId)
           : false;
@@ -101,24 +99,37 @@ class PaymentSetupController extends GetxController {
           : false;
 
       hasMoneriumSession.value = sessionReady;
-      isAddressLinked.value = linkedReady;
+      isAddressLinked.value = linkedReady || ibanReady || balanceReady;
 
-      if (!sessionReady) {
-        step.value = PaymentSetupStep.connectMonerium;
-      } else if (!linkedReady) {
-        step.value = PaymentSetupStep.linkAddress;
-      } else {
-        step.value = PaymentSetupStep.requestIban;
+      if (ibanReady || balanceReady) {
+        step.value = sessionReady
+            ? PaymentSetupStep.complete
+            : PaymentSetupStep.reconnectMonerium;
+        return;
       }
+
+      step.value = PaymentSetupStep.connectMonerium;
     } finally {
       isRefreshing.value = false;
+    }
+
+    if (trackAddress != null &&
+        trackAddress.isNotEmpty &&
+        userId.isNotEmpty &&
+        userId != '0') {
+      unawaited(
+        MoneriumService.registerWalletForTracking(
+          userId: userId,
+          walletAddress: trackAddress,
+        ),
+      );
     }
   }
 
   Future<void> markMoneriumConnected() async {
     hasMoneriumSession.value = true;
-    if (step.value == PaymentSetupStep.connectMonerium) {
-      step.value = PaymentSetupStep.linkAddress;
+    if (step.value == PaymentSetupStep.connectWallet) {
+      step.value = PaymentSetupStep.connectMonerium;
     }
     await refresh();
   }
@@ -126,9 +137,7 @@ class PaymentSetupController extends GetxController {
   Future<void> markAddressLinked({required String userId}) async {
     await MoneriumService.setAddressLinked(userId: userId, linked: true);
     isAddressLinked.value = true;
-    if (step.value.index <= PaymentSetupStep.linkAddress.index) {
-      step.value = PaymentSetupStep.requestIban;
-    }
+    hasMoneriumSession.value = true;
     await refresh();
   }
 

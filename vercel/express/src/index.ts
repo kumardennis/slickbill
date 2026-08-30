@@ -30,7 +30,7 @@ import {
   loadMoneriumToken,
   loadMoneriumTokenByWallet,
   persistMoneriumToken,
-  updateMoneriumTokenWallet,
+  deleteMoneriumToken,
 } from "./lib/moneriumTokens.js";
 import { getSupabaseAdmin } from "./lib/supabaseAdmin.js";
 import {
@@ -48,6 +48,7 @@ import {
   listProcessingInvoicesForPayer,
 } from "./lib/moneriumSettle.js";
 import { addAddressesToAlchemyWebhook } from "./lib/alchemyAddresses.js";
+import { registerMoneriumWallet } from "./lib/registerMoneriumWallet.js";
 import { notifyUserViaSupabase } from "./lib/notifyUser.js";
 
 console.log("🔍 Environment variables:");
@@ -129,6 +130,10 @@ type MoneriumStatePayload = {
 
 const moneriumPkceStore = new Map<string, MoneriumPkceEntry>();
 const moneriumTokenStore = new Map<string, MoneriumTokenEntry>();
+const moneriumRefreshInFlight = new Map<
+  string,
+  Promise<MoneriumTokenEntry>
+>();
 
 const setMoneriumToken = async (
   userId: string,
@@ -702,7 +707,37 @@ const exchangeMoneriumCodeForToken = async (params: {
   return normalizeTokenResponse(json as MoneriumOAuthTokenResponse);
 };
 
-const refreshMoneriumToken = async (userId: string) => {
+const isInvalidGrantPayload = (json: unknown) => {
+  if (!json || typeof json !== "object") {
+    return false;
+  }
+  const map = json as Record<string, unknown>;
+  if (map.error === "invalid_grant") {
+    return true;
+  }
+  if (map.error && typeof map.error === "object") {
+    const nested = map.error as Record<string, unknown>;
+    if (nested.error === "invalid_grant" || nested.code === "invalid_grant") {
+      return true;
+    }
+  }
+  const description = [
+    map.error_description,
+    map.message,
+    map.error,
+  ]
+    .filter((value) => typeof value === "string")
+    .join(" ")
+    .toLowerCase();
+  return description.includes("invalid_grant") || description.includes("invalid refresh");
+};
+
+const clearMoneriumToken = async (userId: string) => {
+  moneriumTokenStore.delete(userId);
+  await deleteMoneriumToken(userId);
+};
+
+const refreshMoneriumTokenInner = async (userId: string) => {
   let existing = moneriumTokenStore.get(userId);
   if (!existing?.refreshToken) {
     const persisted = await loadMoneriumToken(userId);
@@ -723,7 +758,7 @@ const refreshMoneriumToken = async (userId: string) => {
       "MONERIUM_REFRESH_TOKEN_MISSING",
       "No refresh token available for this user.",
       { userId },
-      400,
+      401,
     );
   }
 
@@ -753,6 +788,15 @@ const refreshMoneriumToken = async (userId: string) => {
   })();
 
   if (!response.ok) {
+    if (isInvalidGrantPayload(json) || response.status === 401) {
+      await clearMoneriumToken(userId);
+      throw makeError(
+        "MONERIUM_REAUTH_REQUIRED",
+        "Monerium refresh token is no longer valid. Connect Monerium again.",
+        json,
+        401,
+      );
+    }
     throw makeError(
       "MONERIUM_TOKEN_REFRESH_FAILED",
       "Failed to refresh Monerium access token.",
@@ -767,6 +811,20 @@ const refreshMoneriumToken = async (userId: string) => {
   }
   await setMoneriumToken(userId, next);
   return next;
+};
+
+const refreshMoneriumToken = async (userId: string) => {
+  const inflight = moneriumRefreshInFlight.get(userId);
+  if (inflight) {
+    return inflight;
+  }
+  const promise = refreshMoneriumTokenInner(userId).finally(() => {
+    if (moneriumRefreshInFlight.get(userId) === promise) {
+      moneriumRefreshInFlight.delete(userId);
+    }
+  });
+  moneriumRefreshInFlight.set(userId, promise);
+  return promise;
 };
 
 const getValidMoneriumToken = async (userId: string) => {
@@ -796,7 +854,8 @@ const getValidMoneriumToken = async (userId: string) => {
   }
 
   const skewMs = 30_000;
-  if (current.expiresAt - Date.now() <= skewMs) {
+  const expiresAt = Number(current.expiresAt);
+  if (!Number.isFinite(expiresAt) || expiresAt - Date.now() <= skewMs) {
     return refreshMoneriumToken(userId);
   }
 
@@ -812,85 +871,94 @@ const moneriumApiRequest = async (params: {
   tokenOverride?: MoneriumTokenOverride;
   timeoutMs?: number;
 }) => {
-  const usingOverride = Boolean(params.tokenOverride?.accessToken);
   console.log("➡️ Monerium API request", {
     userId: params.userId,
     method: params.method,
     path: params.path,
-    usingOverride,
-    overrideToken: maskTokenForLog(params.tokenOverride?.accessToken),
   });
 
-  const token = params.tokenOverride?.accessToken
-    ? {
-        accessToken: params.tokenOverride.accessToken,
-        refreshToken: params.tokenOverride.refreshToken,
-        tokenType: params.tokenOverride.tokenType || "Bearer",
-        scope: params.tokenOverride.scope,
-        createdAt: Date.now(),
-        expiresAt:
-          params.tokenOverride.expiresAt || Date.now() + 55 * 60 * 1000,
-      }
-    : await getValidMoneriumToken(params.userId);
-  const normalizedPath = params.path.split("?")[0].replace(/\/+$/, "");
-  const normalizedOrdersPath = moneriumOrdersPath.replace(/\/+$/, "");
-  const normalizedRedeemPath = moneriumRedeemPath.replace(/\/+$/, "");
-  const normalizedProfilesPath = moneriumProfilesPath.replace(/\/+$/, "");
+  const resolveToken = async () => getValidMoneriumToken(params.userId);
 
-  const requiresV2Accept =
-    normalizedPath === normalizedOrdersPath ||
-    normalizedPath.startsWith(`${normalizedOrdersPath}/`) ||
-    normalizedPath === normalizedRedeemPath ||
-    normalizedPath.startsWith(`${normalizedRedeemPath}/`) ||
-    normalizedPath === normalizedProfilesPath ||
-    normalizedPath.startsWith(`${normalizedProfilesPath}/`);
+  const execute = async (token: MoneriumTokenEntry) => {
+    const normalizedPath = params.path.split("?")[0].replace(/\/+$/, "");
+    const normalizedOrdersPath = moneriumOrdersPath.replace(/\/+$/, "");
+    const normalizedRedeemPath = moneriumRedeemPath.replace(/\/+$/, "");
+    const normalizedProfilesPath = moneriumProfilesPath.replace(/\/+$/, "");
 
-  const acceptHeader = requiresV2Accept
-    ? "application/vnd.monerium.api-v2+json"
-    : "application/json";
-  const url = makeMoneriumUrl(params.path, params.query);
-  const controller = new AbortController();
-  const requestTimeoutMs = params.timeoutMs ?? moneriumHttpTimeoutMs;
-  const timeoutId = setTimeout(() => {
-    controller.abort();
-  }, requestTimeoutMs);
+    const requiresV2Accept =
+      normalizedPath === normalizedOrdersPath ||
+      normalizedPath.startsWith(`${normalizedOrdersPath}/`) ||
+      normalizedPath === normalizedRedeemPath ||
+      normalizedPath.startsWith(`${normalizedRedeemPath}/`) ||
+      normalizedPath === normalizedProfilesPath ||
+      normalizedPath.startsWith(`${normalizedProfilesPath}/`);
 
-  let response: any;
-  try {
-    response = await fetch(url, {
-      method: params.method,
-      headers: {
-        Authorization: `${token.tokenType || "Bearer"} ${token.accessToken}`,
-        Accept: acceptHeader,
-        "Content-Type": "application/json",
-      },
-      ...(params.body !== undefined
-        ? { body: JSON.stringify(params.body) }
-        : {}),
-      signal: controller.signal,
-    });
-  } catch (error) {
-    if ((error as any)?.name === "AbortError") {
-      throw makeError(
-        "MONERIUM_UPSTREAM_TIMEOUT",
-        `Monerium API timeout after ${requestTimeoutMs}ms for ${params.path}`,
-        { path: params.path, timeoutMs: requestTimeoutMs },
-        504,
-      );
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
+    const acceptHeader = requiresV2Accept
+      ? "application/vnd.monerium.api-v2+json"
+      : "application/json";
+    const url = makeMoneriumUrl(params.path, params.query);
+    const controller = new AbortController();
+    const requestTimeoutMs = params.timeoutMs ?? moneriumHttpTimeoutMs;
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, requestTimeoutMs);
 
-  const text = await response.text();
-  const data = (() => {
     try {
-      return text ? JSON.parse(text) : null;
-    } catch {
-      return { raw: text };
+      const response = await fetch(url, {
+        method: params.method,
+        headers: {
+          Authorization: `${token.tokenType || "Bearer"} ${token.accessToken}`,
+          Accept: acceptHeader,
+          "Content-Type": "application/json",
+        },
+        ...(params.body !== undefined
+          ? { body: JSON.stringify(params.body) }
+          : {}),
+        signal: controller.signal,
+      });
+      const text = await response.text();
+      const data = (() => {
+        try {
+          return text ? JSON.parse(text) : null;
+        } catch {
+          return { raw: text };
+        }
+      })();
+      return { response, data };
+    } catch (error) {
+      if ((error as any)?.name === "AbortError") {
+        throw makeError(
+          "MONERIUM_UPSTREAM_TIMEOUT",
+          `Monerium API timeout after ${requestTimeoutMs}ms for ${params.path}`,
+          { path: params.path, timeoutMs: requestTimeoutMs },
+          504,
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
-  })();
+  };
+
+  let token = await resolveToken();
+  let { response, data } = await execute(token);
+
+  if (!response.ok && response.status === 401) {
+    console.warn("⚠️ Monerium API 401 — refreshing and retrying once", {
+      userId: params.userId,
+      path: params.path,
+    });
+    try {
+      token = await refreshMoneriumToken(params.userId);
+      ({ response, data } = await execute(token));
+    } catch (refreshError) {
+      console.error("❌ Monerium 401 retry refresh failed", {
+        userId: params.userId,
+        path: params.path,
+        refreshError,
+      });
+    }
+  }
 
   if (!response.ok) {
     const upstreamMessage = summarizeMoneriumErrorData(data);
@@ -898,7 +966,6 @@ const moneriumApiRequest = async (params: {
       userId: params.userId,
       path: params.path,
       status: response.status,
-      usingOverride,
       upstreamMessage,
       upstreamData: data,
     });
@@ -1836,16 +1903,11 @@ app.post("/monerium/siwe/complete", async (req: any, res: any) => {
     });
 
     await setMoneriumToken(entry.userId, token, entry.walletAddress);
-    if (entry.walletAddress) {
-      await updateMoneriumTokenWallet(entry.userId, entry.walletAddress);
-      const alchemyAdd = await addAddressesToAlchemyWebhook([
-        entry.walletAddress,
-      ]);
-      console.log(
-        "ℹ️ Alchemy webhook address sync (SIWE complete)",
-        alchemyAdd,
-      );
-    }
+    await registerMoneriumWallet({
+      privateUserId: entry.userId,
+      walletAddress: entry.walletAddress,
+      token,
+    });
     moneriumPkceStore.delete(state);
 
     // Build the deep-link redirect URL for the app
@@ -2052,8 +2114,12 @@ app.get("/monerium/oauth/callback", async (req: any, res: any) => {
         }
         const nextUrl = url.toString();
         const safeMessage = message ?? "Authentication finished.";
+        const isNativeAppRedirect = /^(slickbill|slickbills):/i.test(
+          entry.appRedirectUri,
+        );
         const shouldAutoRedirect =
-          moneriumAppAutoRedirectEnabled && entry.appAutoRedirect === true;
+          isNativeAppRedirect ||
+          (moneriumAppAutoRedirectEnabled && entry.appAutoRedirect === true);
         const title = shouldAutoRedirect
           ? "Returning to app"
           : "Continue to app";
@@ -2133,6 +2199,10 @@ app.get("/monerium/oauth/callback", async (req: any, res: any) => {
     });
 
     await setMoneriumToken(entry.userId, token);
+    await registerMoneriumWallet({
+      privateUserId: entry.userId,
+      token,
+    });
     moneriumPkceStore.delete(state);
 
     if (finishByRedirect("success", undefined, token)) {
@@ -2172,14 +2242,19 @@ app.post("/monerium/oauth/refresh", async (req: any, res: any) => {
     }
 
     let token: MoneriumTokenEntry;
+    const persisted = await loadMoneriumToken(userId);
+    const stored = moneriumTokenStore.get(userId) ?? persisted;
+    const bodyRefresh =
+      typeof moneriumRefreshToken === "string"
+        ? moneriumRefreshToken.trim()
+        : "";
 
-    if (
-      typeof moneriumRefreshToken === "string" &&
-      moneriumRefreshToken.trim().length > 0
-    ) {
+    if (stored?.refreshToken) {
+      token = await refreshMoneriumToken(userId);
+    } else if (bodyRefresh) {
       const body = new URLSearchParams({
         grant_type: "refresh_token",
-        refresh_token: moneriumRefreshToken.trim(),
+        refresh_token: bodyRefresh,
         client_id: moneriumClientId,
         client_secret: moneriumClientSecret,
       });
@@ -2203,6 +2278,15 @@ app.post("/monerium/oauth/refresh", async (req: any, res: any) => {
       })();
 
       if (!response.ok) {
+        if (isInvalidGrantPayload(json) || response.status === 401) {
+          await clearMoneriumToken(userId);
+          throw makeError(
+            "MONERIUM_REAUTH_REQUIRED",
+            "Monerium refresh token is no longer valid. Connect Monerium again.",
+            json,
+            401,
+          );
+        }
         throw makeError(
           "MONERIUM_TOKEN_REFRESH_FAILED",
           "Failed to refresh Monerium access token.",
@@ -2213,12 +2297,22 @@ app.post("/monerium/oauth/refresh", async (req: any, res: any) => {
 
       token = normalizeTokenResponse(json as MoneriumOAuthTokenResponse);
       if (!token.refreshToken) {
-        token.refreshToken = moneriumRefreshToken.trim();
+        token.refreshToken = bodyRefresh;
       }
       await setMoneriumToken(userId, token);
     } else {
-      token = await refreshMoneriumToken(userId);
+      throw makeError(
+        "MONERIUM_REFRESH_TOKEN_MISSING",
+        "No refresh token available for this user.",
+        { userId },
+        401,
+      );
     }
+
+    await registerMoneriumWallet({
+      privateUserId: userId,
+      token,
+    });
 
     return res.status(200).json({
       ok: true,
@@ -2454,6 +2548,43 @@ app.get("/monerium/profile", async (req: any, res: any) => {
   }
 });
 
+app.post("/monerium/wallet/register", async (req: any, res: any) => {
+  try {
+    const userId =
+      typeof req.body?.userId === "string" ? req.body.userId.trim() : "";
+    const walletAddress =
+      typeof req.body?.walletAddress === "string"
+        ? req.body.walletAddress.trim()
+        : "";
+
+    if (!userId) {
+      return res
+        .status(400)
+        .json(makeError("MONERIUM_USER_ID_MISSING", "Missing userId."));
+    }
+
+    const result = await registerMoneriumWallet({
+      privateUserId: userId,
+      walletAddress: walletAddress || null,
+    });
+
+    return res.status(200).json({
+      ok: result.ok,
+      data: result,
+    });
+  } catch (error) {
+    console.error("❌ Monerium wallet register failed:", error);
+    return res.status(500).json(
+      makeError(
+        "MONERIUM_WALLET_REGISTER_FAILED",
+        error instanceof Error ? error.message : "Unknown error",
+        error,
+        500,
+      ),
+    );
+  }
+});
+
 app.post("/monerium/wallet/link", async (req: any, res: any) => {
   try {
     const { userId, address, chain, profile, message, signature } =
@@ -2594,15 +2725,13 @@ app.post("/monerium/wallet/link", async (req: any, res: any) => {
     });
 
     if (linkedConfirmed) {
-      await updateMoneriumTokenWallet(userId, address);
-      // Also re-persist token with wallet so a missing row still gets address when possible.
-      const existing =
-        moneriumTokenStore.get(userId) ?? (await loadMoneriumToken(userId));
-      if (existing) {
-        await persistMoneriumToken(userId, existing, address);
-      }
-      const alchemyAdd = await addAddressesToAlchemyWebhook([address]);
-      console.log("ℹ️ Alchemy webhook address sync (wallet link)", alchemyAdd);
+      await registerMoneriumWallet({
+        privateUserId: userId,
+        walletAddress: address,
+        token:
+          moneriumTokenStore.get(userId) ??
+          (await loadMoneriumToken(userId)),
+      });
     }
 
     return res.status(200).json({
@@ -2698,6 +2827,18 @@ app.get("/monerium/wallet/addresses", async (req: any, res: any) => {
     const linked = expectedAddress
       ? isMoneriumAddressLinked(data, expectedAddress)
       : undefined;
+
+    const trackedAddress =
+      expectedAddress ||
+      summarizeMoneriumAddressRow(firstAddressRow)?.address ||
+      summarizeMoneriumAddressRow(firstAddressRow)?.walletAddress ||
+      "";
+    if (trackedAddress) {
+      await registerMoneriumWallet({
+        privateUserId: userId,
+        walletAddress: trackedAddress,
+      });
+    }
 
     console.log("✅ Monerium wallet addresses fetched", {
       userId,
@@ -3025,6 +3166,11 @@ app.get("/monerium/balances", async (req: any, res: any) => {
 
     const path = resolveMoneriumBalancesPath(chain, address);
 
+    await registerMoneriumWallet({
+      privateUserId: userId,
+      walletAddress: address,
+    });
+
     console.log("➡️ Monerium balances request", {
       userId,
       address,
@@ -3135,6 +3281,13 @@ app.post("/monerium/orders/redeem", async (req: any, res: any) => {
       body: orderPayload,
     });
 
+    if (typeof walletAddress === "string" && walletAddress.trim()) {
+      await registerMoneriumWallet({
+        privateUserId: userId,
+        walletAddress,
+      });
+    }
+
     return res.status(200).json({ ok: true, data });
   } catch (error) {
     console.error("❌ Monerium redeem failed:", error);
@@ -3217,23 +3370,20 @@ app.post("/monerium/orders/send", async (req: any, res: any) => {
     }
     orderPayload.chain = resolvedChain;
 
-    // Harden memo/reference when paying a known invoice (for webhook matching).
+    await registerMoneriumWallet({
+      privateUserId: userId,
+      walletAddress: orderPayload.address,
+    });
+
     const invoiceIdRaw =
       typeof req.body?.invoiceId === "string" ||
       typeof req.body?.invoiceId === "number"
         ? String(req.body.invoiceId).trim()
         : "";
+    // In-platform: machine invoice id only. Do not put the description on the
+    // payment memo (that is leaked on bank statements and is not used to match).
     if (invoiceIdRaw && /^\d+$/.test(invoiceIdRaw)) {
-      const marker = `[sb:${invoiceIdRaw}]`;
-      const existingMemo =
-        typeof orderPayload.memo === "string" ? orderPayload.memo.trim() : "";
-      if (!existingMemo.toLowerCase().includes(`sb:${invoiceIdRaw}`)) {
-        const combined = existingMemo
-          ? `${existingMemo} ${marker}`.trim()
-          : marker;
-        orderPayload.memo =
-          combined.length > 140 ? combined.slice(0, 140) : combined;
-      }
+      orderPayload.memo = `[sb:${invoiceIdRaw}]`;
       const existingRef =
         typeof orderPayload.referenceNumber === "string"
           ? orderPayload.referenceNumber.trim()
@@ -3242,6 +3392,8 @@ app.post("/monerium/orders/send", async (req: any, res: any) => {
         const fallbackRef = `sb${invoiceIdRaw}`;
         orderPayload.referenceNumber =
           fallbackRef.length > 35 ? fallbackRef.slice(0, 35) : fallbackRef;
+      } else if (existingRef.length > 35) {
+        orderPayload.referenceNumber = existingRef.slice(0, 35);
       }
     }
 
@@ -3386,6 +3538,207 @@ app.post("/monerium/orders/send", async (req: any, res: any) => {
         ? (error as any)
         : makeError(
             "MONERIUM_SEND_ORDER_FAILED",
+            error instanceof Error ? error.message : "Unknown error",
+            error,
+            500,
+          );
+    return res.status(failure.status ?? 500).json(failure);
+  }
+});
+
+app.post("/monerium/orders/withdraw", async (req: any, res: any) => {
+  try {
+    const { userId, order } = req.body ?? {};
+
+    if (!userId || typeof userId !== "string") {
+      return res
+        .status(400)
+        .json(makeError("MONERIUM_USER_ID_MISSING", "Missing userId."));
+    }
+
+    if (!order || typeof order !== "object" || Array.isArray(order)) {
+      return res
+        .status(400)
+        .json(
+          makeError(
+            "MONERIUM_ORDER_PAYLOAD_MISSING",
+            "Missing order payload object.",
+          ),
+        );
+    }
+
+    const orderPayload = { ...(order as Record<string, unknown>) };
+    const kind =
+      typeof orderPayload.kind === "string" ? orderPayload.kind.trim() : "";
+    if (kind.toLowerCase() !== "redeem") {
+      return res
+        .status(400)
+        .json(
+          makeError(
+            "MONERIUM_ORDER_KIND_INVALID",
+            "Withdraw order kind must be 'redeem'.",
+          ),
+        );
+    }
+
+    if (
+      !orderPayload.address ||
+      typeof orderPayload.address !== "string" ||
+      !orderPayload.address.trim()
+    ) {
+      return res
+        .status(400)
+        .json(
+          makeError(
+            "MONERIUM_ORDER_ADDRESS_MISSING",
+            "Order payload missing address.",
+          ),
+        );
+    }
+
+    const bodyChain =
+      typeof orderPayload.chain === "string" ? orderPayload.chain.trim() : "";
+    const resolvedChain = bodyChain || configuredMoneriumWalletChain;
+    if (!resolvedChain) {
+      return res
+        .status(400)
+        .json(
+          makeError(
+            "MONERIUM_CHAIN_MISSING",
+            "Order payload missing chain. Provide order.chain or set MONERIUM_WALLET_CHAIN.",
+          ),
+        );
+    }
+    orderPayload.chain = resolvedChain;
+
+    if (!orderPayload.amount) {
+      return res
+        .status(400)
+        .json(
+          makeError(
+            "MONERIUM_ORDER_AMOUNT_MISSING",
+            "Order payload missing amount.",
+          ),
+        );
+    }
+
+    if (
+      !orderPayload.currency ||
+      typeof orderPayload.currency !== "string" ||
+      !orderPayload.currency.trim()
+    ) {
+      return res
+        .status(400)
+        .json(
+          makeError(
+            "MONERIUM_ORDER_CURRENCY_MISSING",
+            "Order payload missing currency.",
+          ),
+        );
+    }
+
+    const counterpart = orderPayload.counterpart;
+    if (!counterpart || typeof counterpart !== "object") {
+      return res
+        .status(400)
+        .json(
+          makeError(
+            "MONERIUM_ORDER_COUNTERPART_MISSING",
+            "Order payload missing counterpart object.",
+          ),
+        );
+    }
+
+    const identifier = (counterpart as Record<string, unknown>).identifier;
+    const iban =
+      identifier && typeof identifier === "object"
+        ? (identifier as Record<string, unknown>).iban
+        : undefined;
+    if (typeof iban !== "string" || !iban.trim()) {
+      return res
+        .status(400)
+        .json(
+          makeError(
+            "MONERIUM_IBAN_MISSING",
+            "Withdraw counterpart must include an IBAN.",
+          ),
+        );
+    }
+
+    if (
+      !orderPayload.message ||
+      typeof orderPayload.message !== "string" ||
+      !orderPayload.message.trim()
+    ) {
+      return res
+        .status(400)
+        .json(
+          makeError(
+            "MONERIUM_ORDER_MESSAGE_MISSING",
+            "Order payload missing message.",
+          ),
+        );
+    }
+
+    if (
+      !orderPayload.signature ||
+      typeof orderPayload.signature !== "string" ||
+      !orderPayload.signature.trim()
+    ) {
+      return res
+        .status(400)
+        .json(
+          makeError(
+            "MONERIUM_ORDER_SIGNATURE_MISSING",
+            "Order payload missing signature.",
+          ),
+        );
+    }
+
+    // Never treat a cash-out as an invoice payment.
+    delete orderPayload.memo;
+    orderPayload.memo = "SlickBills withdraw";
+    const existingRef =
+      typeof orderPayload.referenceNumber === "string"
+        ? orderPayload.referenceNumber.trim()
+        : "";
+    if (!existingRef || existingRef.toLowerCase().startsWith("sb")) {
+      const fallbackRef = `wd${Date.now()}`;
+      orderPayload.referenceNumber =
+        fallbackRef.length > 35 ? fallbackRef.slice(0, 35) : fallbackRef;
+    } else if (existingRef.length > 35) {
+      orderPayload.referenceNumber = existingRef.slice(0, 35);
+    }
+
+    await registerMoneriumWallet({
+      privateUserId: userId,
+      walletAddress: orderPayload.address,
+    });
+
+    console.log("➡️ Monerium withdraw order request", {
+      userId,
+      chain: orderPayload.chain,
+      currency: orderPayload.currency,
+      amount: orderPayload.amount,
+      hasAddress: Boolean(orderPayload.address),
+      hasSignature: Boolean(orderPayload.signature),
+    });
+
+    const data = await moneriumApiRequest({
+      userId,
+      method: "POST",
+      path: moneriumOrdersPath,
+      body: orderPayload,
+    });
+
+    return res.status(200).json({ ok: true, data });
+  } catch (error) {
+    console.error("❌ Monerium withdraw order failed:", error);
+    const failure =
+      error && typeof error === "object" && "status" in error
+        ? (error as any)
+        : makeError(
+            "MONERIUM_WITHDRAW_FAILED",
             error instanceof Error ? error.message : "Unknown error",
             error,
             500,
@@ -3721,6 +4074,8 @@ const resolveOrdersForTransfer = async (params: {
   txHash: string;
   walletAddress?: string | null;
   userId?: string | null;
+  kind?: "mint" | "burn" | "transfer";
+  amountHint?: string | null;
 }) => {
   let privateUserId = params.userId?.trim() || "";
   let wallet = params.walletAddress?.trim().toLowerCase() || "";
@@ -3806,6 +4161,8 @@ const resolveOrdersForTransfer = async (params: {
     orders,
     txHash: params.txHash,
     privateUserId,
+    kind: params.kind,
+    amountHint: params.amountHint,
   });
 
   return {
@@ -4040,6 +4397,8 @@ app.post("/monerium/chain/transfers", async (req: any, res: any) => {
         const resolved = await resolveOrdersForTransfer({
           txHash: transfer.txHash,
           walletAddress: transfer.walletAddress,
+          kind: transfer.kind,
+          amountHint: transfer.value,
         });
 
         const settleList = Array.isArray(resolved.settle)

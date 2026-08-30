@@ -42,11 +42,14 @@ class QuickShareScreen extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
+    final qrExpanded = useState(false);
+
     return Scaffold(
       resizeToAvoidBottomInset: true,
       body: _buildP2PTab(
         context: context,
         qrData: qrData,
+        qrExpanded: qrExpanded,
         receiverUserAmount: receiverUserAmount,
         descriptionController: descriptionController,
         dueDateController: dueDateController,
@@ -62,6 +65,7 @@ class QuickShareScreen extends HookWidget {
   Widget _buildP2PTab({
     required BuildContext context,
     required ValueNotifier<String> qrData,
+    required ValueNotifier<bool> qrExpanded,
     required ValueNotifier<double> receiverUserAmount,
     required TextEditingController descriptionController,
     required TextEditingController dueDateController,
@@ -72,23 +76,23 @@ class QuickShareScreen extends HookWidget {
     required Function(double) changeReceiverAmount,
   }) {
     final bool isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 100;
+    final colors = Theme.of(context).colorScheme;
 
     return Column(
       children: [
         // Info Banner
         Container(
           padding: EdgeInsets.all(16),
-          color: Theme.of(context).colorScheme.blue.withOpacity(0.1),
+          color: colors.blue.withOpacity(0.1),
           child: Row(
             children: [
-              Icon(Icons.info_outline,
-                  color: Theme.of(context).colorScheme.blue),
+              Icon(Icons.info_outline, color: colors.blue),
               SizedBox(width: 12),
               Expanded(
                 child: Text(
                   'Exchange invoices offline with other SlickBill users via QR/NFC',
                   style: TextStyle(
-                    color: Theme.of(context).colorScheme.dark,
+                    color: colors.dark,
                     fontSize: 13,
                   ),
                 ),
@@ -97,7 +101,7 @@ class QuickShareScreen extends HookWidget {
           ),
         ),
 
-        // Sticky QR Code
+        // Collapsible QR (hidden entirely while keyboard is open)
         if (!isKeyboardOpen)
           Container(
             decoration: BoxDecoration(
@@ -108,47 +112,106 @@ class QuickShareScreen extends HookWidget {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Theme.of(context).colorScheme.blue.withOpacity(0.15),
+                  color: colors.blue.withOpacity(0.15),
                   blurRadius: 20,
-                  offset: Offset(0, 8),
+                  offset: const Offset(0, 8),
                 ),
               ],
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Text(
-                    'Scan with SlickBill app to create invoice',
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.darkGray,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color:
-                            Theme.of(context).colorScheme.blue.withOpacity(0.2),
-                        width: 2,
+            child: Column(
+              children: [
+                Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: () => qrExpanded.value = !qrExpanded.value,
+                    borderRadius: qrExpanded.value
+                        ? BorderRadius.zero
+                        : const BorderRadius.only(
+                            bottomLeft: Radius.circular(24),
+                            bottomRight: Radius.circular(24),
+                          ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                      child: Row(
+                        children: [
+                          FaIcon(
+                            FontAwesomeIcons.qrcode,
+                            size: 16,
+                            color: colors.blue,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              qrExpanded.value
+                                  ? 'Hide QR code'
+                                  : 'Show QR code',
+                              style: TextStyle(
+                                color: colors.dark,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          Icon(
+                            qrExpanded.value
+                                ? Icons.expand_less
+                                : Icons.expand_more,
+                            color: colors.darkGray,
+                          ),
+                        ],
                       ),
                     ),
-                    child: QrImageView(
-                      data: qrData.value.isEmpty ? 'placeholder' : qrData.value,
-                      version: QrVersions.auto,
-                      size: 100,
-                      eyeStyle: QrEyeStyle(
-                        eyeShape: QrEyeShape.circle,
-                        color: Theme.of(context).colorScheme.blue,
-                      ),
+                  ),
+                ),
+                AnimatedCrossFade(
+                  firstChild: const SizedBox(width: double.infinity, height: 0),
+                  secondChild: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    child: Column(
+                      children: [
+                        Text(
+                          'Scan with SlickBill app to create invoice',
+                          style: TextStyle(
+                            color: colors.darkGray,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: colors.blue.withOpacity(0.2),
+                              width: 2,
+                            ),
+                          ),
+                          child: QrImageView(
+                            data: qrData.value.isEmpty
+                                ? 'placeholder'
+                                : qrData.value,
+                            version: QrVersions.auto,
+                            size: 100,
+                            eyeStyle: QrEyeStyle(
+                              eyeShape: QrEyeShape.circle,
+                              color: colors.blue,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
+                  crossFadeState: qrExpanded.value
+                      ? CrossFadeState.showSecond
+                      : CrossFadeState.showFirst,
+                  duration: const Duration(milliseconds: 200),
+                  sizeCurve: Curves.easeInOut,
+                ),
+              ],
             ),
           ),
 
@@ -233,22 +296,6 @@ class QuickShareScreen extends HookWidget {
                   // Action Buttons Row
                   Row(
                     children: [
-                      // Expanded(
-                      //   child: ElevatedButton.icon(
-                      //     onPressed: startReadNfc,
-                      //     icon: FaIcon(FontAwesomeIcons.nfcSymbol, size: 18),
-                      //     label: Text('Read NFC'),
-                      //     style: ElevatedButton.styleFrom(
-                      //       backgroundColor: Theme.of(context).colorScheme.blue,
-                      //       foregroundColor: Colors.white,
-                      //       padding: EdgeInsets.symmetric(vertical: 16),
-                      //       shape: RoundedRectangleBorder(
-                      //         borderRadius: BorderRadius.circular(12),
-                      //       ),
-                      //     ),
-                      //   ),
-                      // ),
-                      // SizedBox(width: 12),
                       Expanded(
                         child: ElevatedButton.icon(
                           onPressed: scanQR,

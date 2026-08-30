@@ -1,8 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:slickbill/config/env_config.dart';
 import 'package:slickbill/feature_auth/models/user_model.dart';
@@ -10,16 +8,22 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class GoogleAuthService {
   final supabase = Supabase.instance.client;
+  static bool _initialized = false;
+  static Future<void>? _initializing;
 
   GoogleAuthService();
 
-  Future<AuthResponse?> signInWithGoogle() async {
-    try {
-      print('Starting Google Sign-In...');
-
-      final GoogleSignIn signIn = GoogleSignIn.instance;
-
-      if (defaultTargetPlatform == TargetPlatform.iOS) {
+  static Future<void> ensureInitialized() {
+    if (_initialized) {
+      return Future.value();
+    }
+    _initializing ??= () async {
+      final signIn = GoogleSignIn.instance;
+      if (kIsWeb) {
+        await signIn.initialize(
+          clientId: EnvConfig.googleWebClientId,
+        );
+      } else if (defaultTargetPlatform == TargetPlatform.iOS) {
         await signIn.initialize(
           clientId: EnvConfig.googleIosClientId,
           serverClientId: EnvConfig.googleWebClientId,
@@ -29,86 +33,56 @@ class GoogleAuthService {
           serverClientId: EnvConfig.googleWebClientId,
         );
       }
+      _initialized = true;
+    }();
+    return _initializing!;
+  }
 
-      final googleAccount = await signIn.authenticate();
-
-      if (googleAccount == null) {
-        print('Google Sign-In cancelled by user');
-        return null;
-      }
-
-      print('Google user signed in: ${googleAccount.email}');
-
+  Future<AuthResponse?> signInWithGoogleAccount(
+    GoogleSignInAccount googleAccount,
+  ) async {
+    String? accessToken;
+    try {
       final googleAuthorization = await googleAccount.authorizationClient
           .authorizationForScopes(<String>['email', 'profile']);
+      accessToken = googleAuthorization?.accessToken;
+    } catch (error) {
+      print('Google access token optional: $error');
+    }
 
-      final googleAuthentication = googleAccount.authentication;
-      final String? idToken = googleAuthentication.idToken;
-      final String? accessToken = googleAuthorization?.accessToken;
+    final String? idToken = googleAccount.authentication.idToken;
 
-      if (idToken == null) {
-        throw 'No ID Token found.';
+    if (idToken == null || idToken.isEmpty) {
+      throw Exception('No ID Token found.');
+    }
+
+    return supabase.auth.signInWithIdToken(
+      provider: OAuthProvider.google,
+      idToken: idToken,
+      accessToken: accessToken,
+    );
+  }
+
+  Future<AuthResponse?> signInWithGoogle() async {
+    try {
+      print('Starting Google Sign-In...');
+      await ensureInitialized();
+
+      if (!GoogleSignIn.instance.supportsAuthenticate()) {
+        throw Exception(
+          'Google Sign-In on web must use the official Google button.',
+        );
       }
 
-      print('Got Google ID token, signing in to Supabase...');
+      final googleAccount = await GoogleSignIn.instance.authenticate();
 
-      final AuthResponse response = await supabase.auth.signInWithIdToken(
-        provider: OAuthProvider.google,
-        idToken: idToken,
-        accessToken: accessToken,
-      );
-
+      print('Google user signed in: ${googleAccount.email}');
+      final response = await signInWithGoogleAccount(googleAccount);
       print('Supabase sign-in successful');
       return response;
     } catch (e) {
       print('Error during Google Sign-In: $e');
       rethrow;
-    }
-  }
-
-  Future<void> signInWithGoogleWeb() async {
-    if (kIsWeb) {
-      try {
-        final currentUri = Uri.base;
-        final path = currentUri.path;
-
-        // Extract invoice token from /bill/<token> or /sign-in?invoice_token=...
-        String? invoiceToken;
-        if (path.startsWith('/bill/')) {
-          invoiceToken = path.replaceFirst('/bill/', '');
-        } else {
-          invoiceToken = currentUri.queryParameters['invoice_token'];
-        }
-
-        String redirectUrl;
-        if (currentUri.host.contains('localhost')) {
-          redirectUrl = invoiceToken != null && invoiceToken.isNotEmpty
-              ? 'http://localhost:3000/sign-in?invoice_token=$invoiceToken'
-              : 'http://localhost:3000/sign-in';
-        } else {
-          redirectUrl = invoiceToken != null && invoiceToken.isNotEmpty
-              ? 'https://app.slickbills.com/sign-in?invoice_token=$invoiceToken'
-              : 'https://app.slickbills.com/sign-in';
-        }
-
-        print('🔵 OAuth redirect URL: $redirectUrl');
-        print('🔵 Preserving invoice token: $invoiceToken');
-
-        await supabase.auth.signInWithOAuth(
-          OAuthProvider.google,
-          redirectTo: redirectUrl,
-          authScreenLaunchMode: LaunchMode.platformDefault,
-        );
-      } catch (e) {
-        print('❌ OAuth error: $e');
-        Get.snackbar(
-          'Sign In Failed',
-          'Could not sign in with Google. Please try again.',
-          backgroundColor: Colors.red,
-          colorText: Colors.white,
-        );
-        rethrow;
-      }
     }
   }
 
@@ -143,7 +117,6 @@ class GoogleAuthService {
           email: (existingUser['email'] ?? '') as String,
           authUserId: (existingUser['authUserId'] ?? '') as String,
           accessToken: '',
-          // add any other fields with safe defaults:
           firstName: (existingUser['firstName'] ?? '') as String? ?? '',
           lastName: (existingUser['lastName'] ?? '') as String? ?? '',
           isPrivate: true,

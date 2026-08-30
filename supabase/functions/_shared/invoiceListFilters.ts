@@ -3,12 +3,25 @@ export type InvoiceListFilterBody = {
   paidOnDateRange?: [string, string];
   createdFrom?: string;
   createdTo?: string;
-  includeOpen?: boolean;
+  matchAnyDate?: boolean;
   openOnly?: boolean;
   invoiceId?: number;
+  /** Skip date window entirely (status filter only, or no status = everything). */
+  allTime?: boolean;
 };
 
-const OPEN_STATUSES = "UNPAID,PROCESSING,PENDING";
+function monthDateOrFilter(
+  createdFrom: string,
+  createdTo: string,
+  columns: string[],
+) {
+  return columns
+    .map(
+      (column) =>
+        `and(${column}.gte."${createdFrom}",${column}.lt."${createdTo}")`,
+    )
+    .join(",");
+}
 
 export function applyInvoiceListFilters(
   query: any,
@@ -19,9 +32,10 @@ export function applyInvoiceListFilters(
     paidOnDateRange,
     createdFrom,
     createdTo,
-    includeOpen,
+    matchAnyDate,
     openOnly,
     invoiceId,
+    allTime,
   } = body;
 
   if (invoiceId) {
@@ -34,6 +48,15 @@ export function applyInvoiceListFilters(
     return query;
   }
 
+  if (allTime) {
+    if (status === "PROCESSING") {
+      query.in("status", ["PROCESSING", "PENDING"]);
+    } else if (status) {
+      query.eq("status", status);
+    }
+    return query;
+  }
+
   if (status === "PAID" && paidOnDateRange?.length === 2) {
     query
       .eq("status", "PAID")
@@ -42,19 +65,15 @@ export function applyInvoiceListFilters(
     return query;
   }
 
-  if (status === "UNPAID" || status === "PROCESSING") {
-    query.eq("status", status);
-    return query;
-  }
-
   if (status) {
     query.eq("status", status);
   }
 
-  if (includeOpen && createdFrom && createdTo) {
-    query.or(
-      `and(created_at.gte."${createdFrom}",created_at.lt."${createdTo}"),status.in.(${OPEN_STATUSES})`,
-    );
+  if (matchAnyDate && createdFrom && createdTo) {
+    const columns = status
+      ? ["created_at", "deadline"]
+      : ["created_at", "deadline", "paidOnDate"];
+    query.or(monthDateOrFilter(createdFrom, createdTo, columns));
     return query;
   }
 

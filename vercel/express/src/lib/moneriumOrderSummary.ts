@@ -28,6 +28,13 @@ export const readMoneriumOrdersArray = (payload: unknown): unknown[] => {
   return [];
 };
 
+const firstNonEmptyString = (...values: unknown[]): string | null => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+};
+
 const formatCounterpartName = (details: Record<string, any> | null) => {
   if (!details) return null;
   const company =
@@ -65,9 +72,21 @@ export const summarizeMoneriumOrder = (
     state: typeof map.state === "string" ? map.state : null,
     amount: map.amount != null ? String(map.amount) : null,
     currency: typeof map.currency === "string" ? map.currency : null,
-    memo: typeof map.memo === "string" ? map.memo : null,
-    referenceNumber:
-      typeof map.referenceNumber === "string" ? map.referenceNumber : null,
+    memo: firstNonEmptyString(
+      map.memo,
+      meta.memo,
+      map.comment,
+      map.narrative,
+      map.remittanceInformation,
+    ),
+    referenceNumber: firstNonEmptyString(
+      map.referenceNumber,
+      map.reference,
+      map.ref,
+      map.endToEndId,
+      meta.referenceNumber,
+      meta.reference,
+    ),
     address: typeof map.address === "string" ? map.address : null,
     counterpartIban:
       typeof identifier?.iban === "string" ? identifier.iban : null,
@@ -79,10 +98,44 @@ export const summarizeMoneriumOrder = (
 
 export const parseSbInvoiceIdFromMemo = (memo?: string | null): number | null => {
   if (!memo || typeof memo !== "string") return null;
-  const match = memo.match(/\[?sb:(\d+)\]?/i);
-  if (!match) return null;
-  const id = Number(match[1]);
-  return Number.isFinite(id) && id > 0 ? id : null;
+  const tagged = memo.match(/\[sb:(\d+)\]/i) ?? memo.match(/\bsb:(\d+)\b/i);
+  if (tagged) {
+    const id = Number(tagged[1]);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  }
+  const compact = memo.trim().match(/^sb(\d+)$/i);
+  if (compact) {
+    const id = Number(compact[1]);
+    return Number.isFinite(id) && id > 0 ? id : null;
+  }
+  return null;
+};
+
+/** In-platform marker only (`[sb:123]` / `sb123`). Not a user invoice number. */
+export const parseSbInvoiceIdFromOrder = (
+  order: Pick<MoneriumOrderSummary, "memo" | "referenceNumber" | "raw">,
+): number | null => {
+  const fromMemo = parseSbInvoiceIdFromMemo(order.memo);
+  if (fromMemo) return fromMemo;
+  const fromRef = parseSbInvoiceIdFromMemo(order.referenceNumber);
+  if (fromRef) return fromRef;
+
+  const map = asRecord(order.raw);
+  if (!map) return null;
+  const meta = asRecord(map.meta) ?? {};
+  return (
+    parseSbInvoiceIdFromMemo(
+      firstNonEmptyString(
+        map.memo,
+        meta.memo,
+        map.comment,
+        map.narrative,
+        map.referenceNumber,
+        map.reference,
+        meta.referenceNumber,
+      ),
+    ) ?? null
+  );
 };
 
 export const amountsEqual2dp = (

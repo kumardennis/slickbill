@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:get/get.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:slickbill/feature_auth/services/facebook_auth_service.dart';
 import 'package:slickbill/feature_auth/services/google_auth_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -222,6 +223,13 @@ class SupabaseAuthManger {
   Future<bool> signInWithGoogle() async {
     return _handleOAuthSignIn(
       authProvider: () => _googleAuthService.signInWithGoogle(),
+      providerName: 'Google',
+    );
+  }
+
+  Future<bool> signInWithGoogleAccount(GoogleSignInAccount account) async {
+    return _handleOAuthSignIn(
+      authProvider: () => _googleAuthService.signInWithGoogleAccount(account),
       providerName: 'Google',
     );
   }

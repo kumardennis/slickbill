@@ -378,24 +378,38 @@ class DigitalInvoiceRepository {
           .not('publicToken', 'is', null);
 
       if (query != null) {
+        final from = query.createdFrom;
+        final to = query.createdTo;
+        final inMonth =
+            'and(created_at.gte."$from",created_at.lt."$to"),and(deadline.gte."$from",deadline.lt."$to")';
         switch (query.status) {
           case InvoiceStatusFilter.all:
-            request = request.or(
-              'and(created_at.gte."${query.createdFrom}",created_at.lt."${query.createdTo}"),status.in.(UNPAID,PROCESSING,PENDING)',
-            );
+            if (!query.ignoresMonth) {
+              request = request.or(
+                '$inMonth,and(paidOnDate.gte."$from",paidOnDate.lt."$to")',
+              );
+            }
             break;
           case InvoiceStatusFilter.unpaid:
             request = request.eq('status', 'UNPAID');
+            if (!query.ignoresMonth) {
+              request = request.or(inMonth);
+            }
             break;
           case InvoiceStatusFilter.processing:
-            request = request.eq('status', 'PROCESSING');
+            request = request.inFilter('status', ['PROCESSING', 'PENDING']);
+            if (!query.ignoresMonth) {
+              request = request.or(inMonth);
+            }
             break;
           case InvoiceStatusFilter.paid:
-            final range = query.paidOnDateRange;
-            request = request
-                .eq('status', 'PAID')
-                .gte('paidOnDate', range[0])
-                .lte('paidOnDate', range[1]);
+            request = request.eq('status', 'PAID');
+            if (!query.ignoresMonth) {
+              final range = query.paidOnDateRange;
+              request = request
+                  .gte('paidOnDate', range[0])
+                  .lte('paidOnDate', range[1]);
+            }
             break;
         }
       }
@@ -416,6 +430,7 @@ class DigitalInvoiceRepository {
           status: invoice.status,
           createdAt: invoice.createdAt.toIso8601String(),
           paidOnDate: invoice.paidOnDate,
+          deadline: invoice.deadline,
         );
       }).toList();
     } catch (e, stackTrace) {

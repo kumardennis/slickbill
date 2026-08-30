@@ -8,6 +8,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
+import 'package:slickbill/feature_dashboard/widgets/from_business_badge.dart';
 import 'package:slickbill/feature_trashboard/utils/sent_invoices_class.dart';
 import 'package:slickbill/feature_trashboard/widgets/invoice_card.dart';
 
@@ -213,8 +214,10 @@ class SentBills extends HookWidget {
                                             invoice.displayReceiverName,
                                         status: invoice.status,
                                         isSeen: invoice.isSeen,
-                                        isFromBusiness:
-                                            invoice.isFromBusiness),
+                                        isFromBusiness: invoice.isFromBusiness,
+                                        businessBadgePerspective:
+                                            BusinessBadgePerspective
+                                                .sentAsBusiness),
                                   ),
                                 ))
                             .toList(),

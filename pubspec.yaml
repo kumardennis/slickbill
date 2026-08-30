@@ -1,7 +1,7 @@
 name: slickbill
 description: A new Flutter project.
 publish_to: "none"
-version: 0.1.0+12
+version: 0.1.0+19
 
 environment:
   sdk: ">=3.0.1 <4.0.0"
@@ -43,6 +43,7 @@ dependencies:
   loader_overlay: ^5.0.0
   iban_to_bic: ^0.0.8
   google_sign_in: ^7.2.0
+  google_sign_in_web: ^1.1.3
   universal_html: ^2.2.4
   app_links: ^6.4.1
   flutter_facebook_auth: ^7.0.1

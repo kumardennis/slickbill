@@ -316,13 +316,12 @@ class PushNotificationService {
       )) {
         return;
       }
-    } else if (type == 'SLICKBILL_PAYMENT_SUCCESS') {
-      if (!InvoiceToastCoordinator.claimToast(
-        kind: InvoiceToastCoordinator.kindPayerPaid,
-        invoiceId: invoiceId,
-      )) {
-        return;
+      if (Get.isRegistered<DigitalInvoiceController>()) {
+        Get.find<DigitalInvoiceController>().requestSentListRefresh();
       }
+    } else if (type == 'SLICKBILL_PAYMENT_SUCCESS') {
+      InvoiceToastCoordinator.notifyPayerPaidInApp(invoiceId: invoiceId);
+      return;
     }
 
     Get.snackbar(
@@ -409,6 +408,7 @@ class PushNotificationService {
       case 'SLICKBILL_PROCESSING':
       case 'monerium_payment_processing':
       case 'payment_reminder':
+      case 'SLICKBILL_PAYMENT_SUCCESS':
         final parsedInvoiceId = int.tryParse('$invoiceId');
         if (parsedInvoiceId == null) {
           Get.offAllNamed('/home-screen');

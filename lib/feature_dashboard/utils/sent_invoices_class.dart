@@ -47,6 +47,7 @@ class SentInvoicesClass {
                     status: invoice.status,
                     createdAt: invoice.createdAt,
                     paidOnDate: invoice.paidOnDate,
+                    deadline: invoice.deadline,
                   ))
               .toList();
         }

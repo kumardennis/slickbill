@@ -18,15 +18,7 @@ class CurrentBankSelector extends HookWidget {
     final authManager = SupabaseAuthManger();
     final client = Supabase.instance.client;
 
-    // initial selection from currentBankController or from primary iban in list
-    final ibans = userController.user.value.ibans ?? [];
-    final primaryFromList = ibans.firstWhereOrNull((b) => b.isPrimary) ??
-        (ibans.isNotEmpty ? ibans.first : null);
-
-    final initialIban =
-        currentBankController.current.value.iban ?? primaryFromList?.iban;
-
-    final selectedIban = useState<String?>(initialIban);
+    final selectedIban = useState<String?>(null);
 
     Future<void> _setPrimaryBank(BankAccount bankAccount) async {
       final user = userController.user.value;
@@ -87,7 +79,20 @@ class CurrentBankSelector extends HookWidget {
       }
     }
 
-    return Center(
+    return Obx(() {
+      final ibans = userController.user.value.ibans ?? [];
+      final primaryFromList = ibans.firstWhereOrNull((b) => b.isPrimary) ??
+          (ibans.isNotEmpty ? ibans.first : null);
+
+      final initialIban =
+          currentBankController.current.value.iban ?? primaryFromList?.iban;
+
+      final shownIban =
+          (selectedIban.value != null && selectedIban.value!.trim().isNotEmpty)
+              ? selectedIban.value
+              : initialIban;
+
+      return Center(
       child: Column(
         children: [
           Padding(
@@ -116,15 +121,15 @@ class CurrentBankSelector extends HookWidget {
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
                             border: Border.all(
-                              color: selectedIban.value == bankAccount.iban
+                              color: shownIban == bankAccount.iban
                                   ? Theme.of(context).colorScheme.darkerBlue
                                   : Colors.grey.shade300,
-                              width: selectedIban.value == bankAccount.iban
+                              width: shownIban == bankAccount.iban
                                   ? 2
                                   : 1,
                             ),
                             borderRadius: BorderRadius.circular(8),
-                            color: selectedIban.value == bankAccount.iban
+                            color: shownIban == bankAccount.iban
                                 ? Theme.of(context)
                                     .colorScheme
                                     .darkerBlue
@@ -198,10 +203,10 @@ class CurrentBankSelector extends HookWidget {
                               ),
                               // Selection indicator
                               Icon(
-                                selectedIban.value == bankAccount.iban
+                                shownIban == bankAccount.iban
                                     ? Icons.check_circle
                                     : Icons.radio_button_unchecked,
-                                color: selectedIban.value == bankAccount.iban
+                                color: shownIban == bankAccount.iban
                                     ? Theme.of(context).colorScheme.darkerBlue
                                     : Colors.grey.shade400,
                                 size: 24,
@@ -240,5 +245,6 @@ class CurrentBankSelector extends HookWidget {
         ],
       ),
     );
+    });
   }
 }

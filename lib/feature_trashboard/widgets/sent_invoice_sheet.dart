@@ -54,7 +54,9 @@ class SentInvoiceSheet extends HookWidget {
                     ),
                     if (invoice.isFromBusiness) ...[
                       const SizedBox(height: 6),
-                      const FromBusinessBadge(),
+                      const FromBusinessBadge(
+                        perspective: BusinessBadgePerspective.sentAsBusiness,
+                      ),
                     ],
                     Text(
                         DateFormat('EEE, dd MMM yyyy')

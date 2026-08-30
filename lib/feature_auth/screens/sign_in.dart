@@ -7,10 +7,10 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
-import 'package:slickbill/feature_auth/services/google_auth_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../utils/supabase_auth_manger.dart';
+import 'package:slickbill/feature_auth/utils/supabase_auth_manger.dart';
+import 'package:slickbill/feature_auth/widgets/continue_with_google_button.dart';
 
 class SignIn extends HookWidget {
   final String? invoice_token;
@@ -19,7 +19,6 @@ class SignIn extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final _supabase = SupabaseAuthManger();
-    final _googleAuthService = GoogleAuthService();
 
     final emailController = useTextEditingController();
     final passwordController = useTextEditingController();
@@ -275,32 +274,6 @@ class SignIn extends HookWidget {
       }
     }
 
-    void googleSignIn() async {
-      try {
-        if (kIsWeb) {
-          // Web: use OAuth redirect flow
-          // This will redirect to Supabase OAuth, then back to /sign-in
-          await _googleAuthService.signInWithGoogleWeb();
-        } else {
-          // Mobile: use native Google Sign-In
-          final success = await _supabase.signInWithGoogle();
-          if (success) {
-            final invoiceToken = getInvoiceToken();
-
-            if (invoiceToken != null && invoiceToken.isNotEmpty) {
-              Get.offAllNamed(
-                '/bill/$invoiceToken',
-              );
-            } else {
-              Get.offAllNamed('/home-screen');
-            }
-          }
-        }
-      } catch (e) {
-        Get.snackbar('Error', 'Google Sign-In failed: $e');
-      }
-    }
-
     void facebookSignIn() async {
       try {
         final success = await _supabase.signInWithFacebook();
@@ -365,42 +338,7 @@ class SignIn extends HookWidget {
 
                             const SizedBox(height: 40),
 
-                            // Google Sign-In Button - PRIORITY
-                            SizedBox(
-                              width: double.infinity,
-                              height: 56,
-                              child: ElevatedButton(
-                                onPressed: googleSignIn,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.white,
-                                  foregroundColor: Colors.black,
-                                  elevation: 2,
-                                  shadowColor: Colors.black26,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Image.asset(
-                                      'assets/g-logo.png',
-                                      height: 24,
-                                      width: 24,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      'Continue with Google',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                            const ContinueWithGoogleButton(),
 
                             const SizedBox(height: 16),
 

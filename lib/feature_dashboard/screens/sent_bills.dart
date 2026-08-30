@@ -88,7 +88,7 @@ class SentBills extends HookWidget {
     useEffect(() {
       refreshAllData();
       return null;
-    }, [filter.value.month.year, filter.value.month.month, filter.value.status]);
+    }, [filter.value.month.year, filter.value.month.month, filter.value.status, filter.value.allTime]);
 
     useEffect(() {
       final refreshWorker =
@@ -160,9 +160,11 @@ class SentBills extends HookWidget {
                             Padding(
                               padding: const EdgeInsets.fromLTRB(20, 24, 0, 0),
                               child: Text(
-                                'lbl_NoInvoicesInMonth'.trParams({
-                                  'month': monthName,
-                                }),
+                                filter.value.emptyListNeedsMonth
+                                    ? filter.value.emptyListLabelKey.trParams({
+                                        'month': monthName,
+                                      })
+                                    : filter.value.emptyListLabelKey.tr,
                               ),
                             )
                           else

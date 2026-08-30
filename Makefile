@@ -14,7 +14,7 @@ help:
 
 build-web:
 	@echo "🚀 Building web with environment variables..."
-	flutter build web --dart-define=SUPABASE_ANON_KEY=$(SUPABASE_ANON_KEY) --dart-define=GOOGLE_WEB_CLIENT_ID=$(GOOGLE_WEB_CLIENT_ID) --dart-define=GOOGLE_WEB_CLIENT_SECRET=$(GOOGLE_WEB_CLIENT_SECRET) --dart-define=GOOGLE_ANDROID_CLIENT_ID=$(GOOGLE_ANDROID_CLIENT_ID) --dart-define=GOOGLE_IOS_CLIENT_ID=$(GOOGLE_IOS_CLIENT_ID) --dart-define=OPEN_AI_KEY=$(OPEN_AI_KEY) --dart-define=MONERIUM_CLIENT_ID=$(MONERIUM_CLIENT_ID) --dart-define=MONERIUM_CLIENT_SECRET=$(MONERIUM_CLIENT_SECRET) --release
+	flutter build web --no-tree-shake-icons --no-wasm-dry-run --dart-define=SUPABASE_ANON_KEY=$(SUPABASE_ANON_KEY) --dart-define=GOOGLE_WEB_CLIENT_ID=$(GOOGLE_WEB_CLIENT_ID) --dart-define=GOOGLE_WEB_CLIENT_SECRET=$(GOOGLE_WEB_CLIENT_SECRET) --dart-define=GOOGLE_ANDROID_CLIENT_ID=$(GOOGLE_ANDROID_CLIENT_ID) --dart-define=GOOGLE_IOS_CLIENT_ID=$(GOOGLE_IOS_CLIENT_ID) --dart-define=OPEN_AI_KEY=$(OPEN_AI_KEY) --dart-define=MONERIUM_CLIENT_ID=$(MONERIUM_CLIENT_ID) --dart-define=MONERIUM_CLIENT_SECRET=$(MONERIUM_CLIENT_SECRET) --release
 
 run-web:
 	@echo "🌐 Running web in development mode..."

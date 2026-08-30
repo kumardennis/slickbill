@@ -104,6 +104,7 @@ class HomeScreen extends HookWidget {
                   )) {
                     return;
                   }
+                  invoiceController.requestSentListRefresh();
                 }
 
                 if (Get.isSnackbarOpen) {
@@ -143,31 +144,8 @@ class HomeScreen extends HookWidget {
                 final invoiceId = '${payload.newRecord['id'] ?? ''}';
                 // Prefer FCM for settle; wait briefly so push can claim first.
                 await Future.delayed(const Duration(milliseconds: 1500));
-                if (!InvoiceToastCoordinator.claimToast(
-                  kind: InvoiceToastCoordinator.kindPayerPaid,
+                InvoiceToastCoordinator.notifyPayerPaidInApp(
                   invoiceId: invoiceId,
-                )) {
-                  return;
-                }
-
-                if (Get.isSnackbarOpen) {
-                  Get.closeCurrentSnackbar();
-                }
-
-                Get.snackbar(
-                  'Payment successful',
-                  'Tap refresh to load latest data',
-                  snackPosition: SnackPosition.TOP,
-                  duration: const Duration(seconds: 5),
-                  mainButton: TextButton(
-                    onPressed: () async {
-                      if (Get.isSnackbarOpen) {
-                        Get.closeCurrentSnackbar();
-                      }
-                      invoiceController.requestReceivedListRefresh();
-                    },
-                    child: const Text('Refresh'),
-                  ),
                 );
               })
           .subscribe();

@@ -27,8 +27,6 @@ class AllBills extends HookWidget {
     final PaymentSetupController paymentSetupController =
         Get.put(PaymentSetupController());
 
-    var tabIndex = useState(0);
-
     final filePath = useState<Uint8List?>(null);
     final checkingForIntent = useState<bool>(true);
 
@@ -52,86 +50,22 @@ class AllBills extends HookWidget {
         showSettings: true,
         tabBar: TabBar(
             indicatorColor: Theme.of(context).colorScheme.blue,
-            onTap: (value) {
-              tabIndex.value = value;
-            },
+            labelColor: Theme.of(context).colorScheme.blue,
+            unselectedLabelColor: Theme.of(context).colorScheme.gray,
+            labelStyle: Theme.of(context)
+                .textTheme
+                .titleSmall
+                ?.copyWith(fontWeight: FontWeight.w600),
+            unselectedLabelStyle: Theme.of(context)
+                .textTheme
+                .titleSmall
+                ?.copyWith(fontWeight: FontWeight.w600),
+            labelPadding: const EdgeInsets.symmetric(horizontal: 4),
             controller: tabController,
             tabs: [
-              Tab(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'hd_Received'.tr,
-                      style: Theme.of(context)
-                          .textTheme
-                          .displayMedium
-                          ?.copyWith(
-                              color: tabIndex.value == 0
-                                  ? Theme.of(context).colorScheme.blue
-                                  : Theme.of(context).colorScheme.gray),
-                    ),
-                    const SizedBox(
-                      width: 4,
-                    ),
-                    FaIcon(FontAwesomeIcons.squareCaretDown,
-                        size: 20,
-                        color: tabIndex.value == 0
-                            ? Theme.of(context).colorScheme.blue
-                            : Theme.of(context).colorScheme.gray)
-                  ],
-                ),
-              ),
-              Tab(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'hd_Sent'.tr,
-                      style: Theme.of(context)
-                          .textTheme
-                          .displayMedium
-                          ?.copyWith(
-                              color: tabIndex.value == 1
-                                  ? Theme.of(context).colorScheme.blue
-                                  : Theme.of(context).colorScheme.gray),
-                    ),
-                    const SizedBox(
-                      width: 5,
-                    ),
-                    FaIcon(FontAwesomeIcons.squareCaretUp,
-                        size: 20,
-                        color: tabIndex.value == 1
-                            ? Theme.of(context).colorScheme.blue
-                            : Theme.of(context).colorScheme.gray)
-                  ],
-                ),
-              ),
-              Tab(
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'hd_PublicInvoices'.tr,
-                      style: Theme.of(context)
-                          .textTheme
-                          .displayMedium
-                          ?.copyWith(
-                              color: tabIndex.value == 2
-                                  ? Theme.of(context).colorScheme.blue
-                                  : Theme.of(context).colorScheme.gray),
-                    ),
-                    const SizedBox(
-                      width: 5,
-                    ),
-                    FaIcon(FontAwesomeIcons.squareCaretUp,
-                        size: 20,
-                        color: tabIndex.value == 2
-                            ? Theme.of(context).colorScheme.blue
-                            : Theme.of(context).colorScheme.gray)
-                  ],
-                ),
-              ),
+              Tab(text: 'hd_Received'.tr),
+              Tab(text: 'hd_Sent'.tr),
+              Tab(text: 'hd_PublicInvoices'.tr),
             ]),
       ),
       body: filePath.value != null

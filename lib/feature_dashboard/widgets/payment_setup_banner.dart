@@ -28,7 +28,9 @@ class PaymentSetupBanner extends StatelessWidget {
           onTap: () async {
             await Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const Profile()),
+              MaterialPageRoute(
+                builder: (context) => const Profile(),
+              ),
             );
             await setupController.refresh();
           },
@@ -65,7 +67,9 @@ class PaymentSetupBanner extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Go to Profile',
+                  step == PaymentSetupStep.reconnectMonerium
+                      ? 'Reconnect'
+                      : 'Continue',
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: colorScheme.lighterBlue,
@@ -95,32 +99,22 @@ class PaymentSetupBanner extends StatelessWidget {
           icon: FontAwesomeIcons.wallet,
           title: 'Connect your wallet',
           subtitle:
-              'Go to Profile to attach MetaMask so you can set up Monerium payments.',
+              'Create a new wallet, or use MetaMask / WalletConnect.',
           background: colorScheme.lighterBlue.withOpacity(0.12),
         );
       case PaymentSetupStep.connectMonerium:
         return _BannerConfig(
           icon: FontAwesomeIcons.buildingColumns,
-          title: 'Connect Monerium',
-          subtitle:
-              'Go to Profile and connect Monerium to continue payment setup.',
+          title: 'Set up payments',
+          subtitle: 'Connect Monerium to get your IBAN.',
           background: colorScheme.yellow.withOpacity(0.18),
         );
-      case PaymentSetupStep.linkAddress:
+      case PaymentSetupStep.reconnectMonerium:
         return _BannerConfig(
-          icon: FontAwesomeIcons.link,
-          title: 'Link your wallet address',
-          subtitle:
-              'Go to Profile and link your wallet address on Monerium.',
+          icon: FontAwesomeIcons.buildingColumns,
+          title: 'Reconnect Monerium',
+          subtitle: 'Sign in to load your IBAN and balance.',
           background: colorScheme.yellow.withOpacity(0.18),
-        );
-      case PaymentSetupStep.requestIban:
-        return _BannerConfig(
-          icon: FontAwesomeIcons.moneyCheckDollar,
-          title: 'Request your Monerium IBAN',
-          subtitle:
-              'Go to Profile and request an IBAN to finish payment setup.',
-          background: colorScheme.lightYellow.withOpacity(0.55),
         );
       case PaymentSetupStep.complete:
         return _BannerConfig(

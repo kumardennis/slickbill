@@ -131,6 +131,19 @@ export async function sendFcmPush({
             body,
           },
           data: dataPayload,
+          android: {
+            priority: "HIGH",
+          },
+          apns: {
+            headers: {
+              "apns-priority": "10",
+            },
+            payload: {
+              aps: {
+                sound: "default",
+              },
+            },
+          },
         },
       }),
     },

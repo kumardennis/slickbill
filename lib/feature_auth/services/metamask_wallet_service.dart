@@ -59,12 +59,38 @@ class MetamaskWalletService {
     debugPrint('[MetaMaskWebViewFlow] $message');
   }
 
+  static Future<void> _closeWalletTab() async {
+    try {
+      await closeInAppWebView();
+    } catch (_) {}
+  }
+
+  /// Chrome Custom Tab (Android) / Safari View (iOS). Full Chrome only if that fails.
+  static Future<bool> _openWalletClientTab(Uri uri) async {
+    if (kIsWeb) {
+      return launchUrl(uri, mode: LaunchMode.platformDefault);
+    }
+
+    try {
+      final opened = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
+      if (opened) {
+        _log('opened wallet-client in custom tab');
+        return true;
+      }
+    } catch (error) {
+      _log('custom tab failed, falling back to Chrome: $error');
+    }
+
+    return launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   static void onAuthCallbackUri(Uri uri) {
     if (useNativeFlow) {
       NativeWeb3AuthService.onAuthCallbackUri(uri);
       return;
     }
 
+    unawaited(_closeWalletTab());
     _log('onAuthCallbackUri() received: $uri');
 
     final flow = uri.queryParameters['flow']?.trim().toLowerCase();
@@ -156,16 +182,13 @@ class MetamaskWalletService {
       },
     );
 
-    _log('opening MetaMask in external browser: $authUri');
+    _log('opening wallet connect in custom tab: $authUri');
 
-    final opened = await launchUrl(
-      authUri,
-      mode: LaunchMode.externalApplication,
-    );
+    final opened = await _openWalletClientTab(authUri);
 
     if (!opened) {
       _pendingAuthCompleter = null;
-      throw Exception('Unable to open external browser for MetaMask login');
+      throw Exception('Unable to open wallet connect');
     }
 
     try {
@@ -213,16 +236,13 @@ class MetamaskWalletService {
       },
     );
 
-    _log('opening MetaMask signing flow in external browser: $signUri');
+    _log('opening payment sign in custom tab: $signUri');
 
-    final opened = await launchUrl(
-      signUri,
-      mode: LaunchMode.externalApplication,
-    );
+    final opened = await _openWalletClientTab(signUri);
 
     if (!opened) {
       _pendingSignCompleter = null;
-      throw Exception('Unable to open external browser for MetaMask signing');
+      throw Exception('Unable to open payment signing');
     }
 
     try {

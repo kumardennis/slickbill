@@ -224,12 +224,19 @@ class SendInvoicesClass {
   }
 
   Future<List<UsersByUsername>?> getUsersByUsername(String query) async {
+    final normalized = query.trim().replaceFirst(RegExp(r'^@+'), '');
+    if (normalized.length < 2) {
+      return const [];
+    }
+
     try {
       final response = await Supabase.instance.client.functions
           .invoke('auth-and-settings/get-users-by-username', headers: {
         'Authorization': 'Bearer ${userController.user.value.accessToken}'
       }, body: {
-        "query": query,
+        'query': normalized,
+        if (userController.user.value.privateUserId != null)
+          'excludePrivateUserId': userController.user.value.privateUserId,
       });
 
       final data = await response.data;

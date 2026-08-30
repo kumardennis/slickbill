@@ -5,6 +5,7 @@ import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_auth/models/user_model.dart';
 import 'package:slickbill/feature_auth/services/monerium_service.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/payment_setup_controller.dart';
+import 'package:slickbill/feature_dashboard/screens/add_withdraw_money.dart';
 
 class MoneriumBalanceCard extends HookWidget {
   final ClientUserModel user;
@@ -88,10 +89,14 @@ class MoneriumBalanceCard extends HookWidget {
         }
       }
 
-      return const String.fromEnvironment(
+      const configured = String.fromEnvironment(
         'MONERIUM_WALLET_CHAIN',
         defaultValue: '',
       );
+      if (configured.trim().isNotEmpty) {
+        return configured.trim();
+      }
+      return 'polygon';
     }
 
     String summarizeMoneriumBalances(dynamic data) {
@@ -161,8 +166,11 @@ class MoneriumBalanceCard extends HookWidget {
       isFetchingBalance.value = true;
       try {
         final userId = resolveMoneriumUserId();
+        await MoneriumService.hasActiveSession(userId: userId);
+
         final ibansResponse = await MoneriumService.getIbans(userId: userId);
-        final rawIbans = MoneriumService.extractIbans(ibansResponse['data']);
+        final rawIbans =
+            MoneriumService.extractIbansFromResponse(ibansResponse);
         final filteredIbans = filterIbansForWallet(
           ibans: rawIbans,
           walletAddress: walletAddress,
@@ -175,11 +183,6 @@ class MoneriumBalanceCard extends HookWidget {
         }
 
         final chain = resolveMoneriumChainForBalances(filteredIbans);
-        if (chain.isEmpty) {
-          balanceSummary.value = null;
-          return;
-        }
-
         final balanceResponse = await MoneriumService.getBalances(
           userId: userId,
           address: walletAddress,
@@ -189,10 +192,12 @@ class MoneriumBalanceCard extends HookWidget {
         balanceSummary.value =
             summarizeMoneriumBalances(balanceResponse['data']);
 
-        // A successful balance fetch means Monerium is fully connected.
         await paymentSetupController.markCompleteFromBalance(userId: userId);
-      } catch (_) {
-        if (showFeedback) {
+      } catch (error) {
+        debugPrint('[MoneriumBalanceCard] balance fetch failed: $error');
+        moneriumIbans.value = const [];
+        balanceSummary.value = null;
+        if (showFeedback && context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: const Text('Failed to refresh Monerium balance.'),
@@ -207,12 +212,17 @@ class MoneriumBalanceCard extends HookWidget {
 
     useEffect(() {
       loadBalance();
-      return null;
+      final worker = ever(paymentSetupController.hasMoneriumSession, (connected) {
+        if (connected) {
+          loadBalance();
+        }
+      });
+      return worker.dispose;
     }, [user.id, user.privateUserId, user.metamaskWalletAddress]);
 
     final hasMoneriumIban = moneriumIbans.value.isNotEmpty;
     final shouldShowCard = hasMoneriumIban &&
-        !(user.metamaskWalletAddress?.trim().isEmpty ?? true);
+        (user.metamaskWalletAddress?.trim().isNotEmpty ?? false);
 
     final visibleBalanceLines = balanceLines(balanceSummary.value);
     final eurLine = visibleBalanceLines.cast<String?>().firstWhere(
@@ -426,6 +436,50 @@ class MoneriumBalanceCard extends HookWidget {
                           color: Colors.white.withOpacity(0.76),
                           fontWeight: FontWeight.w600,
                         ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () async {
+                            await Get.to(
+                              () => const AddWithdrawMoneyScreen(),
+                            );
+                            await loadBalance();
+                          },
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: BorderSide(
+                              color: Colors.white.withOpacity(0.55),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: const Text('Add money'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () async {
+                            await Get.to(
+                              () => const AddWithdrawMoneyScreen(
+                                startOnWithdraw: true,
+                              ),
+                            );
+                            await loadBalance();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor:
+                                Theme.of(context).colorScheme.blue,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            elevation: 0,
+                          ),
+                          child: const Text('Withdraw'),
+                        ),
+                      ),
+                    ],
                   ),
                   if (visibleBalanceLines.length > 1) ...[
                     const SizedBox(height: 14),

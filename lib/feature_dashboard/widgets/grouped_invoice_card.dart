@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
+import 'package:slickbill/feature_dashboard/widgets/from_business_badge.dart';
 import 'package:slickbill/feature_dashboard/widgets/invoice_card.dart';
 
 class GroupedInvoiceCard extends StatelessWidget {
@@ -34,6 +35,7 @@ class GroupedInvoiceCard extends StatelessWidget {
           status: i.status,
           isSeen: i.isSeen,
           isFromBusiness: i.isFromBusiness,
+          businessBadgePerspective: BusinessBadgePerspective.sentAsBusiness,
         ),
       );
     }
@@ -192,6 +194,8 @@ class GroupedInvoiceCard extends StatelessWidget {
                       status: i.status,
                       isSeen: i.isSeen,
                       isFromBusiness: i.isFromBusiness,
+                      businessBadgePerspective:
+                          BusinessBadgePerspective.sentAsBusiness,
                     ),
                   ),
                 ),

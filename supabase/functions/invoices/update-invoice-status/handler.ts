@@ -27,16 +27,58 @@ export const handler = async (req: Request) => {
 
     const requestedStatus = hasStatus ? status.trim().toUpperCase() : null;
     const resolvedStatus = requestedStatus ?? (isPaid ? "PAID" : "UNPAID");
-    const paidOnDate =
-      resolvedStatus === "PAID" ? dayjs().format("YYYY-MM-DD") : null;
+
+    const { data: currentInvoice, error: currentInvoiceError } = await supabase
+      .from("digital_invoices")
+      .select(
+        "*, sender:senders (*, private_users (firstName, userId)), receiver:receivers (*, private_users (firstName, userId))",
+      )
+      .eq("id", invoiceId)
+      .single();
+
+    if (currentInvoiceError || !currentInvoice) {
+      const responseData = {
+        isRequestSuccessfull: false,
+        data: null,
+        error: currentInvoiceError ?? "Invoice not found",
+      };
+
+      return new Response(JSON.stringify(responseData), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const currentStatus = String(currentInvoice.status ?? "")
+      .trim()
+      .toUpperCase();
+
+    // Settlement can mark PAID before the payer app writes PROCESSING.
+    // Never overwrite a paid invoice with processing.
+    if (currentStatus === "PAID" && resolvedStatus === "PROCESSING") {
+      const responseData = {
+        isRequestSuccessfull: true,
+        data: currentInvoice,
+        error: null,
+      };
+
+      return new Response(JSON.stringify(responseData), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const payload: Record<string, unknown> = {
+      status: resolvedStatus,
+    };
+    if (resolvedStatus === "PAID") {
+      payload.paidOnDate = dayjs().format("YYYY-MM-DD");
+    } else if (resolvedStatus === "UNPAID") {
+      payload.paidOnDate = null;
+    }
 
     const { data: digitalInvoiceData, error: digitalInvoiceError } =
       await supabase
         .from("digital_invoices")
-        .update({
-          status: resolvedStatus,
-          paidOnDate,
-        })
+        .update(payload)
         .match({ id: invoiceId })
         .select(
           "*, sender:senders (*, private_users (firstName, userId)), receiver:receivers (*, private_users (firstName, userId))",
@@ -64,50 +106,81 @@ export const handler = async (req: Request) => {
     const senderUserId = digitalInvoiceData.sender?.private_users?.userId;
     const receiverUserId = digitalInvoiceData.receiver?.private_users?.userId;
 
-    // Call the send-notification endpoint to send FCM notification
+    const notifyUser = async (params: {
+      userId: unknown;
+      type: string;
+      title: string;
+      body: string;
+    }) => {
+      if (params.userId == null || params.userId === "") {
+        return;
+      }
+      const authKey =
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ||
+        Deno.env.get("SUPABASE_ANON_KEY") ||
+        "";
+      const notificationUrl = new URL(Deno.env.get("SUPABASE_URL") || "");
+      notificationUrl.pathname =
+        "/functions/v1/notifications/send-notification";
+
+      await fetch(notificationUrl.toString(), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authKey}`,
+          apikey: authKey,
+        },
+        body: JSON.stringify({
+          userId: params.userId,
+          type: params.type,
+          invoiceId: digitalInvoiceData.id,
+          title: params.title,
+          body: params.body,
+        }),
+      });
+    };
+
     if (resolvedStatus === "PAID" || resolvedStatus === "PROCESSING") {
       try {
-        const notificationUserId =
-          resolvedStatus === "PAID" ? senderUserId : receiverUserId;
-        const notificationType =
-          resolvedStatus === "PAID" ? "SLICKBILL_PAID" : "SLICKBILL_PROCESSING";
-        const notificationTitle =
-          resolvedStatus === "PAID" ? "Slickbill Paid" : "Payment in process";
         const receiverName =
           digitalInvoiceData.receiver?.private_users?.firstName ?? "Someone";
-        const notificationBody =
-          resolvedStatus === "PAID"
-            ? `${receiverName} paid your slickbill`
-            : "Your invoice payment has been initiated and is now processing.";
 
-        if (!notificationUserId) {
-          console.warn("Skipping notification due to missing target user", {
-            invoiceId: digitalInvoiceData.id,
-            status: resolvedStatus,
+        if (resolvedStatus === "PAID") {
+          if (senderUserId) {
+            await notifyUser({
+              userId: senderUserId,
+              type: "SLICKBILL_PAID",
+              title: "Slickbill Paid",
+              body: `${receiverName} paid your slickbill`,
+            });
+          } else {
+            console.warn("Skipping owner paid notification: missing sender", {
+              invoiceId: digitalInvoiceData.id,
+            });
+          }
+
+          if (receiverUserId && receiverUserId !== senderUserId) {
+            await notifyUser({
+              userId: receiverUserId,
+              type: "SLICKBILL_PAYMENT_SUCCESS",
+              title: "Payment successful",
+              body: "Your slickbill payment went through.",
+            });
+          }
+        } else if (receiverUserId) {
+          await notifyUser({
+            userId: receiverUserId,
+            type: "SLICKBILL_PROCESSING",
+            title: "Payment in process",
+            body: "Your invoice payment has been initiated and is now processing.",
           });
         } else {
-          const notificationUrl = new URL(Deno.env.get("SUPABASE_URL") || "");
-          notificationUrl.pathname =
-            "/functions/v1/notifications/send-notification";
-
-          await fetch(notificationUrl.toString(), {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY") || ""}`,
-            },
-            body: JSON.stringify({
-              userId: notificationUserId,
-              type: notificationType,
-              invoiceId: digitalInvoiceData.id,
-              title: notificationTitle,
-              body: notificationBody,
-            }),
+          console.warn("Skipping processing notification: missing receiver", {
+            invoiceId: digitalInvoiceData.id,
           });
         }
       } catch (notificationError) {
         console.error("Failed to send notification:", notificationError);
-        // Don't fail the request if notification fails
       }
     }
 

@@ -22,9 +22,9 @@ import 'package:slickbill/shared_widgets/custom_appbar.dart';
 import '../../feature_navigation/getx_controllers/navigation_controller.dart';
 import '../../feature_self_create/models/extracted_invoice_data_model.dart';
 import '../../feature_self_create/widgets/input_field.dart';
-import '../../feature_self_create/widgets/input_field_amount.dart';
 import '../models/receiver_user_model.dart';
 import '../models/users_by_username_model.dart';
+import '../widgets/compact_receiver_row.dart';
 
 class SendInvoice extends HookWidget {
   const SendInvoice({super.key});
@@ -285,9 +285,11 @@ class SendInvoice extends HookWidget {
     }
 
     changeReceiverAmount(int id, double amount) {
-      print('ID: $id, AMOUNT: $amount');
-      receiverUsers.value.firstWhere((receiver) => receiver.id == id).amount =
-          amount;
+      final updated = [...receiverUsers.value];
+      final i = updated.indexWhere((receiver) => receiver.id == id);
+      if (i == -1) return;
+      updated[i].amount = amount;
+      receiverUsers.value = updated;
     }
 
     return Scaffold(
@@ -327,6 +329,7 @@ class SendInvoice extends HookWidget {
                       ),
                       const SizedBox(height: 12),
                       TypeAheadField<UsersByUsername>(
+                        debounceDuration: const Duration(milliseconds: 280),
                         builder: (context, controller, focusNode) {
                           return TextField(
                             controller: controller,
@@ -340,7 +343,7 @@ class SendInvoice extends HookWidget {
                                   fontWeight: FontWeight.w500,
                                 ),
                             decoration: InputDecoration(
-                              hintText: 'Search users by name...',
+                              hintText: 'lbl_SearchUsers'.tr,
                               hintStyle: TextStyle(
                                 color: Theme.of(context).colorScheme.darkGray,
                               ),
@@ -388,7 +391,7 @@ class SendInvoice extends HookWidget {
                                 ),
                               ),
                               title: Text(
-                                suggestion.users.username,
+                                '@${suggestion.users.username}',
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodyMedium
@@ -398,7 +401,8 @@ class SendInvoice extends HookWidget {
                                     ),
                               ),
                               subtitle: Text(
-                                '${suggestion.firstName} ${suggestion.lastName}',
+                                '${suggestion.firstName} ${suggestion.lastName}'
+                                    .trim(),
                                 style: Theme.of(context)
                                     .textTheme
                                     .bodySmall
@@ -428,90 +432,41 @@ class SendInvoice extends HookWidget {
                 ),
               ),
 
-              // Selected Users Chips
               if (receiverUsers.value.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: receiverUsers.value.map((receiverUser) {
-                    return Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors
-                            .white, // ✅ White background instead of transparent blue
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Theme.of(context).colorScheme.blue,
-                          width: 2,
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  child: Column(
+                    children: [
+                      for (var i = 0; i < receiverUsers.value.length; i++)
+                        Builder(
+                          builder: (context) {
+                            final receiver = receiverUsers.value[i];
+                            return CompactReceiverRow(
+                              receiverUser: receiver,
+                              showDivider: i < receiverUsers.value.length - 1,
+                              onAmountChanged: changeReceiverAmount,
+                              onRemove: () {
+                                receiverUsers.value = receiverUsers.value
+                                    .where((e) => e.id != receiver.id)
+                                    .toList();
+                              },
+                            );
+                          },
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 8,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                Icons.person,
-                                size: 16,
-                                color: Theme.of(context).colorScheme.blue,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                '${receiverUser.firstName} ${receiverUser.lastName}',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .bodyMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .dark, // ✅ Dark text
-                                    ),
-                              ),
-                              const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: () {
-                                  receiverUsers.value = receiverUsers.value
-                                      .where((element) =>
-                                          element.id != receiverUser.id)
-                                      .toList();
-                                },
-                                child: Container(
-                                  padding: EdgeInsets.all(4),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.withOpacity(0.1),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    Icons.close,
-                                    size: 16,
-                                    color: Colors.red,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          SizedBox(
-                            width: 120,
-                            child: InputFieldAmount(
-                              receiverUser: receiverUser,
-                              changeReceiverAmount: changeReceiverAmount,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }).toList(),
+                    ],
+                  ),
                 ),
               ],
 
