@@ -16,31 +16,33 @@ This is **not** a CRM dump of emails/IBANs. It is **relationship analytics** der
 
 ## Relationship model
 
-A **merchant–customer connection** exists when:
+A **merchant–customer link** is created or updated when:
 
-- Merchant = invoice **sender** with `senderIsBusiness = true`
-- Customer = invoice **receiver** (private user) who **paid** (`status = PAID`)
+1. **Check-in session** — customer scans checkout QR → **OPEN session** → cashier sees “This user” live → cashier **closes** session
+2. **Payment only** — no session → insights after **PAID** (existing trigger)
 
 ```text
-digital_invoices
-  sender  → business merchant
-  receiver → paying customer
-  status  → PAID
+Check-in:  customer scans /m/{checkoutToken} → upsert link (check_in_*)
+Payment:   digital_invoices PAID + senderIsBusiness → upsert link (paid_*)
 ```
+
+See [Merchant checkout QR & check-in](./merchant-checkout-qr.md).
 
 Materialized view or table: `merchant_customer_links`
 
 | Column | Notes |
 |--------|-------|
 | `merchant_private_user_id` | Business operator account |
-| `customer_private_user_id` | Payer — join to `private_users` → `users` for username when needed (server-side only) |
-| `first_paid_at` | |
+| `customer_private_user_id` | Customer — join to `users` for username when needed (server-side only) |
+| `first_check_in_at` | nullable |
+| `last_check_in_at` | nullable |
+| `check_in_count` | default 0 |
+| `first_paid_at` | nullable |
 | `last_paid_at` | |
 | `paid_invoice_count` | |
 | `total_paid_eur` | Sum of paid amounts |
-| `avg_days_to_pay` | Optional |
 
-Updated on invoice `PAID` (trigger or job).
+Updated on check-in RPC and/or invoice `PAID` trigger.
 
 ---
 

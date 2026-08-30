@@ -18,6 +18,8 @@ import 'package:slickbill/feature_nearby_transaction/screens/send_nfc_invoice.da
 import 'package:slickbill/feature_tickets/screens/tickets_folder_list.dart';
 import 'package:slickbill/shared_screens/received_invoice.dart';
 import 'package:slickbill/shared_widgets/global_invoice_receiver.dart';
+import 'package:slickbill/feature_loyalty/getx_controllers/customer_active_visit_controller.dart';
+import 'package:slickbill/feature_loyalty/getx_controllers/merchant_open_sessions_controller.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart' as launcher;
 
@@ -158,6 +160,44 @@ class HomeScreen extends HookWidget {
         }
       };
     }, [userController.user.value.privateUserId]);
+
+    useEffect(() {
+      final user = userController.user.value;
+
+      if (user.isBusiness) {
+        final merchantPrivateUserId = user.privateUserId?.toString() ?? '';
+        if (merchantPrivateUserId.isEmpty) {
+          return null;
+        }
+
+        final sessionsController = Get.put(MerchantOpenSessionsController());
+        sessionsController.attach(merchantPrivateUserId: merchantPrivateUserId);
+
+        if (Get.isRegistered<CustomerActiveVisitController>()) {
+          Get.find<CustomerActiveVisitController>().detach();
+        }
+
+        return () {
+          if (Get.isRegistered<MerchantOpenSessionsController>()) {
+            Get.find<MerchantOpenSessionsController>().detach();
+          }
+        };
+      }
+
+      if (Get.isRegistered<MerchantOpenSessionsController>()) {
+        Get.find<MerchantOpenSessionsController>().detach();
+      }
+
+      final visitController = Get.put(CustomerActiveVisitController());
+      visitController.attach(
+        customerPrivateUserId: user.privateUserId?.toString() ?? '',
+      );
+
+      return visitController.detach;
+    }, [
+      userController.user.value.isBusiness,
+      userController.user.value.privateUserId,
+    ]);
 
     final filePath = useState<Uint8List?>(null);
     final checkingForIntent = useState<bool>(true);

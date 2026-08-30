@@ -3,6 +3,9 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
+import 'package:slickbill/feature_loyalty/screens/merchant_cashier_screen.dart';
+import 'package:slickbill/feature_loyalty/screens/merchant_checkout_qr_screen.dart';
+import 'package:slickbill/feature_loyalty/screens/merchant_customers_screen.dart';
 
 class BusinessProfileCard extends HookWidget {
   const BusinessProfileCard({super.key});
@@ -30,7 +33,9 @@ class BusinessProfileCard extends HookWidget {
       if (!context.mounted) return;
       Get.snackbar(
         saved ? 'Saved' : 'Oops..',
-        saved ? 'inf_BusinessProfileSaved'.tr : 'inf_BusinessProfileSaveFailed'.tr,
+        saved
+            ? 'inf_BusinessProfileSaved'.tr
+            : 'inf_BusinessProfileSaveFailed'.tr,
         backgroundColor: saved
             ? Colors.green.withOpacity(0.1)
             : Theme.of(context).colorScheme.red,
@@ -137,6 +142,75 @@ class BusinessProfileCard extends HookWidget {
                             publicName: publicNameController.text,
                           ),
                   child: Text('btn_Save'.tr),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: isSaving.value
+                      ? null
+                      : () => Get.to(() => const MerchantCheckoutQrScreen()),
+                  icon: Icon(
+                    Icons.qr_code_2_outlined,
+                    color: Theme.of(context).colorScheme.blue,
+                  ),
+                  label: Text('btn_CheckoutQr'.tr),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                      color: Theme.of(context).colorScheme.blue,
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: isSaving.value
+                      ? null
+                      : () => Get.to(() => const MerchantCashierScreen()),
+                  icon: Icon(
+                    Icons.point_of_sale_outlined,
+                    color: Theme.of(context).colorScheme.blue,
+                  ),
+                  label: Text('btn_Cashier'.tr),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                      color: Theme.of(context).colorScheme.blue,
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: isSaving.value
+                      ? null
+                      : () => Get.to(() => const MerchantCustomersScreen()),
+                  icon: Icon(
+                    Icons.insights_outlined,
+                    color: Theme.of(context).colorScheme.blue,
+                  ),
+                  label: Text('btn_ViewCustomers'.tr),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(
+                      color: Theme.of(context).colorScheme.blue,
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                 ),
               ),
             ],

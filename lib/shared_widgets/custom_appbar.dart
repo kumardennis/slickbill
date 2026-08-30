@@ -7,19 +7,23 @@ import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_dashboard/screens/profile.dart';
 import 'package:slickbill/feature_dashboard/widgets/from_business_badge.dart';
+import 'package:slickbill/feature_loyalty/widgets/customer_active_visit_appbar_action.dart';
+import 'package:slickbill/feature_loyalty/widgets/merchant_open_sessions_appbar_action.dart';
 
 class CustomAppbar extends HookWidget implements PreferredSizeWidget {
   final String title;
   final Widget? appbarIcon;
   final PreferredSizeWidget? tabBar;
   final bool showSettings;
+  final bool hideMerchantSessionAction;
 
   const CustomAppbar(
       {super.key,
       required this.title,
       required this.appbarIcon,
       this.tabBar,
-      this.showSettings = false});
+      this.showSettings = false,
+      this.hideMerchantSessionAction = false});
 
   @override
   Size get preferredSize =>
@@ -59,6 +63,10 @@ class CustomAppbar extends HookWidget implements PreferredSizeWidget {
               )
             : null,
         actions: [
+          if (isBusiness && !hideMerchantSessionAction)
+            const MerchantOpenSessionsAppBarAction()
+          else if (!isBusiness)
+            const CustomerActiveVisitAppBarAction(),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: Center(

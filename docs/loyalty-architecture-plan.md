@@ -7,11 +7,17 @@
 | Order | Deliverable | Why |
 |-------|-------------|-----|
 | **1** | DB migration (tables, RLS, trigger on `PAID`) | Single source of truth; atomic upserts |
-| **2** | Merchant **Customers** screen (business users) | Landing-page promise; no funding/legal blockers |
-| **3** | User **Rewards** card + claim flow (Phase 0) | Accumulate-only; separate from Monerium UI |
-| **4** | Profile/dashboard polish, badges, empty states | |
+| **2** | Merchant **Customers** screen (business users) | ✅ Done |
+| **3a** | ✅ Checkout token + sessions migration |
+| **3b** | Merchant QR + cashier + customer scan landing |
+| **3c** | Customer check-in bottom sheet + profile “My merchants” | ✅ Done |
+| **4** | User **Rewards** (auto-earn promo points, no claim) | ✅ Done |
+| **3d** | **Group sessions** — 3-word session token, 2-word+2-digit member token, join/split | ✅ Code ready — apply `20260830173630_loyalty_group_sessions_3d.sql` |
+| **3e** | Bill from session (server RPC, pay in app) | Planned |
 | **5** | Expiry cron (`pg_cron` or scheduled job) | After ledger is stable |
 | **6** | Redemption (Phase 1) | Only after funding + counsel |
+
+See [Merchant checkout QR & check-in](./merchant-checkout-qr.md).
 
 **Do not start with:** redeem at pay, merchant cashback config, Edge Functions.
 

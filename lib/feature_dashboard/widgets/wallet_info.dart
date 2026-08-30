@@ -27,6 +27,7 @@ class WalletInfo extends HookWidget {
 
     var isConnectingMetamask = useState(false);
     var isConnectingMonerium = useState(false);
+    var isLoadingMoneriumStatus = useState(false);
     var isMoneriumConnected = useState(false);
     var isAddressLinked = useState(false);
     var moneriumIbans = useState<List<dynamic>>([]);
@@ -911,6 +912,7 @@ class WalletInfo extends HookWidget {
     }
 
     Future<void> loadMoneriumConnectionStatus() async {
+      isLoadingMoneriumStatus.value = true;
       try {
         final userId = resolveMoneriumUserId();
         if (userId.isEmpty || userId == '0') {
@@ -950,6 +952,10 @@ class WalletInfo extends HookWidget {
         await paymentSetupController.refresh();
       } catch (e) {
         debugPrint('[WalletConnectUI] failed to load Monerium status: $e');
+      } finally {
+        if (isMounted()) {
+          isLoadingMoneriumStatus.value = false;
+        }
       }
     }
 
@@ -1128,6 +1134,8 @@ class WalletInfo extends HookWidget {
     final showReconnect = alreadySetUp &&
         (metamaskWalletAddress.value?.trim().isNotEmpty ?? false) &&
         !isMoneriumConnected.value;
+    final isMoneriumBusy = isLoadingMoneriumStatus.value ||
+        isConnectingMonerium.value;
 
     return Column(
       children: [
@@ -1156,6 +1164,27 @@ class WalletInfo extends HookWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (isMoneriumBusy) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(999),
+                  child: LinearProgressIndicator(
+                    minHeight: 3,
+                    backgroundColor: Colors.white.withOpacity(0.18),
+                    color: Colors.white.withOpacity(0.92),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  isConnectingMonerium.value
+                      ? 'Connecting to Monerium…'
+                      : 'Refreshing Monerium status…',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.white.withOpacity(0.88),
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+                const SizedBox(height: 12),
+              ],
               Row(
                 children: [
                   const FaIcon(

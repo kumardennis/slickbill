@@ -23,6 +23,7 @@ import 'package:slickbill/feature_send/models/users_by_username_model.dart';
 import 'package:slickbill/feature_send/screens/quick_share.dart';
 import 'package:slickbill/feature_send/utils/send_invoices_class.dart';
 import 'package:slickbill/feature_send/widgets/compact_receiver_row.dart';
+import 'package:slickbill/shared_utils/scanned_qr_router.dart';
 import 'package:slickbill/shared_widgets/custom_appbar.dart';
 
 class SendNfcInvoice extends HookWidget {
@@ -172,11 +173,17 @@ class SendNfcInvoice extends HookWidget {
     }
 
     String? _handleBarcode(BarcodeCapture barcodes) {
-      return barcodes.barcodes.firstOrNull?.rawValue;
+      final rawValue = barcodes.barcodes.firstOrNull?.rawValue;
+      if (rawValue == null) return null;
+      return rawValue.trim();
     }
 
     Future<void> createSlickillFromQR(result) async {
       try {
+        if (await navigateScannedQrPayload(result.toString())) {
+          return;
+        }
+
         Map<String, dynamic> jsonObject = jsonDecode(result);
 
         await sendInvoicesClass.createReceivePrivateQRInvoice(
@@ -988,8 +995,8 @@ Widget _buildDirectShareTab({
             itemBuilder: (context, suggestion) {
               return ListTile(
                 title: Text('@${suggestion.users.username}'),
-                subtitle:
-                    Text('${suggestion.firstName} ${suggestion.lastName}'.trim()),
+                subtitle: Text(
+                    '${suggestion.firstName} ${suggestion.lastName}'.trim()),
               );
             },
             onSelected: (suggestion) {

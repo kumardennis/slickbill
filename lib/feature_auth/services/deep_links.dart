@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:app_links/app_links.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/feature_auth/services/metamask_wallet_service.dart';
 import 'package:slickbill/feature_auth/services/monerium_service.dart';
+import 'package:slickbill/shared_utils/scanned_qr_router.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 String? _pendingBillToken;
@@ -55,6 +58,19 @@ String? _extractBillToken(Uri uri) {
   return null;
 }
 
+String? _extractMerchantCheckoutToken(Uri uri) {
+  if (uri.pathSegments.length >= 2 && uri.pathSegments.first == 'm') {
+    final token = uri.pathSegments[1].trim();
+    if (token.isNotEmpty) return token;
+  }
+
+  if (uri.pathSegments.isNotEmpty && uri.pathSegments.first.trim().isNotEmpty) {
+    return uri.pathSegments.first.trim();
+  }
+
+  return null;
+}
+
 bool processIncomingDeepLinkUri(Uri uri) {
   if (uri.scheme == 'w3a') {
     print('🔑 Web3Auth callback received');
@@ -95,8 +111,38 @@ bool processIncomingDeepLinkUri(Uri uri) {
     return true;
   }
 
+  final isMerchantCheckInLink =
+      (uri.scheme == 'slickbills' || uri.scheme == 'slickbill') &&
+          uri.host == 'm';
+  if (isMerchantCheckInLink) {
+    print('🏪 Merchant check-in deep link detected');
+    final checkoutToken = _extractMerchantCheckoutToken(uri);
+    if (checkoutToken != null) {
+      print('   Checkout token: $checkoutToken');
+      unawaited(
+        navigateScannedQrPayload('https://app.slickbills.com/m/$checkoutToken'),
+      );
+    }
+    return true;
+  }
+
   if (uri.scheme == 'https' &&
-      (uri.host == 'slickbills.com' || uri.host == 'www.slickbills.com')) {
+      (uri.host == 'app.slickbills.com' ||
+          uri.host == 'slickbills.com' ||
+          uri.host == 'www.slickbills.com')) {
+    if (uri.pathSegments.length >= 2 && uri.pathSegments.first == 'm') {
+      final checkoutToken = uri.pathSegments[1].trim();
+      if (checkoutToken.isNotEmpty) {
+        print('🏪 Merchant check-in web link: $checkoutToken');
+        unawaited(
+          navigateScannedQrPayload(
+            'https://app.slickbills.com/m/$checkoutToken',
+          ),
+        );
+        return true;
+      }
+    }
+
     if (uri.pathSegments.isNotEmpty) {
       print('🌐 Web deep link: /${uri.pathSegments.join('/')}');
       Get.toNamed('/${uri.pathSegments.join('/')}');

@@ -6,6 +6,7 @@ import '../feature_Dashboard/locales/en_locale.dart';
 import '../feature_self_create/locales/en_locale.dart';
 import '../feature_send/locales/en_locale.dart';
 import '../feature_tickets/locales/en_locale.dart';
+import '../feature_loyalty/locales/en_locale.dart';
 
 class AppTranslations extends Translations {
   @override
@@ -31,7 +32,8 @@ class AppTranslations extends Translations {
           ...selfCreateLocales_EN,
           ...sendLocales_EN,
           ...ticketLocales_EN,
-          ...nearbyTransactionLocales_EN
+          ...nearbyTransactionLocales_EN,
+          ...loyaltyLocales_EN
         },
         'et_EE': {
           'hello': 'Hallo Welt',

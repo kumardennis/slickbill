@@ -20,6 +20,7 @@ import 'package:slickbill/feature_auth/services/deep_links.dart';
 import 'package:slickbill/feature_auth/services/native_web3auth_service.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
 import 'package:slickbill/feature_navigation/getx_controllers/navigation_controller.dart';
+import 'package:slickbill/feature_loyalty/screens/merchant_check_in_landing_screen.dart';
 import 'package:slickbill/feature_public/screens/public_invoice_landing.dart';
 import 'package:slickbill/feature_public/screens/public_invoice_view.dart';
 import 'package:slickbill/shared_locales/locale_en.dart';
@@ -120,6 +121,22 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     final baseUri = Uri.base;
     final path = baseUri.path;
     print('🌐 Raw browser path: $path');
+
+    // Handle /m/<checkoutToken>/join/<joinCode>
+    if (path.startsWith('/m/')) {
+      final segments = path.split('/').where((s) => s.isNotEmpty).toList();
+      if (segments.length >= 4 &&
+          segments[0] == 'm' &&
+          segments[2] == 'join') {
+        Get.parameters['token'] = segments[1];
+        Get.parameters['joinCode'] = segments[3];
+        return '/m/:token/join/:joinCode';
+      }
+      if (segments.length >= 2 && segments[0] == 'm') {
+        Get.parameters['token'] = segments[1];
+        return '/m/:token';
+      }
+    }
 
     // Handle /bill/<token>
     if (path.startsWith('/bill/')) {
@@ -252,6 +269,19 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               name: '/public-invoice-view',
               page: () => PublicInvoiceView(
                 token: Get.arguments['token'] ?? '',
+              ),
+            ),
+            GetPage(
+              name: '/m/:token/join/:joinCode',
+              page: () => MerchantCheckInLandingScreen(
+                checkoutToken: Get.parameters['token'] ?? '',
+                joinCode: Get.parameters['joinCode'],
+              ),
+            ),
+            GetPage(
+              name: '/m/:token',
+              page: () => MerchantCheckInLandingScreen(
+                checkoutToken: Get.parameters['token'] ?? '',
               ),
             ),
             GetPage(

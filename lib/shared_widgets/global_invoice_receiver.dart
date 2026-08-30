@@ -10,6 +10,7 @@ import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
 
 import '../feature_navigation/getx_controllers/navigation_controller.dart';
 import '../feature_send/utils/send_invoices_class.dart';
+import '../shared_utils/scanned_qr_router.dart';
 
 class GlobalReceiveService {
   static void showReceiveOptions(BuildContext context) {
@@ -160,6 +161,10 @@ class GlobalReceiveService {
         .then((scannedResult) async {
       if (scannedResult == null || scannedResult.isEmpty) return;
 
+      if (await navigateScannedQrPayload(scannedResult)) {
+        return;
+      }
+
       final ctx = Get.context;
       if (ctx != null) {
         Get.snackbar(
@@ -175,52 +180,20 @@ class GlobalReceiveService {
   }
 
   static String? _handleBarcode(BarcodeCapture barcodes) {
-    // ✅ Check if it's a URL (public invoice)
     final rawValue = barcodes.barcodes.firstOrNull?.rawValue;
     if (rawValue == null) return null;
-
-    if (rawValue.startsWith('http://') || rawValue.startsWith('https://')) {
-      try {
-        final uri = Uri.parse(rawValue);
-
-        // Check if it's an invoice URL
-        if (uri.pathSegments.contains('invoice') &&
-            uri.pathSegments.length >= 2) {
-          final tokenIndex = uri.pathSegments.indexOf('invoice') + 1;
-          final token = uri.pathSegments[tokenIndex];
-
-          print('✅ Public invoice detected: $token');
-
-          // Navigate to public invoice page
-          Get.toNamed('/bill/$token');
-
-          return null; // Prevent further processing
-        }
-      } catch (e) {
-        print('❌ Error parsing URL: $e');
-      }
-    }
-
-    return barcodes.barcodes.firstOrNull?.rawValue;
+    return rawValue.trim();
   }
 
   static Future<InvoiceModel?> _createSlickbillFromQR(String result) async {
     try {
+      if (await navigateScannedQrPayload(result)) {
+        return null;
+      }
+
       final NavigationController navigationController = Get.find();
       SendInvoicesClass sendInvoicesClass = SendInvoicesClass();
       ReceivedInvoicesClass receivedInvoicesClass = ReceivedInvoicesClass();
-
-      if (result.startsWith('https://app.slickbills.com/bill/')) {
-        // Extract the public token from the URL
-        final publicToken = result.split('/bill/').last;
-
-        print(
-            '📱 Scanned public invoice link, navigating to: /bill/$publicToken');
-
-        // ✅ Just navigate using deep link - app is already installed!
-        Get.toNamed('/bill/$publicToken');
-        return null;
-      }
 
       Map<String, dynamic> jsonObject = jsonDecode(result);
 

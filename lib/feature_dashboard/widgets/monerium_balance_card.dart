@@ -15,10 +15,15 @@ class MoneriumBalanceCard extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final isFetchingBalance = useState(false);
+    final hasLoadedOnce = useState(false);
     final balanceSummary = useState<String?>(null);
     final moneriumIbans = useState<List<dynamic>>([]);
     final PaymentSetupController paymentSetupController =
         Get.put(PaymentSetupController());
+    final walletAddress = user.metamaskWalletAddress?.trim() ?? '';
+    final hasWallet = walletAddress.isNotEmpty;
+    final profileHasMonerium =
+        PaymentSetupController.userHasMoneriumIban(user);
 
     String resolveMoneriumUserId() {
       final privateUserId = user.privateUserId;
@@ -156,7 +161,6 @@ class MoneriumBalanceCard extends HookWidget {
     }
 
     Future<void> loadBalance({bool showFeedback = false}) async {
-      final walletAddress = user.metamaskWalletAddress?.trim() ?? '';
       if (walletAddress.isEmpty) {
         moneriumIbans.value = const [];
         balanceSummary.value = null;
@@ -164,6 +168,8 @@ class MoneriumBalanceCard extends HookWidget {
       }
 
       isFetchingBalance.value = true;
+      final previousIbans = moneriumIbans.value;
+      final previousSummary = balanceSummary.value;
       try {
         final userId = resolveMoneriumUserId();
         await MoneriumService.hasActiveSession(userId: userId);
@@ -195,8 +201,13 @@ class MoneriumBalanceCard extends HookWidget {
         await paymentSetupController.markCompleteFromBalance(userId: userId);
       } catch (error) {
         debugPrint('[MoneriumBalanceCard] balance fetch failed: $error');
-        moneriumIbans.value = const [];
-        balanceSummary.value = null;
+        if (previousIbans.isNotEmpty) {
+          moneriumIbans.value = previousIbans;
+          balanceSummary.value = previousSummary;
+        } else {
+          moneriumIbans.value = const [];
+          balanceSummary.value = null;
+        }
         if (showFeedback && context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -206,6 +217,7 @@ class MoneriumBalanceCard extends HookWidget {
           );
         }
       } finally {
+        hasLoadedOnce.value = true;
         isFetchingBalance.value = false;
       }
     }
@@ -220,23 +232,32 @@ class MoneriumBalanceCard extends HookWidget {
       return worker.dispose;
     }, [user.id, user.privateUserId, user.metamaskWalletAddress]);
 
-    final hasMoneriumIban = moneriumIbans.value.isNotEmpty;
-    final shouldShowCard = hasMoneriumIban &&
-        (user.metamaskWalletAddress?.trim().isNotEmpty ?? false);
+    return Obx(() {
+      final isRefreshingSetup = paymentSetupController.isRefreshing.value;
+      final setupHasMonerium = paymentSetupController.hasMoneriumIban.value;
+      final hasMoneriumIban = moneriumIbans.value.isNotEmpty;
+      final isLoading = isFetchingBalance.value || isRefreshingSetup;
+      final shouldShowCard = hasWallet &&
+          (hasMoneriumIban ||
+              isLoading ||
+              profileHasMonerium ||
+              setupHasMonerium ||
+              hasLoadedOnce.value);
 
-    final visibleBalanceLines = balanceLines(balanceSummary.value);
-    final eurLine = visibleBalanceLines.cast<String?>().firstWhere(
-          (line) => (line ?? '').toUpperCase().startsWith('EUR:'),
-          orElse: () => null,
-        );
-    final eurAmount = eurLine != null && eurLine.contains(':')
-        ? eurLine.split(':').skip(1).join(':').trim()
-        : null;
-    final prominentBalanceLine = (eurAmount != null && eurAmount.isNotEmpty)
-        ? '€$eurAmount'
-        : (visibleBalanceLines.isNotEmpty ? visibleBalanceLines.first : null);
+      final visibleBalanceLines = balanceLines(balanceSummary.value);
+      final eurLine = visibleBalanceLines.cast<String?>().firstWhere(
+            (line) => (line ?? '').toUpperCase().startsWith('EUR:'),
+            orElse: () => null,
+          );
+      final eurAmount = eurLine != null && eurLine.contains(':')
+          ? eurLine.split(':').skip(1).join(':').trim()
+          : null;
+      final prominentBalanceLine = (eurAmount != null && eurAmount.isNotEmpty)
+          ? '€$eurAmount'
+          : (visibleBalanceLines.isNotEmpty ? visibleBalanceLines.first : null);
+      final showBalanceLoading = isLoading && prominentBalanceLine == null;
 
-    final card = Container(
+      final card = Container(
       key: const ValueKey('monerium-balance-card'),
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(20, 16, 20, 8),
@@ -337,7 +358,7 @@ class MoneriumBalanceCard extends HookWidget {
                       Material(
                         color: Colors.transparent,
                         child: InkWell(
-                          onTap: isFetchingBalance.value
+                          onTap: isLoading
                               ? null
                               : () => loadBalance(showFeedback: true),
                           borderRadius: BorderRadius.circular(999),
@@ -353,7 +374,7 @@ class MoneriumBalanceCard extends HookWidget {
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                isFetchingBalance.value
+                                isLoading
                                     ? const SizedBox(
                                         height: 14,
                                         width: 14,
@@ -369,9 +390,7 @@ class MoneriumBalanceCard extends HookWidget {
                                       ),
                                 const SizedBox(width: 6),
                                 Text(
-                                  isFetchingBalance.value
-                                      ? 'Refreshing'
-                                      : 'Refresh',
+                                  isLoading ? 'Refreshing' : 'Refresh',
                                   style: Theme.of(context)
                                       .textTheme
                                       .bodySmall
@@ -397,9 +416,33 @@ class MoneriumBalanceCard extends HookWidget {
                         ),
                   ),
                   const SizedBox(height: 6),
-                  if (isFetchingBalance.value)
+                  if (showBalanceLoading)
+                    Row(
+                      children: [
+                        const SizedBox(
+                          height: 28,
+                          width: 28,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Loading balance…',
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(
+                                color: Colors.white.withOpacity(0.88),
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ],
+                    )
+                  else if (isLoading && prominentBalanceLine != null)
                     Text(
-                      prominentBalanceLine ?? '€0',
+                      prominentBalanceLine,
                       style:
                           Theme.of(context).textTheme.displayMedium?.copyWith(
                                 color: Colors.white.withOpacity(0.72),
@@ -428,8 +471,18 @@ class MoneriumBalanceCard extends HookWidget {
                               ),
                     ),
                   const SizedBox(height: 10),
+                  if (isLoading)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        minHeight: 3,
+                        backgroundColor: Colors.white.withOpacity(0.18),
+                        color: Colors.white.withOpacity(0.92),
+                      ),
+                    ),
+                  const SizedBox(height: 6),
                   Text(
-                    isFetchingBalance.value
+                    isLoading
                         ? 'Syncing latest Monerium balance'
                         : 'Live balance from your linked Monerium account',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -442,12 +495,14 @@ class MoneriumBalanceCard extends HookWidget {
                     children: [
                       Expanded(
                         child: OutlinedButton(
-                          onPressed: () async {
-                            await Get.to(
-                              () => const AddWithdrawMoneyScreen(),
-                            );
-                            await loadBalance();
-                          },
+                          onPressed: isLoading
+                              ? null
+                              : () async {
+                                  await Get.to(
+                                    () => const AddWithdrawMoneyScreen(),
+                                  );
+                                  await loadBalance();
+                                },
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.white,
                             side: BorderSide(
@@ -461,14 +516,16 @@ class MoneriumBalanceCard extends HookWidget {
                       const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton(
-                          onPressed: () async {
-                            await Get.to(
-                              () => const AddWithdrawMoneyScreen(
-                                startOnWithdraw: true,
-                              ),
-                            );
-                            await loadBalance();
-                          },
+                          onPressed: isLoading
+                              ? null
+                              : () async {
+                                  await Get.to(
+                                    () => const AddWithdrawMoneyScreen(
+                                      startOnWithdraw: true,
+                                    ),
+                                  );
+                                  await loadBalance();
+                                },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.white,
                             foregroundColor:
@@ -539,5 +596,6 @@ class MoneriumBalanceCard extends HookWidget {
               key: ValueKey('monerium-balance-empty'),
             ),
     );
+    });
   }
 }
