@@ -10,16 +10,20 @@ import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
 import 'package:slickbill/feature_dashboard/utils/payment_class.dart';
 import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
 import 'package:slickbill/feature_dashboard/utils/invoice_csv_exporter.dart';
+import 'package:slickbill/feature_dashboard/screens/monerium_statements.dart';
 import 'package:slickbill/feature_dashboard/widgets/invoice_card.dart';
 import 'package:slickbill/feature_dashboard/widgets/invoice_list_filter_bar.dart';
 import 'package:slickbill/feature_dashboard/widgets/received_invoice_sheet.dart';
 import 'package:slickbill/feature_dashboard/widgets/statistics_card.dart';
+import 'package:slickbill/shared_widgets/sb_dark_surface_theme.dart';
 import 'package:slickbill/feature_auth/services/monerium_service.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/payment_setup_controller.dart';
 import 'package:slickbill/core/services/invoice_toast_coordinator.dart';
-import 'package:slickbill/services/biometric_auth_service.dart';
+import 'package:slickbill/feature_navigation/getx_controllers/navigation_controller.dart';
+import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/services/coinbase/coinbase_service.dart';
 import 'package:slickbill/shared_widgets/cdp_webview.dart';
+import 'package:slickbill/shared_widgets/sb_quick_request_card.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../feature_auth/getx_controllers/user_controller.dart';
@@ -31,7 +35,6 @@ class ReceivedBills extends HookWidget {
   Widget build(BuildContext context) {
     final receivedInvoicesClass = ReceivedInvoicesClass();
     final payment = PaymentClass();
-    final biometricAuth = BiometricAuthService();
     final UserController userController = Get.find();
     final DigitalInvoiceController invoiceController =
         Get.find<DigitalInvoiceController>();
@@ -57,8 +60,8 @@ class ReceivedBills extends HookWidget {
 
       final results = await Future.wait([
         receivedInvoicesClass.getPrivateReceivedInvoices(query: current),
-        receivedInvoicesClass.getOpenInvoicesSum(),
-        receivedInvoicesClass.getPaidInMonth(current.monthStart),
+        receivedInvoicesClass.getOpenInvoicesSum(period: current),
+        receivedInvoicesClass.getPaidInPeriod(current),
       ]);
       if (!context.mounted) return;
 
@@ -114,22 +117,6 @@ class ReceivedBills extends HookWidget {
 
     Future<void> createCoinbaseTransaction(
         InvoiceModel invoice, bool isPaid) async {
-      final authenticated = await biometricAuth.authenticateWithBiometrics(
-        reason:
-            'Authenticate to confirm payment of €${invoice.amount.toStringAsFixed(2)}',
-      );
-
-      if (!authenticated) {
-        Get.snackbar(
-          'Authentication Failed',
-          'Biometric authentication is required to make payments.',
-          backgroundColor: Theme.of(context).colorScheme.red,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 3),
-        );
-        return;
-      }
-
       print('Creating Coinbase transaction...');
       print(invoice.senders?.privateUsers?.users);
       if (invoice.senders == null ||
@@ -266,6 +253,13 @@ class ReceivedBills extends HookWidget {
         );
         return;
       }
+
+      final confirmed = await AppLockController.confirmSensitiveAction(
+        reason: 'lbl_ConfirmPayment'.trParams({
+          'amount': '€${invoice.amount.toStringAsFixed(2)}',
+        }),
+      );
+      if (!confirmed) return;
 
       try {
         await MoneriumService.ensureConnected(
@@ -613,14 +607,9 @@ class ReceivedBills extends HookWidget {
     }, []);
 
     Future<void> openInvoice(InvoiceModel invoice) async {
-      await showModalBottomSheet(
+      await showInvoiceSheet(
         context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        backgroundColor: Colors.transparent,
-        builder: (context) => FractionallySizedBox(
-          heightFactor: 0.94,
-          child: ReceivedInvoiceSheet(
+        builder: (context) => ReceivedInvoiceSheet(
             invoice: invoice,
             payInvoice: payInvoice,
             updateInvoiceStatus: updateInvoiceStatus,
@@ -650,7 +639,6 @@ class ReceivedBills extends HookWidget {
               return rows.first;
             },
             updateInvoiceObsolete: updateInvoiceObsolete,
-          ),
         ),
       );
     }
@@ -694,20 +682,14 @@ class ReceivedBills extends HookWidget {
     final monthName =
         DateFormat.MMMM().format(filter.value.monthStart);
     final rows = invoices.value ?? <InvoiceModel>[];
+    final unpaidCount = rows.where((i) {
+      final s = i.status.trim().toUpperCase();
+      return s == 'UNPAID' || s == 'PENDING';
+    }).length;
+    final navigationController = Get.find<NavigationController>();
 
     return Column(
       children: [
-        InvoiceListFilterBar(
-          query: filter.value,
-          onChanged: (next) => filter.value = next,
-          exportEnabled: rows.isNotEmpty,
-          onExport: () {
-            InvoiceCsvExporter.exportReceived(
-              invoices: rows,
-              query: filter.value,
-            );
-          },
-        ),
         if (isLoading.value && hasLoaded.value)
           LinearProgressIndicator(
             minHeight: 2,
@@ -723,26 +705,86 @@ class ReceivedBills extends HookWidget {
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(0.0, 12.0, 20.0, 20.0),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
                 child: !hasLoaded.value && isLoading.value
                     ? const Padding(
                         padding: EdgeInsets.only(top: 48),
                         child: Center(child: CircularProgressIndicator()),
                       )
                     : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          InvoiceListFilterBar(
+                            query: filter.value,
+                            onChanged: (next) => filter.value = next,
+                            exportEnabled: rows.isNotEmpty,
+                            showPills: false,
+                            onExport: () {
+                              InvoiceCsvExporter.exportReceived(
+                                invoices: rows,
+                                query: filter.value,
+                              );
+                            },
+                          ),
                           StatisticsCard(
                             pendingAmount: pending.value,
                             paidAmount: paidThisMonth.value,
                             pendingLabel: 'lbl_PendingToPay'.tr,
-                            paidLabel: 'lbl_PaidInMonth'.trParams({
-                              'month': monthName,
-                            }),
+                            paidLabel: filter.value.overviewLabelNeedsMonth
+                                ? filter.value.paidOverviewLabelKey
+                                    .trParams({'month': monthName})
+                                : filter.value.paidOverviewLabelKey.tr,
+                            pendingSubtitle: unpaidCount > 0
+                                ? 'lbl_ActiveRequests'.trParams({
+                                    'count': '$unpaidCount',
+                                  })
+                                : null,
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 16),
+                          SbQuickRequestCard(
+                            onNewRequest: () =>
+                                navigationController.openUsernameSend(),
+                            onViewHistory: () =>
+                                Get.to(() => const MoneriumStatements()),
+                          ),
+                          const SizedBox(height: 16),
+                            InvoiceListFilterBar(
+                            query: filter.value,
+                            onChanged: (next) => filter.value = next,
+                            showMonthHeader: false,
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              Text(
+                                'lbl_RecentItems'.tr,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelLarge
+                                    ?.copyWith(fontSize: 14),
+                              ),
+                              const Spacer(),
+                              GestureDetector(
+                                onTap: () => filter.value =
+                                    filter.value.copyWith(allTime: true),
+                                child: Text(
+                                  'lbl_SeeAll'.tr,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .labelMedium
+                                      ?.copyWith(
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .secondary,
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
                           if (rows.isEmpty)
                             Padding(
-                              padding: const EdgeInsets.fromLTRB(20, 24, 0, 0),
+                              padding: const EdgeInsets.fromLTRB(0, 24, 0, 0),
                               child: Text(
                                 filter.value.emptyListNeedsMonth
                                     ? filter.value.emptyListLabelKey.trParams({
@@ -756,24 +798,28 @@ class ReceivedBills extends HookWidget {
                               children: rows
                                   .map((invoice) => Padding(
                                         padding:
-                                            const EdgeInsets.only(top: 20.0),
+                                            const EdgeInsets.only(bottom: 12),
                                         child: GestureDetector(
                                           onTap: () async {
                                             await openInvoice(invoice);
                                           },
                                           child: InvoiceCard(
-                                              amount: invoice.amount,
-                                              invoiceNo: invoice.invoiceNo,
-                                              date: invoice.createdAt,
-                                              dueDate: invoice.deadline,
-                                              paidOnDate: invoice.paidOnDate,
-                                              description: invoice.description,
-                                              senderOrReeceiverName:
-                                                  invoice.displaySenderName,
-                                              status: invoice.status,
-                                              isSeen: invoice.isSeen,
-                                              isFromBusiness:
-                                                  invoice.isFromBusiness),
+                                            amount: invoice.amount,
+                                            invoiceNo: invoice.invoiceNo,
+                                            date: invoice.createdAt,
+                                            dueDate: invoice.deadline,
+                                            paidOnDate: invoice.paidOnDate,
+                                            description: invoice.description,
+                                            senderOrReeceiverName:
+                                                invoice.displaySenderName,
+                                            status: invoice.status,
+                                            isSeen: invoice.isSeen,
+                                            isFromBusiness:
+                                                invoice.isFromBusiness,
+                                            role: InvoiceCardRole.received,
+                                            onFooterAction: () =>
+                                                openInvoice(invoice),
+                                          ),
                                         ),
                                       ))
                                   .toList(),

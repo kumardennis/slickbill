@@ -25,6 +25,9 @@ class AppTranslations extends Translations {
               'Tap your device to another NFC enabled device.',
           'inf_QRInstruction':
               'Scan the QR code to receive the SlickBill invoice.',
+          'hd_ScanQr': 'Scan QR',
+          'inf_ScanQrSheet':
+              'Point your camera at a SlickBills QR to receive the invoice.',
           'lbl_NewInvoiceReceived': 'You got a new SlickBill!',
           'inf_WontBeMoment': "This won't take a moment.",
           ...authLocales_EN,

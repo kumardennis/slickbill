@@ -4,15 +4,14 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
-import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_auth/getx_controllers/current_bank_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/models/user_model.dart';
 import 'package:slickbill/core/services/invoice_toast_coordinator.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/intent_controller.dart';
+import 'package:slickbill/feature_dashboard/getx_controllers/payment_setup_controller.dart';
 import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
 import 'package:slickbill/feature_nearby_transaction/screens/send_nfc_invoice.dart';
 import 'package:slickbill/feature_tickets/screens/tickets_folder_list.dart';
@@ -20,6 +19,8 @@ import 'package:slickbill/shared_screens/received_invoice.dart';
 import 'package:slickbill/shared_widgets/global_invoice_receiver.dart';
 import 'package:slickbill/feature_loyalty/getx_controllers/customer_active_visit_controller.dart';
 import 'package:slickbill/feature_loyalty/getx_controllers/merchant_open_sessions_controller.dart';
+import 'package:slickbill/shared_widgets/sb_bottom_nav.dart';
+import 'package:slickbill/theme/sb_colors.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart' as launcher;
 
@@ -49,6 +50,7 @@ class HomeScreen extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
+    Get.put(PaymentSetupController());
     CurrentBankController currentBankController =
         Get.put(CurrentBankController());
 
@@ -284,70 +286,22 @@ class HomeScreen extends HookWidget {
     }
 
     return Scaffold(
+      backgroundColor: SbColors.surface,
       body: Obx(() => _pages[navigationController.currentIndex.value]),
       bottomNavigationBar: Obx(
-        () => BottomNavigationBar(
-          type: BottomNavigationBarType.fixed,
+        () => SbBottomNav(
           currentIndex: navigationController.currentIndex.value,
           onTap: (index) => navigationController.changeIndex(index),
-          backgroundColor: Theme.of(context).colorScheme.blue,
-          selectedItemColor: Theme.of(context).colorScheme.light,
-          unselectedItemColor:
-              Theme.of(context).colorScheme.gray.withOpacity(0.6),
-          selectedFontSize: 11,
-          unselectedFontSize: 10,
-          items: const [
-            // ✅ 0 - Bills
-            BottomNavigationBarItem(
-              icon: FaIcon(FontAwesomeIcons.list, size: 20),
-              label: 'Bills',
-            ),
-
-            BottomNavigationBarItem(
-              icon: FaIcon(FontAwesomeIcons.qrcode, size: 28),
-              label: 'Exchange',
-            ),
-            BottomNavigationBarItem(
-              icon: FaIcon(FontAwesomeIcons.fileArrowUp, size: 20),
-              label: 'Upload',
-            ),
-          ],
         ),
       ),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Theme.of(context).colorScheme.darkerBlue,
-                  Theme.of(context).colorScheme.blue,
-                ],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color:
-                      Theme.of(context).colorScheme.darkerBlue.withOpacity(0.3),
-                  blurRadius: 15,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
-            child: FloatingActionButton(
-              heroTag: 'receive',
-              onPressed: () => GlobalReceiveService.showReceiveOptions(context),
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              child: const FaIcon(
-                FontAwesomeIcons.download,
-                color: Colors.white,
-                size: 24,
-              ),
-            ),
-          ),
-        ],
+      floatingActionButton: FloatingActionButton(
+        heroTag: 'receive',
+        onPressed: () => GlobalReceiveService.showReceiveOptions(context),
+        backgroundColor: SbColors.electricCyan,
+        foregroundColor: SbColors.deepNavy,
+        elevation: 2,
+        tooltip: 'hd_ScanQr'.tr,
+        child: const Icon(Icons.qr_code_scanner_rounded, size: 24),
       ),
     );
   }

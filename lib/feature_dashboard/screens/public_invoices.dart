@@ -9,6 +9,7 @@ import 'package:slickbill/feature_dashboard/models/invoice_list_query.dart';
 import 'package:slickbill/feature_dashboard/widgets/invoice_list_filter_bar.dart';
 import 'package:slickbill/feature_dashboard/utils/invoice_csv_exporter.dart';
 import 'package:slickbill/feature_dashboard/widgets/sent_public_invoice_sheet.dart';
+import 'package:slickbill/shared_widgets/sb_dark_surface_theme.dart';
 import 'package:slickbill/feature_public/models/public_invoice_model.dart';
 import 'package:flutter/services.dart';
 import 'package:slickbill/feature_dashboard/widgets/sent_invoice_sheet.dart';
@@ -30,6 +31,7 @@ class PublicInvoices extends HookWidget {
     final filter = useState(InvoiceListQuery(
       month: currentInvoiceMonth(),
       status: InvoiceStatusFilter.all,
+      monthBasis: InvoiceMonthBasis.created,
     ));
 
     Future<void> loadPublicInvoices() async {
@@ -94,14 +96,11 @@ class PublicInvoices extends HookWidget {
         return;
       }
 
-      showModalBottomSheet(
+      showInvoiceSheet(
         context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
         builder: (context) => SentInvoiceSheet(
           invoice: invoice,
           updateInvoiceObsolete: () {
-            // Reload public invoices after update
             loadPublicInvoices();
           },
         ),
@@ -122,14 +121,11 @@ class PublicInvoices extends HookWidget {
         return;
       }
 
-      showModalBottomSheet(
+      showInvoiceSheet(
         context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
         builder: (context) => SentPublicInvoiceSheet(
           invoice: invoice,
           updateInvoiceObsolete: () {
-            // Reload public invoices after update
             loadPublicInvoices();
           },
         ),
@@ -393,16 +389,19 @@ class PublicInvoices extends HookWidget {
       backgroundColor: Theme.of(context).colorScheme.light,
       body: Column(
         children: [
-          InvoiceListFilterBar(
-            query: filter.value,
-            onChanged: (next) => filter.value = next,
-            exportEnabled: publicInvoices.value.isNotEmpty,
-            onExport: () {
-              InvoiceCsvExporter.exportPublic(
-                invoices: publicInvoices.value,
-                query: filter.value,
-              );
-            },
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: InvoiceListFilterBar(
+              query: filter.value,
+              onChanged: (next) => filter.value = next,
+              exportEnabled: publicInvoices.value.isNotEmpty,
+              onExport: () {
+                InvoiceCsvExporter.exportPublic(
+                  invoices: publicInvoices.value,
+                  query: filter.value,
+                );
+              },
+            ),
           ),
           if (isLoading.value && hasLoaded.value)
             LinearProgressIndicator(
@@ -511,10 +510,8 @@ class PublicInvoices extends HookWidget {
                                             context, publicInvoice);
                                       } else {
                                         // Show the public invoice details instead
-                                        showModalBottomSheet(
+                                        showInvoiceSheet(
                                           context: context,
-                                          isScrollControlled: true,
-                                          backgroundColor: Colors.transparent,
                                           builder: (context) =>
                                               SentPublicInvoiceSheet(
                                             invoice: publicInvoice,

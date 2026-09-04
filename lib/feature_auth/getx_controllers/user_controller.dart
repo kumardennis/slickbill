@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:slickbill/core/services/push_notification_service.dart';
 import 'package:slickbill/feature_auth/repos/user_repo.dart';
+import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/screens/sign_in.dart';
 import 'package:slickbill/feature_auth/services/google_auth_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -364,6 +365,9 @@ class UserController extends GetxController {
 
   Future<void> clearUserData() async {
     try {
+      if (Get.isRegistered<AppLockController>()) {
+        Get.find<AppLockController>().resetOnLogout();
+      }
       await _googleAuthService.signOut();
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('user_data');

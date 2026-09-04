@@ -380,35 +380,53 @@ class DigitalInvoiceRepository {
       if (query != null) {
         final from = query.createdFrom;
         final to = query.createdTo;
-        final inMonth =
-            'and(created_at.gte."$from",created_at.lt."$to"),and(deadline.gte."$from",deadline.lt."$to")';
+        final createdOnly = query.monthBasis == InvoiceMonthBasis.created;
+        final inMonth = createdOnly
+            ? 'created_at.gte."$from",created_at.lt."$to"'
+            : 'and(created_at.gte."$from",created_at.lt."$to"),and(deadline.gte."$from",deadline.lt."$to")';
         switch (query.status) {
           case InvoiceStatusFilter.all:
             if (!query.ignoresMonth) {
-              request = request.or(
-                '$inMonth,and(paidOnDate.gte."$from",paidOnDate.lt."$to")',
-              );
+              if (createdOnly) {
+                request = request.gte('created_at', from).lt('created_at', to);
+              } else {
+                request = request.or(
+                  '$inMonth,and(paidOnDate.gte."$from",paidOnDate.lt."$to")',
+                );
+              }
             }
             break;
           case InvoiceStatusFilter.unpaid:
             request = request.eq('status', 'UNPAID');
             if (!query.ignoresMonth) {
-              request = request.or(inMonth);
+              if (createdOnly) {
+                request = request.gte('created_at', from).lt('created_at', to);
+              } else {
+                request = request.or(inMonth);
+              }
             }
             break;
           case InvoiceStatusFilter.processing:
             request = request.inFilter('status', ['PROCESSING', 'PENDING']);
             if (!query.ignoresMonth) {
-              request = request.or(inMonth);
+              if (createdOnly) {
+                request = request.gte('created_at', from).lt('created_at', to);
+              } else {
+                request = request.or(inMonth);
+              }
             }
             break;
           case InvoiceStatusFilter.paid:
             request = request.eq('status', 'PAID');
             if (!query.ignoresMonth) {
-              final range = query.paidOnDateRange;
-              request = request
-                  .gte('paidOnDate', range[0])
-                  .lte('paidOnDate', range[1]);
+              if (createdOnly) {
+                request = request.gte('created_at', from).lt('created_at', to);
+              } else {
+                final range = query.paidOnDateRange;
+                request = request
+                    .gte('paidOnDate', range[0])
+                    .lte('paidOnDate', range[1]);
+              }
             }
             break;
         }

@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../feature_auth/utils/money_formatter.dart';
 import '../../feature_navigation/getx_controllers/navigation_controller.dart';
+import '../../shared_widgets/sb_dark_surface_theme.dart';
 import '../getx_controllers/digital_invoice_controller.dart';
 import '../utils/sent_invoices_class.dart';
 import '../../feature_send/models/direct_share_draft.dart';
@@ -122,7 +123,8 @@ class SentInvoiceSheet extends HookWidget {
       navigationController.changeIndex(1);
     }
 
-    return Container(
+    return SbDarkSurfaceTheme(
+      builder: (context) => Container(
       decoration: BoxDecoration(
           gradient: LinearGradient(
               colors: [
@@ -141,7 +143,7 @@ class SentInvoiceSheet extends HookWidget {
               tileMode: TileMode.clamp,
               begin: Alignment.topLeft,
               end: Alignment.bottomRight)),
-      height: MediaQuery.of(context).size.height,
+      height: double.infinity,
       child: Padding(
         padding: const EdgeInsets.all(20.0),
         child: SingleChildScrollView(
@@ -917,6 +919,7 @@ class SentInvoiceSheet extends HookWidget {
           ]),
         ),
       ),
+    ),
     );
   }
 }

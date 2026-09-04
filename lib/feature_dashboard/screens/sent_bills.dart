@@ -15,6 +15,7 @@ import '../../feature_auth/getx_controllers/user_controller.dart';
 import '../getx_controllers/digital_invoice_controller.dart';
 import '../widgets/sent_invoice_sheet.dart';
 import '../widgets/grouped_invoice_card.dart';
+import 'package:slickbill/shared_widgets/sb_dark_surface_theme.dart';
 
 class SentBills extends HookWidget {
   SentInvoicesClass sentInvoicesClass = SentInvoicesClass();
@@ -34,6 +35,7 @@ class SentBills extends HookWidget {
     final filter = useState(InvoiceListQuery(
       month: currentInvoiceMonth(),
       status: InvoiceStatusFilter.all,
+      monthBasis: InvoiceMonthBasis.created,
     ));
     final fetchRef = useRef<Future<void> Function()>(() async {});
 
@@ -43,8 +45,8 @@ class SentBills extends HookWidget {
 
       final results = await Future.wait([
         sentInvoicesClass.getPrivateSentInvoices(query: current),
-        sentInvoicesClass.getOpenInvoicesSum(),
-        sentInvoicesClass.getPaidInMonth(current.monthStart),
+        sentInvoicesClass.getOpenInvoicesSum(period: current),
+        sentInvoicesClass.getPaidInPeriod(current),
       ]);
 
       final rows = results[0] as List<InvoiceModel>?;
@@ -66,17 +68,11 @@ class SentBills extends HookWidget {
     }
 
     Future<void> openInvoice(InvoiceModel invoice) async {
-      await showModalBottomSheet(
+      await showInvoiceSheet(
         context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        backgroundColor: Colors.transparent,
-        builder: (context) => FractionallySizedBox(
-          heightFactor: 0.94,
-          child: SentInvoiceSheet(
-            invoice: invoice,
-            updateInvoiceObsolete: updateInvoiceObsolete,
-          ),
+        builder: (context) => SentInvoiceSheet(
+          invoice: invoice,
+          updateInvoiceObsolete: updateInvoiceObsolete,
         ),
       );
     }
@@ -113,16 +109,19 @@ class SentBills extends HookWidget {
 
     return Column(
       children: [
-        InvoiceListFilterBar(
-          query: filter.value,
-          onChanged: (next) => filter.value = next,
-          exportEnabled: rows.isNotEmpty,
-          onExport: () {
-            InvoiceCsvExporter.exportSent(
-              invoices: rows,
-              query: filter.value,
-            );
-          },
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: InvoiceListFilterBar(
+            query: filter.value,
+            onChanged: (next) => filter.value = next,
+            exportEnabled: rows.isNotEmpty,
+            onExport: () {
+              InvoiceCsvExporter.exportSent(
+                invoices: rows,
+                query: filter.value,
+              );
+            },
+          ),
         ),
         if (isLoading.value && hasLoaded.value)
           LinearProgressIndicator(
@@ -139,7 +138,7 @@ class SentBills extends HookWidget {
             child: SingleChildScrollView(
               physics: const AlwaysScrollableScrollPhysics(),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(0.0, 12.0, 20.0, 20.0),
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
                 child: !hasLoaded.value && isLoading.value
                     ? const Padding(
                         padding: EdgeInsets.only(top: 48),
@@ -151,14 +150,15 @@ class SentBills extends HookWidget {
                             pendingAmount: pending.value,
                             paidAmount: receivedThisMonth.value,
                             pendingLabel: 'lbl_WaitingForPayment'.tr,
-                            paidLabel: 'lbl_ReceivedInMonth'.trParams({
-                              'month': monthName,
-                            }),
+                            paidLabel: filter.value.overviewLabelNeedsMonth
+                                ? filter.value.receivedOverviewLabelKey
+                                    .trParams({'month': monthName})
+                                : filter.value.receivedOverviewLabelKey.tr,
                           ),
                           const SizedBox(height: 12),
                           if (rows.isEmpty)
                             Padding(
-                              padding: const EdgeInsets.fromLTRB(20, 24, 0, 0),
+                              padding: const EdgeInsets.fromLTRB(0, 24, 0, 0),
                               child: Text(
                                 filter.value.emptyListNeedsMonth
                                     ? filter.value.emptyListLabelKey.trParams({
@@ -186,7 +186,7 @@ class SentBills extends HookWidget {
                                       .map(
                                         (groupInvoices) => Padding(
                                           padding: const EdgeInsets.only(
-                                              top: 20.0),
+                                              bottom: 12),
                                           child: GroupedInvoiceCard(
                                             invoices: groupInvoices,
                                             onTapInvoice: openInvoice,

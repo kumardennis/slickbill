@@ -1,37 +1,47 @@
 import 'package:flutter/material.dart';
+import 'package:slickbill/theme/sb_colors.dart';
 
 extension CustomColorScheme on ColorScheme {
-  Color get lightYellow => const Color(0xFFF1D7A5);
-  Color get yellow => const Color(0xFFE4C142);
-  Color get blue => const Color(0xFF003453);
-  Color get lighterBlue => const Color(0xFF0074B9);
-  Color get darkerBlue => const Color(0xFF003453);
-  Color get lightGreen => const Color(0xFFA1CDAF);
-  Color get darkGreen => Color.fromARGB(255, 46, 19, 78);
-  Color get turqouise => const Color.fromARGB(255, 1, 56, 73);
-  Color get green => const Color(0xFF399E5A);
-  Color get red => const Color(0xFFDB2B39);
-  Color get light => const Color.fromARGB(255, 253, 254, 255);
-  Color get dark => const Color(0xFF0A0B0C);
-  Color get gray => const Color(0xFF979797);
-  Color get lightGray => const Color(0xFFBFBFBF);
-  Color get darkGray => const Color(0xFF1F2124);
+  Color get lightYellow => const Color(0xFFFEF3C7);
+  Color get yellow => SbColors.warningAmber;
+  Color get blue => SbColors.deepNavy;
+  Color get lighterBlue => SbColors.electricCyan;
+  Color get darkerBlue => SbColors.deepNavy;
+  Color get lightGreen => const Color(0xFFD1FAE5);
+  Color get darkGreen => SbColors.primary;
+  Color get turqouise => SbColors.primaryContainer;
+  Color get green => SbColors.successGreen;
+  Color get red => SbColors.error;
+  Color get light => brightness == Brightness.dark ? Colors.white : SbColors.surface;
+  Color get dark => onSurface;
+  Color get gray => outline;
+  Color get lightGray => outlineVariant;
+  Color get darkGray => onSurfaceVariant;
+
+  Color get electricCyan => SbColors.electricCyan;
+  Color get deepNavy => SbColors.deepNavy;
+  Color get successGreen => SbColors.successGreen;
+  Color get warningAmber => SbColors.warningAmber;
+  Color get surfaceLowest => SbColors.surfaceLowest;
+  Color get surfaceLow => SbColors.surfaceLow;
+  Color get surfaceContainer => SbColors.surfaceContainer;
+  Color get surfaceHigh => SbColors.surfaceHigh;
 }
 
 Map customColorScheme = {
-  'lightYellow': const Color(0xFFF1D7A5),
-  'yellow': const Color(0xFFE4C142),
-  'blue': const Color(0xFF003453),
-  'lighterBlue': const Color(0xFF0074B9),
-  'darkerBlue': const Color(0xFF003453),
-  'lightGreen': const Color(0xFFA1CDAF),
-  'darkGreen': Color.fromARGB(255, 46, 19, 78),
-  'turqouise': Color.fromARGB(255, 1, 56, 73),
-  'green': const Color(0xFF399E5A),
-  'red': const Color(0xFFDB2B39),
-  'light': const Color(0xFFF3F9FA),
-  'dark': const Color(0xFF0A0B0C),
-  'gray': const Color(0xFF979797),
-  'lightGray': const Color(0xFFBFBFBF),
-  'darkGray': const Color(0xFF1F2124),
+  'lightYellow': const Color(0xFFFEF3C7),
+  'yellow': SbColors.warningAmber,
+  'blue': SbColors.deepNavy,
+  'lighterBlue': SbColors.electricCyan,
+  'darkerBlue': SbColors.deepNavy,
+  'lightGreen': const Color(0xFFD1FAE5),
+  'darkGreen': SbColors.primary,
+  'turqouise': SbColors.primaryContainer,
+  'green': SbColors.successGreen,
+  'red': SbColors.error,
+  'light': SbColors.surface,
+  'dark': SbColors.obsidian,
+  'gray': SbColors.outline,
+  'lightGray': SbColors.outlineVariant,
+  'darkGray': SbColors.onSurfaceVariant,
 };

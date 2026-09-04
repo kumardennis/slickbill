@@ -13,5 +13,15 @@ Map<String, String> authLocales_EN = {
   'lbl_FullName': 'Full name',
   'lbl_PublicName': 'Public name',
   'lbl_GoToSignUp': 'Not yet registered? Create an account!',
-  'lbl_GoToSignIn': 'Already have an account? Sign in!'
+  'lbl_GoToSignIn': 'Already have an account? Sign in!',
+  'lbl_UnlockToContinue': 'Unlock to continue',
+  'btn_Unlock': 'Unlock',
+  'lbl_UnlockHint': 'Use Face ID, fingerprint, or your device passcode.',
+  'lbl_LockRequiresDevicePasscode':
+      'Turn on Face ID, fingerprint, or a device passcode in Settings to open SlickBills.',
+  'lbl_LockTooManyAttempts':
+      'Too many attempts. Lock your phone and try again, or use your passcode.',
+  'lbl_ConfirmPayment': 'Confirm payment of @amount',
+  'lbl_ConfirmWithdraw': 'Confirm withdrawal of @amount',
+  'btn_SignOut': 'Sign out',
 };

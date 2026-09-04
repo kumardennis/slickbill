@@ -23,32 +23,16 @@ class CustomerActiveVisitAppBarAction extends StatelessWidget {
 
       return Padding(
         padding: const EdgeInsets.only(right: 4),
-        child: TextButton(
+        child: IconButton(
+          tooltip: visit.memberToken.isNotEmpty
+              ? visit.memberToken
+              : visit.merchantPublicName,
           onPressed: controller.showVisitSheet,
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            minimumSize: Size.zero,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                visit.sessionToken,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: colors.darkerBlue,
-                      fontWeight: FontWeight.w800,
-                    ),
-              ),
-              Text(
-                visit.memberToken,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: colors.darkGray,
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-            ],
+          visualDensity: VisualDensity.compact,
+          icon: Icon(
+            Icons.storefront_rounded,
+            size: 22,
+            color: colors.darkerBlue,
           ),
         ),
       );

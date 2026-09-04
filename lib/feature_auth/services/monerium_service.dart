@@ -1025,6 +1025,52 @@ class MoneriumService {
     return null;
   }
 
+  static List<Map<String, dynamic>> extractOrdersList(
+    Map<String, dynamic>? response,
+  ) {
+    if (response == null) {
+      return const [];
+    }
+
+    List<dynamic>? list;
+    final data = response['data'];
+    if (data is List) {
+      list = data;
+    } else if (data is Map<String, dynamic>) {
+      for (final key in ['orders', 'items', 'results', 'data']) {
+        final nested = data[key];
+        if (nested is List) {
+          list = nested;
+          break;
+        }
+      }
+      if (list == null && data['id'] != null) {
+        list = [data];
+      }
+    }
+
+    list ??= response['orders'] is List
+        ? response['orders'] as List
+        : response['items'] is List
+            ? response['items'] as List
+            : response['results'] is List
+                ? response['results'] as List
+                : null;
+
+    if (list == null || list.isEmpty) {
+      final first = response['firstOrder'];
+      if (first is Map) {
+        return [Map<String, dynamic>.from(first)];
+      }
+      return const [];
+    }
+
+    return list
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
+  }
+
   static Future<Map<String, dynamic>> recheckOrderByTxHash({
     required String userId,
     required String txHash,

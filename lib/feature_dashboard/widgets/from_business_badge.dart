@@ -26,8 +26,8 @@ class FromBusinessBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = isBusiness
-        ? Theme.of(context).colorScheme.yellow
-        : Theme.of(context).colorScheme.lightGreen;
+        ? Theme.of(context).colorScheme.warningAmber
+        : Theme.of(context).colorScheme.successGreen;
 
     final label = !isBusiness
         ? 'lbl_Private'.tr

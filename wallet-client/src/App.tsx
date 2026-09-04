@@ -17,6 +17,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { LinkEmail } from "./pages/link-email/LinkEmail.tsx";
 import { MetamaskAuth } from "./pages/metamask/MetamaskAuth.tsx";
 import { MoneriumSiwe } from "./pages/siwe/MoneriumSiwe.tsx";
+import { sb } from "./theme";
 
 declare global {
   interface Window {
@@ -142,7 +143,7 @@ function App() {
   if (!cdpConfig) {
     return (
       <div style={styles.centerScreen}>
-        <div style={styles.card}>
+        <div style={{ ...styles.card, padding: 16 }}>
           <div style={styles.brandRow}>
             <div style={styles.logoMark} aria-hidden />
             <div>
@@ -219,9 +220,6 @@ function AppContent() {
     console.log("✅ Flutter functions exposed to window");
   }, [user.currentUser]);
 
-  const currentEmail =
-    user.currentUser?.authenticationMethods?.google?.email ?? null;
-
   return (
     <div style={styles.page}>
       <header style={styles.header}>
@@ -234,24 +232,13 @@ function AppContent() {
               loading="eager"
             />
             <div>
-              <div style={styles.headerTitle}>SlickBills Wallet</div>
+              <div style={styles.headerTitle}>SlickBills</div>
               <div style={styles.headerSubtitle}>
-                {window.isFlutterApp ? "Embedded" : "Web"} ·{" "}
-                {currentEmail ?? "Not signed in"}
+                {window.isFlutterApp
+                  ? "Continue in this screen, then return to the app."
+                  : "Wallet"}
               </div>
             </div>
-          </div>
-
-          <div style={styles.statusPill} title="SDK status">
-            <span
-              style={{
-                ...styles.statusDot,
-                backgroundColor: isInitialized ? "#16a34a" : "#f59e0b",
-              }}
-            />
-            <span style={styles.statusText}>
-              {isInitialized ? "Ready" : "Starting"}
-            </span>
           </div>
         </div>
       </header>
@@ -562,70 +549,59 @@ function MetamaskAuthPage() {
 const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: "100dvh",
-    background: "linear-gradient(180deg, #0b1220 0%, #070b14 100%)",
-    color: "#e5e7eb",
+    background: sb.surface,
+    color: sb.onSurface,
     display: "flex",
     flexDirection: "column",
+    fontFamily: "Inter, system-ui, sans-serif",
   },
   header: {
     position: "sticky",
     top: 0,
     zIndex: 10,
-    backdropFilter: "blur(10px)",
-    backgroundColor: "rgba(7, 11, 20, 0.72)",
-    borderBottom: "1px solid rgba(255,255,255,0.08)",
+    backgroundColor: "rgba(244, 250, 251, 0.92)",
+    borderBottom: `1px solid ${sb.outlineVariant}`,
   },
   headerInner: {
-    maxWidth: 980,
+    maxWidth: 560,
     margin: "0 auto",
-    padding: "16px 16px",
+    padding: "16px 20px",
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
     gap: 12,
   },
-  brandRow: { display: "flex", alignItems: "center", gap: 12 },
+  brandRow: { display: "flex", alignItems: "center", gap: 10 },
   logo: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+    width: 28,
+    height: 28,
     objectFit: "contain",
-    background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.08)",
   },
   logoMark: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    background:
-      "linear-gradient(135deg, rgba(59,130,246,0.85), rgba(168,85,247,0.85))",
-    border: "1px solid rgba(255,255,255,0.12)",
+    width: 28,
+    height: 28,
+    borderRadius: 8,
+    background: sb.deepNavy,
   },
-  headerTitle: { fontSize: 16, fontWeight: 700, lineHeight: 1.1 },
-  headerSubtitle: { fontSize: 12, opacity: 0.75, marginTop: 2 },
-  statusPill: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 8,
-    padding: "8px 10px",
-    borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(255,255,255,0.06)",
-    whiteSpace: "nowrap",
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: 700,
+    lineHeight: 1.1,
+    color: sb.onSurface,
+    letterSpacing: -0.2,
   },
-  statusDot: { width: 8, height: 8, borderRadius: 999 },
-  statusText: { fontSize: 12, opacity: 0.9 },
-
-  main: { flex: 1, padding: "22px 0" },
-  container: { maxWidth: 980, padding: "0 16px", margin: "0 auto" },
-
+  headerSubtitle: {
+    fontSize: 12,
+    color: sb.onSurfaceVariant,
+    marginTop: 2,
+    fontWeight: 600,
+  },
+  main: { flex: 1, padding: "20px 0 28px" },
+  container: { maxWidth: 560, padding: "0 20px", margin: "0 auto" },
   stack: { display: "flex", flexDirection: "column", gap: 16 },
-
   card: {
-    borderRadius: 16,
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(255,255,255,0.06)",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+    borderRadius: 12,
+    background: sb.surfaceLowest,
+    boxShadow: "0 2px 12px rgba(0, 52, 83, 0.04)",
   },
   cardHeader: {
     padding: "16px 16px 12px",
@@ -634,94 +610,91 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "space-between",
     gap: 12,
   },
-  cardTitle: { fontSize: 16, fontWeight: 700 },
-  cardSubtitle: { fontSize: 12, opacity: 0.75, marginTop: 4 },
+  cardTitle: { fontSize: 16, fontWeight: 700, color: sb.onSurface },
+  cardSubtitle: {
+    fontSize: 12,
+    color: sb.onSurfaceVariant,
+    marginTop: 4,
+  },
   cardBody: { padding: 16 },
-
-  hr: { height: 1, background: "rgba(255,255,255,0.10)" },
-
-  muted: { fontSize: 13, opacity: 0.8, lineHeight: 1.5 },
-
+  hr: { height: 1, background: sb.surfaceHigh },
+  muted: { fontSize: 14, color: sb.onSurfaceVariant, lineHeight: 1.5 },
   badgeOk: {
     display: "inline-flex",
     alignItems: "center",
-    padding: "6px 10px",
+    padding: "4px 8px",
     borderRadius: 999,
-    border: "1px solid rgba(34,197,94,0.35)",
-    background: "rgba(34,197,94,0.10)",
-    color: "#bbf7d0",
-    fontSize: 12,
+    background: "rgba(16, 185, 129, 0.10)",
+    color: sb.success,
+    fontSize: 11,
     fontWeight: 600,
   },
   badgeWarn: {
     display: "inline-flex",
     alignItems: "center",
-    padding: "6px 10px",
+    padding: "4px 8px",
     borderRadius: 999,
-    border: "1px solid rgba(245,158,11,0.35)",
-    background: "rgba(245,158,11,0.10)",
-    color: "#fde68a",
-    fontSize: 12,
+    background: "rgba(245, 158, 11, 0.12)",
+    color: sb.warning,
+    fontSize: 11,
     fontWeight: 600,
   },
-
   grid2: {
     display: "grid",
     gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
     gap: 12,
   },
   miniCard: {
-    borderRadius: 14,
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(0,0,0,0.18)",
+    borderRadius: 12,
+    background: sb.surface,
     padding: 12,
   },
-  miniTitle: { fontSize: 12, opacity: 0.75 },
-  miniValue: { marginTop: 6, fontSize: 13, fontWeight: 700 },
-
+  miniTitle: { fontSize: 11, color: sb.onSurfaceVariant, fontWeight: 600 },
+  miniValue: {
+    marginTop: 6,
+    fontSize: 13,
+    fontWeight: 700,
+    color: sb.onSurface,
+  },
   notice: {
-    borderRadius: 14,
-    border: "1px solid rgba(59,130,246,0.25)",
-    background: "rgba(59,130,246,0.10)",
+    borderRadius: 12,
+    background: "rgba(0, 194, 255, 0.08)",
     padding: 12,
   },
-  noticeTitle: { fontSize: 13, fontWeight: 700 },
-  noticeBody: { fontSize: 12, opacity: 0.85, marginTop: 4 },
-
+  noticeTitle: { fontSize: 13, fontWeight: 700, color: sb.deepNavy },
+  noticeBody: { fontSize: 12, color: sb.onSurfaceVariant, marginTop: 4 },
   kvRow: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 12,
     padding: "10px 0",
-    borderBottom: "1px solid rgba(255,255,255,0.08)",
+    borderBottom: `1px solid ${sb.surfaceHigh}`,
   },
-  kvKey: { fontSize: 12, opacity: 0.75 },
-  kvValue: { fontSize: 12, fontWeight: 700 },
-
+  kvKey: { fontSize: 12, color: sb.onSurfaceVariant },
+  kvValue: { fontSize: 12, fontWeight: 700, color: sb.onSurface },
   footer: {
-    borderTop: "1px solid rgba(255,255,255,0.08)",
-    background: "rgba(7, 11, 20, 0.55)",
+    borderTop: `1px solid ${sb.outlineVariant}`,
+    background: sb.surface,
   },
   footerInner: {
-    maxWidth: 980,
+    maxWidth: 560,
     margin: "0 auto",
-    padding: "14px 16px",
+    padding: "14px 20px",
   },
-  footerText: { fontSize: 12, opacity: 0.78 },
-
+  footerText: { fontSize: 12, color: sb.onSurfaceVariant },
   centerScreen: {
     minHeight: "100dvh",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     padding: 16,
-    background: "linear-gradient(180deg, #0b1220 0%, #070b14 100%)",
-    color: "#e5e7eb",
+    background: sb.surface,
+    color: sb.onSurface,
+    fontFamily: "Inter, system-ui, sans-serif",
   },
-
-  brandTitle: { fontWeight: 800, letterSpacing: 0.2 },
-  brandSubtitle: { fontSize: 12, opacity: 0.75, marginTop: 2 },
+  brandTitle: { fontWeight: 800, letterSpacing: -0.2, color: sb.onSurface },
+  brandSubtitle: { fontSize: 12, color: sb.onSurfaceVariant, marginTop: 2 },
 };
 
 export default App;

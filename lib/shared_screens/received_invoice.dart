@@ -12,7 +12,7 @@ import 'package:slickbill/feature_dashboard/widgets/received_invoice_sheet.dart'
 import 'package:slickbill/feature_auth/services/monerium_service.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/payment_setup_controller.dart';
 import 'package:slickbill/core/services/invoice_toast_coordinator.dart';
-import 'package:slickbill/services/biometric_auth_service.dart';
+import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/services/coinbase/coinbase_service.dart';
 import 'package:slickbill/shared_widgets/cdp_webview.dart';
 import 'package:slickbill/shared_widgets/custom_appbar.dart';
@@ -21,7 +21,6 @@ class ReceivedInvoice extends HookWidget {
   final InvoiceModel invoice;
   final ReceivedInvoicesClass receivedInvoicesClass = ReceivedInvoicesClass();
   final PaymentClass payment = PaymentClass();
-  final biometricAuth = BiometricAuthService();
   final UserController userController = Get.find();
   final DigitalInvoiceController invoiceController =
       Get.find<DigitalInvoiceController>();
@@ -77,22 +76,6 @@ class ReceivedInvoice extends HookWidget {
           'Sender Coinbase account information is missing.',
           backgroundColor: Theme.of(context).colorScheme.red,
           colorText: Colors.white,
-        );
-        return;
-      }
-
-      final authenticated = await biometricAuth.authenticateWithBiometrics(
-        reason:
-            'Authenticate to confirm payment of €${invoice.amount.toStringAsFixed(2)}',
-      );
-
-      if (!authenticated) {
-        Get.snackbar(
-          'Authentication Failed',
-          'Biometric authentication is required to make payments.',
-          backgroundColor: Theme.of(context).colorScheme.red,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 3),
         );
         return;
       }
@@ -219,6 +202,13 @@ class ReceivedInvoice extends HookWidget {
         );
         return;
       }
+
+      final confirmed = await AppLockController.confirmSensitiveAction(
+        reason: 'lbl_ConfirmPayment'.trParams({
+          'amount': '€${invoice.amount.toStringAsFixed(2)}',
+        }),
+      );
+      if (!confirmed) return;
 
       try {
         await MoneriumService.ensureConnected(

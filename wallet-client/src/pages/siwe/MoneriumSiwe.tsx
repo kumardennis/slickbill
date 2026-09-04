@@ -1,6 +1,7 @@
 import { WEB3AUTH_NETWORK } from "@web3auth/base";
 import { Web3Auth } from "@web3auth/modal";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { sb } from "../../theme";
 
 const EXCHANGE_SERVER_URL = "https://express-ten-xi.vercel.app";
 const SIWE_PARAMS_SESSION_KEY = "monerium_siwe_params_v1";
@@ -295,23 +296,42 @@ export function MoneriumSiwe() {
         alignItems: "center",
         justifyContent: "center",
         minHeight: "100vh",
-        fontFamily: "system-ui, sans-serif",
-        background: "#0f172a",
-        color: "#e2e8f0",
+        fontFamily: "Inter, system-ui, sans-serif",
+        background: sb.surface,
+        color: sb.onSurface,
         gap: 16,
         padding: 24,
       }}
     >
-      {step !== "error" && <div style={{ fontSize: 32 }}>⏳</div>}
-      {step === "error" && <div style={{ fontSize: 32 }}>❌</div>}
-      <p style={{ fontSize: 16, textAlign: "center", maxWidth: 320 }}>
+      {step !== "error" && (
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 999,
+            border: `3px solid ${sb.outlineVariant}`,
+            borderTopColor: sb.electricCyan,
+            animation: "sb-spin 0.8s linear infinite",
+          }}
+        />
+      )}
+      <p
+        style={{
+          fontSize: 16,
+          fontWeight: 600,
+          textAlign: "center",
+          maxWidth: 320,
+          color: step === "error" ? sb.error : sb.onSurface,
+        }}
+      >
         {step === "error" ? errorMsg : statusText}
       </p>
       {step === "error" && appRedirectUri && (
-        <p style={{ fontSize: 13, color: "#94a3b8" }}>
-          Returning to app shortly…
+        <p style={{ fontSize: 13, color: sb.onSurfaceVariant }}>
+          Returning to the app shortly…
         </p>
       )}
+      <style>{`@keyframes sb-spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

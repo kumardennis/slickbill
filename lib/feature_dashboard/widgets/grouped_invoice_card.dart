@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:intl/intl.dart';
-import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
 import 'package:slickbill/feature_dashboard/widgets/from_business_badge.dart';
 import 'package:slickbill/feature_dashboard/widgets/invoice_card.dart';
+import 'package:slickbill/shared_widgets/sb_surface_card.dart';
+import 'package:slickbill/theme/sb_colors.dart';
 
 class GroupedInvoiceCard extends StatelessWidget {
   final List<InvoiceModel> invoices;
@@ -19,7 +21,6 @@ class GroupedInvoiceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     if (invoices.isEmpty) return const SizedBox.shrink();
 
-    // If group size is 1 -> return single InvoiceCard
     if (invoices.length == 1) {
       final i = invoices.first;
       return GestureDetector(
@@ -36,6 +37,8 @@ class GroupedInvoiceCard extends StatelessWidget {
           isSeen: i.isSeen,
           isFromBusiness: i.isFromBusiness,
           businessBadgePerspective: BusinessBadgePerspective.sentAsBusiness,
+          role: InvoiceCardRole.sent,
+          onFooterAction: () => onTapInvoice(i),
         ),
       );
     }
@@ -55,132 +58,98 @@ class GroupedInvoiceCard extends StatelessWidget {
     final hasProcessing =
         invoices.any((e) => e.status.toUpperCase() == 'PROCESSING');
     final allPaid = invoices.every((e) => e.status.toUpperCase() == 'PAID');
+    final hasOverdue = invoices.any((e) {
+      final status = e.status.trim().toUpperCase();
+      if (status == 'PAID' ||
+          status == 'PROCESSING' ||
+          status == 'PENDING') {
+        return false;
+      }
+      final due = DateTime.tryParse(e.deadline);
+      return due != null && DateTime.now().isAfter(due);
+    });
     final groupStatus = allPaid
-        ? 'Paid'
+        ? 'lbl_Paid'.tr
         : hasProcessing
-            ? 'Waiting'
-            : 'Unpaid';
+            ? 'lbl_Processing'.tr
+            : hasOverdue
+                ? 'lbl_Overdue'.tr
+                : 'lbl_Pending'.tr;
+    final statusColor = allPaid
+        ? SbColors.successGreen
+        : hasProcessing
+            ? SbColors.electricCyan
+            : hasOverdue
+                ? SbColors.error
+                : SbColors.warningAmber;
 
     return Container(
       decoration: BoxDecoration(
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(0),
-          topRight: Radius.circular(28),
-          bottomLeft: Radius.circular(0),
-          bottomRight: Radius.circular(28),
-        ),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Theme.of(context).colorScheme.turqouise,
-            Theme.of(context).colorScheme.turqouise.withOpacity(0.7),
-          ],
-        ),
+        color: SbColors.surfaceLowest,
+        borderRadius: BorderRadius.circular(SbRadii.md),
+        boxShadow: SbShadows.cardSoft,
       ),
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          tilePadding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
-          collapsedIconColor: Theme.of(context).colorScheme.yellow,
-          iconColor: Theme.of(context).colorScheme.yellow,
+          tilePadding: const EdgeInsets.fromLTRB(8, 8, 16, 8),
+          controlAffinity: ListTileControlAffinity.leading,
+          collapsedIconColor: SbColors.onSurfaceVariant,
+          iconColor: SbColors.deepNavy,
           title: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    '€ ${totalAmount.toStringAsFixed(2)}',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.yellow,
-                          fontWeight: FontWeight.w800,
-                        ),
-                  ),
-                  Text(
-                    'Total',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.lightGray,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 10,
-                        ),
-                  ),
-                ],
-              ),
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '€ ${paidAmount.toStringAsFixed(2)}',
-                      style:
-                          Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.green,
-                                fontWeight: FontWeight.w800,
-                              ),
+                      first.description,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            color: SbColors.onSurface,
+                          ),
                     ),
+                    const SizedBox(height: 2),
                     Text(
-                      'Received',
-                      style:
-                          Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                color: Theme.of(context).colorScheme.lightGray,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 10,
-                              ),
+                      '$createdLabel • ${invoices.length} invoices',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: SbColors.onSurfaceVariant,
+                          ),
                     ),
                   ],
                 ),
               ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: groupStatus == 'Paid'
-                      ? Theme.of(context).colorScheme.green.withOpacity(0.15)
-                      : Theme.of(context).colorScheme.yellow.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  groupStatus,
-                  style: TextStyle(
-                    color: groupStatus == 'Paid'
-                        ? Theme.of(context).colorScheme.green
-                        : Theme.of(context).colorScheme.yellow,
-                    fontWeight: FontWeight.w700,
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  SbStatusPill(label: groupStatus, color: statusColor),
+                  const SizedBox(height: 8),
+                  Text(
+                    '€${totalAmount.toStringAsFixed(2)}',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: SbColors.onSurface,
+                        ),
                   ),
-                ),
+                  Text(
+                    '€${paidAmount.toStringAsFixed(2)} received',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: SbColors.successGreen,
+                          fontSize: 11,
+                        ),
+                  ),
+                ],
               ),
             ],
           ),
-          subtitle: Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  first.description,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.light,
-                        fontWeight: FontWeight.w600,
-                      ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$createdLabel • ${invoices.length} invoices',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.gray,
-                      ),
-                ),
-              ],
-            ),
-          ),
-          childrenPadding: const EdgeInsets.fromLTRB(0, 2, 0, 0),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
           children: invoices
               .map(
                 (i) => Padding(
-                  padding: const EdgeInsets.only(top: 10),
+                  padding: const EdgeInsets.only(top: 8),
                   child: GestureDetector(
                     onTap: () => onTapInvoice(i),
                     child: InvoiceCard(
@@ -196,6 +165,8 @@ class GroupedInvoiceCard extends StatelessWidget {
                       isFromBusiness: i.isFromBusiness,
                       businessBadgePerspective:
                           BusinessBadgePerspective.sentAsBusiness,
+                      role: InvoiceCardRole.sent,
+                      onFooterAction: () => onTapInvoice(i),
                     ),
                   ),
                 ),

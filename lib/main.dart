@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:get/get.dart';
-import 'package:google_fonts/google_fonts.dart';
+import 'package:slickbill/theme/sb_theme.dart';
 import 'package:loader_overlay/loader_overlay.dart';
 import 'package:slickbill/_NFCHandler.dart';
 import 'package:slickbill/config/env_config.dart';
@@ -24,9 +24,11 @@ import 'package:slickbill/feature_loyalty/screens/merchant_check_in_landing_scre
 import 'package:slickbill/feature_public/screens/public_invoice_landing.dart';
 import 'package:slickbill/feature_public/screens/public_invoice_view.dart';
 import 'package:slickbill/shared_locales/locale_en.dart';
+import 'package:slickbill/shared_widgets/app_lock_gate.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:slickbill/firebase_options.dart';
 import 'feature_auth/screens/sign_in.dart';
+import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:flutter_web_plugins/url_strategy.dart'; // add this import
 
@@ -78,6 +80,7 @@ Future<void> main() async {
   await PushNotificationService.initializeApp();
 
   Get.put<UserController>(UserController(), permanent: true);
+  Get.put<AppLockController>(AppLockController(), permanent: true);
   Get.put<DigitalInvoiceController>(DigitalInvoiceController(),
       permanent: true);
   Get.put<NavigationController>(NavigationController(), permanent: true);
@@ -232,25 +235,9 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           translations: AppTranslations(),
           locale: const Locale('en', 'US'),
           title: 'SlickBill',
-          theme: ThemeData(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF1E3A8A),
-              brightness: Brightness.light,
-            ),
-            textTheme: GoogleFonts.robotoTextTheme(
-              const TextTheme(
-                displayLarge: TextStyle(fontSize: 24.0, color: Colors.white),
-                displayMedium: TextStyle(fontSize: 20.0, color: Colors.white),
-                displaySmall: TextStyle(fontSize: 16.0, color: Colors.white),
-                bodyLarge: TextStyle(fontSize: 20, color: Colors.white),
-                bodyMedium: TextStyle(fontSize: 16.0, color: Colors.white),
-                bodySmall: TextStyle(fontSize: 12.0, color: Colors.white),
-                headlineLarge: TextStyle(fontSize: 32, color: Colors.white),
-                headlineMedium: TextStyle(fontSize: 24.0, color: Colors.white),
-                headlineSmall: TextStyle(fontSize: 18.0, color: Colors.white),
-              ),
-            ),
-          ),
+          theme: buildSlickBillsTheme(),
+          builder: (context, child) =>
+              AppLockGate(child: child ?? const SizedBox.shrink()),
 
           // Use the pre-parsed route
           initialRoute: initialRoute,
@@ -297,6 +284,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           ],
 
           routingCallback: (routing) {
+            AppLockController.noteRouteChange();
             print(
                 '🔍 ROUTE CHANGE: ${routing?.current} <- ${routing?.previous}');
             print('   Stack trace: ${StackTrace.current}');

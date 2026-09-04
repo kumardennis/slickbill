@@ -4,6 +4,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
+import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/models/user_model.dart';
 import 'package:slickbill/feature_auth/services/monerium_service.dart';
@@ -260,6 +261,13 @@ class AddWithdrawMoneyScreen extends HookWidget {
         );
         return;
       }
+
+      final confirmed = await AppLockController.confirmSensitiveAction(
+        reason: 'lbl_ConfirmWithdraw'.trParams({
+          'amount': '€${amount.toStringAsFixed(2)}',
+        }),
+      );
+      if (!confirmed) return;
 
       isWithdrawing.value = true;
       try {

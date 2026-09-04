@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_send/models/receiver_user_model.dart';
+import 'package:slickbill/theme/sb_colors.dart';
 
-/// One-line recipient: @username · amount · remove
+/// One-line recipient: avatar · @username · amount · remove
 class CompactReceiverRow extends HookWidget {
   final ReceiverUserModel receiverUser;
   final bool showDivider;
@@ -19,122 +19,137 @@ class CompactReceiverRow extends HookWidget {
     this.showDivider = true,
   });
 
+  String get _initials {
+    final first = receiverUser.firstName.trim();
+    final last = receiverUser.lastName.trim();
+    if (first.isEmpty && last.isEmpty) {
+      final u = receiverUser.username;
+      return u.isNotEmpty ? u[0].toUpperCase() : '?';
+    }
+    return '${first.isNotEmpty ? first[0] : ''}${last.isNotEmpty ? last[0] : ''}'
+        .toUpperCase();
+  }
+
   @override
   Widget build(BuildContext context) {
     final amountController = useTextEditingController(
       text: receiverUser.amount > 0 ? receiverUser.amount.toString() : '',
     );
-    final colors = Theme.of(context).colorScheme;
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 16,
-                backgroundColor: colors.blue.withOpacity(0.12),
-                child: Icon(Icons.person, size: 16, color: colors.blue),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: SbColors.surfaceLow,
+          borderRadius: BorderRadius.circular(SbRadii.md),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: SbColors.primaryFixedDim.withValues(alpha: 0.45),
+              child: Text(
+                _initials,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: SbColors.deepNavy,
+                      fontWeight: FontWeight.w700,
+                    ),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '@${receiverUser.username}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: SbColors.onSurface,
+                        ),
+                  ),
+                  if ('${receiverUser.firstName} ${receiverUser.lastName}'
+                      .trim()
+                      .isNotEmpty)
                     Text(
-                      '@${receiverUser.username}',
+                      '${receiverUser.firstName} ${receiverUser.lastName}'
+                          .trim(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: colors.dark,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: SbColors.onSurfaceVariant,
+                            fontSize: 10,
                           ),
                     ),
-                    if ('${receiverUser.firstName} ${receiverUser.lastName}'
-                        .trim()
-                        .isNotEmpty)
-                      Text(
-                        '${receiverUser.firstName} ${receiverUser.lastName}'
-                            .trim(),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: colors.darkGray,
-                              fontSize: 11,
-                            ),
-                      ),
-                  ],
-                ),
+                ],
               ),
-              const SizedBox(width: 8),
-              SizedBox(
-                width: 88,
-                child: TextField(
-                  controller: amountController,
-                  keyboardType:
-                      const TextInputType.numberWithOptions(decimal: true),
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-                  ],
-                  textAlign: TextAlign.end,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                        color: colors.dark,
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: SbColors.surfaceLowest,
+                borderRadius: BorderRadius.circular(SbRadii.sm),
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    '€',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: SbColors.deepNavy,
+                        ),
+                  ),
+                  SizedBox(
+                    width: 40,
+                    child: TextField(
+                      controller: amountController,
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                      ],
+                      textAlign: TextAlign.end,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            color: SbColors.deepNavy,
+                          ),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        hintText: '0',
+                        filled: false,
+                        contentPadding: EdgeInsets.symmetric(vertical: 6),
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
                       ),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    prefixText: '€ ',
-                    prefixStyle: TextStyle(
-                      color: colors.darkGray,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    hintText: '0',
-                    hintStyle: TextStyle(color: colors.darkGray),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 8,
-                    ),
-                    filled: true,
-                    fillColor: colors.gray.withOpacity(0.25),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide.none,
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: BorderSide(color: colors.blue, width: 1.5),
+                      onChanged: (value) {
+                        onAmountChanged(
+                          receiverUser.id,
+                          double.tryParse(value) ?? 0.0,
+                        );
+                      },
                     ),
                   ),
-                  onChanged: (value) {
-                    onAmountChanged(
-                      receiverUser.id,
-                      double.tryParse(value) ?? 0.0,
-                    );
-                  },
-                ),
+                ],
               ),
-              const SizedBox(width: 4),
-              IconButton(
-                onPressed: onRemove,
-                icon: Icon(Icons.close, size: 18, color: Colors.red.shade400),
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                tooltip: 'Remove',
+            ),
+            const SizedBox(width: 4),
+            InkWell(
+              onTap: onRemove,
+              borderRadius: BorderRadius.circular(SbRadii.full),
+              child: const SizedBox(
+                width: 24,
+                height: 24,
+                child: Icon(Icons.close, size: 16, color: SbColors.error),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
-        if (showDivider)
-          Divider(height: 1, thickness: 1, color: colors.gray.withOpacity(0.5)),
-      ],
+      ),
     );
   }
 }

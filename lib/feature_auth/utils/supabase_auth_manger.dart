@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:get/get.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/services/facebook_auth_service.dart';
 import 'package:slickbill/feature_auth/services/google_auth_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -432,6 +433,7 @@ class SupabaseAuthManger {
           Uri.base.queryParameters['invoice_token'];
 
       print('✅ $providerName Sign-In complete');
+      AppLockController.markInteractiveLogin();
       if (invoiceToken != null && invoiceToken.isNotEmpty) {
         print('🎯 Navigating to public invoice with token: $invoiceToken');
         Get.offAllNamed(

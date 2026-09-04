@@ -1,14 +1,13 @@
-import 'dart:ui';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/src/widgets/framework.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
-import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_auth/utils/money_formatter.dart';
 import 'package:slickbill/feature_dashboard/widgets/from_business_badge.dart';
+import 'package:slickbill/shared_widgets/sb_surface_card.dart';
+import 'package:slickbill/theme/sb_colors.dart';
+
+enum InvoiceCardRole { received, sent }
 
 class InvoiceCard extends HookWidget {
   final String invoiceNo;
@@ -22,6 +21,8 @@ class InvoiceCard extends HookWidget {
   final double amount;
   final bool isFromBusiness;
   final BusinessBadgePerspective businessBadgePerspective;
+  final InvoiceCardRole role;
+  final VoidCallback? onFooterAction;
 
   const InvoiceCard(
       {super.key,
@@ -35,176 +36,178 @@ class InvoiceCard extends HookWidget {
       required this.isSeen,
       required this.amount,
       this.isFromBusiness = false,
-      this.businessBadgePerspective =
-          BusinessBadgePerspective.fromBusiness});
+      this.businessBadgePerspective = BusinessBadgePerspective.fromBusiness,
+      this.role = InvoiceCardRole.received,
+      this.onFooterAction});
 
   @override
   Widget build(BuildContext context) {
-    FormatNumber formatNumber = FormatNumber();
+    final formatNumber = FormatNumber();
     final normalizedStatus = status.trim().toUpperCase();
+    final isPaid = normalizedStatus == 'PAID';
+    final isProcessing =
+        normalizedStatus == 'PROCESSING' || normalizedStatus == 'PENDING';
 
-    bool dateIsPassed = DateTime.now().isAfter(DateTime.parse(dueDate));
+    DateTime? parsedDate = DateTime.tryParse(date);
+    DateTime? parsedPaid = paidOnDate != null && paidOnDate!.isNotEmpty
+        ? DateTime.tryParse(paidOnDate!)
+        : null;
+    final parsedDue = DateTime.tryParse(dueDate);
+    final isOverdue = !isPaid &&
+        !isProcessing &&
+        parsedDue != null &&
+        DateTime.now().isAfter(parsedDue);
 
-    return (Container(
-      height: 200,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Theme.of(context).colorScheme.lighterBlue.withAlpha(200),
-            Theme.of(context).colorScheme.blue.withAlpha(200),
-            Theme.of(context).colorScheme.darkerBlue.withAlpha(255),
-            Theme.of(context).colorScheme.lighterBlue.withOpacity(0.5),
-          ],
-          stops: const [0.0, 0.1, 0.6, 0.99],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.only(
-            topRight: Radius.circular(24), bottomRight: Radius.circular(24)),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).colorScheme.darkerBlue.withOpacity(0.9),
-            blurRadius: 15,
-            offset: const Offset(0, 8),
-            spreadRadius: -2,
-          ),
-        ],
-      ),
-      width: MediaQuery.of(context).size.width,
-      padding: const EdgeInsets.all(15.0),
+    final Color accent = isPaid
+        ? SbColors.successGreen
+        : isProcessing
+            ? SbColors.electricCyan
+            : isOverdue
+                ? SbColors.error
+                : SbColors.warningAmber;
+
+    final IconData icon = isPaid
+        ? Icons.done_all_rounded
+        : isProcessing
+            ? Icons.storefront_rounded
+            : isOverdue
+                ? Icons.warning_amber_rounded
+                : Icons.receipt_long_rounded;
+
+    final String statusLabel = isPaid
+        ? 'lbl_Paid'.tr
+        : isProcessing
+            ? 'lbl_Processing'.tr
+            : isOverdue
+                ? 'lbl_Overdue'.tr
+                : 'lbl_Pending'.tr;
+
+    final String footerMeta;
+    if (isPaid && parsedPaid != null) {
+      footerMeta =
+          'lbl_PaidOn'.trParams({'date': DateFormat('EEE, dd MMM').format(parsedPaid)});
+    } else if (role == InvoiceCardRole.sent) {
+      footerMeta = 'To: $senderOrReeceiverName';
+    } else {
+      footerMeta = 'From: $senderOrReeceiverName';
+    }
+
+    final String footerAction = isPaid
+        ? 'lbl_CheckDetails'.tr
+        : isProcessing
+            ? 'lbl_TrackStatus'.tr
+            : role == InvoiceCardRole.sent
+                ? 'lbl_SendReminder'.tr
+                : 'btn_Pay'.tr;
+
+    final dateLabelSource =
+        role == InvoiceCardRole.received ? parsedDue ?? parsedDate : parsedDate;
+    final dateLabel = dateLabelSource != null
+        ? DateFormat('EEE, dd MMM yyyy').format(dateLabelSource)
+        : (role == InvoiceCardRole.received ? dueDate : date);
+
+    return SbSurfaceCard(
+      padding: const EdgeInsets.all(SbSpace.md),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '#$invoiceNo',
-                    style: Theme.of(context)
-                        .textTheme
-                        .headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  if (isFromBusiness) ...[
-                    const SizedBox(height: 6),
-                    FromBusinessBadge(
-                      perspective: businessBadgePerspective,
-                    ),
-                  ],
-                  Text(
-                      DateFormat('EEE, dd MMM yyyy')
-                          .format(DateTime.parse(date!)),
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(color: Theme.of(context).colorScheme.gray))
-                ],
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 20, color: accent),
               ),
-              Row(
-                children: [
-                  Text(
-                      normalizedStatus == 'PAID'
-                          ? 'lbl_Paid'.tr
-                          : normalizedStatus == 'PROCESSING'
-                              ? 'Waiting'
-                              : 'lbl_Unpaid'.tr,
-                      style: Theme.of(context)
-                          .textTheme
-                          .displayMedium
-                          ?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: normalizedStatus == 'PAID'
-                                  ? Theme.of(context).colorScheme.green
-                                  : normalizedStatus == 'PROCESSING'
-                                      ? Theme.of(context).colorScheme.yellow
-                                      : dateIsPassed
-                                          ? Theme.of(context).colorScheme.red
-                                          : Theme.of(context)
-                                              .colorScheme
-                                              .yellow)),
-                  const SizedBox(
-                    width: 10,
-                  ),
-                  normalizedStatus == 'PAID'
-                      ? FaIcon(
-                          FontAwesomeIcons.circleCheck,
-                          size: 20,
-                          color: Theme.of(context).colorScheme.green,
-                        )
-                      : FaIcon(
-                          FontAwesomeIcons.clockRotateLeft,
-                          size: 20,
-                          color: normalizedStatus == 'PROCESSING'
-                              ? Theme.of(context).colorScheme.yellow
-                              : dateIsPassed
-                                  ? Theme.of(context).colorScheme.red
-                                  : Theme.of(context).colorScheme.yellow,
-                        )
-                ],
-              )
-            ],
-          ),
-          Wrap(
-            clipBehavior: Clip.antiAlias,
-            children: [
-              Text(description,
-                  maxLines: 2, style: Theme.of(context).textTheme.bodyMedium)
-            ],
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                  paidOnDate != null
-                      ? 'lbl_PaidOn'.trParams({
-                          'date': paidOnDate != ''
-                              ? '${DateFormat('EEE, dd MMM').format(DateTime.parse(paidOnDate!))}'
-                              : '-'
-                        })
-                      : 'lbl_Due'.trParams({
-                          'date':
-                              '${DateFormat('EEE, dd MMM').format(DateTime.parse(dueDate!))}'
-                        }),
-                  style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: paidOnDate != null
-                          ? Theme.of(context).colorScheme.green
-                          : dateIsPassed
-                              ? Theme.of(context).colorScheme.red
-                              : Theme.of(context).colorScheme.yellow)),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(formatNumber.formatMoney(amount),
-                      style: Theme.of(context).textTheme.displayLarge?.copyWith(
-                          fontWeight: FontWeight.w600,
-                          color: paidOnDate != null
-                              ? Theme.of(context).colorScheme.green
-                              : dateIsPassed
-                                  ? Theme.of(context).colorScheme.red
-                                  : Theme.of(context).colorScheme.yellow)),
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width / 3,
-                    child: Align(
-                      alignment: Alignment.centerRight,
-                      child: Text(senderOrReeceiverName,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.displaySmall),
+              const SizedBox(width: SbSpace.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '#$invoiceNo',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            color: SbColors.onSurface,
+                          ),
                     ),
-                  )
-                ],
-              )
+                    const SizedBox(height: 2),
+                    Text(
+                      '$dateLabel • $description',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: SbColors.onSurfaceVariant,
+                          ),
+                    ),
+                    if (isFromBusiness) ...[
+                      const SizedBox(height: 6),
+                      FromBusinessBadge(
+                        perspective: businessBadgePerspective,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              SbStatusPill(label: statusLabel, color: accent),
             ],
-          )
+          ),
+          const SizedBox(height: 10),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              formatNumber.formatMoney(amount),
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.4,
+                    color: SbColors.onSurface,
+                  ),
+            ),
+          ),
+          const SizedBox(height: SbSpace.sm),
+          const Divider(height: 1, color: SbColors.surfaceContainer),
+          const SizedBox(height: SbSpace.xs),
+          Row(
+            children: [
+              Icon(
+                isPaid
+                    ? Icons.check_rounded
+                    : isProcessing
+                        ? Icons.qr_code_rounded
+                        : Icons.person_outline_rounded,
+                size: 14,
+                color: SbColors.onSurfaceVariant,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  footerMeta,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: SbColors.onSurfaceVariant,
+                      ),
+                ),
+              ),
+              GestureDetector(
+                onTap: onFooterAction,
+                child: Text(
+                  footerAction,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: SbColors.secondary,
+                        fontSize: 12,
+                      ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
-    ));
+    );
   }
 }

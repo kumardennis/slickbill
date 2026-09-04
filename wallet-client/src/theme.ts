@@ -1,0 +1,20 @@
+/** Mirrors lib/theme/sb_colors.dart — keep hex in sync. */
+export const sb = {
+  deepNavy: "#0B2545",
+  primary: "#001E33",
+  primaryContainer: "#003453",
+  electricCyan: "#00C2FF",
+  secondary: "#00629E",
+  success: "#10B981",
+  warning: "#F59E0B",
+  error: "#BA1A1A",
+  surface: "#F4FAFB",
+  surfaceLowest: "#FFFFFF",
+  surfaceHigh: "#E3E9EA",
+  onSurface: "#161D1E",
+  onSurfaceVariant: "#42474D",
+  outline: "#72777E",
+  outlineVariant: "#C2C7CE",
+  onPrimary: "#FFFFFF",
+  primaryFixedDim: "#A3CBF1",
+} as const;

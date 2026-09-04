@@ -106,7 +106,7 @@
 		</dict>
 	</dict>
 	<key>NSFaceIDUsageDescription</key>
-	<string>We need Face ID to authenticate payments securely</string>
+	<string>SlickBills uses Face ID to unlock the app and confirm payments.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>We need camera access to scan QR codes and receive slickbills</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

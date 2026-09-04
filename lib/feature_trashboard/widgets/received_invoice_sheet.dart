@@ -31,13 +31,13 @@ class ReceivedInvoiceSheet extends HookWidget {
     return Container(
       decoration: BoxDecoration(
           gradient: LinearGradient(colors: [
-        Theme.of(context).colorScheme.darkGray,
-        Theme.of(context).colorScheme.dark
+        Theme.of(context).colorScheme.darkerBlue,
+        Theme.of(context).colorScheme.blue
       ], stops: [
         0.0,
         0.2
       ], begin: Alignment.topCenter, end: Alignment.bottomCenter)),
-      height: MediaQuery.of(context).size.height,
+      height: double.infinity,
       child: Padding(
         padding: const EdgeInsets.all(20.0),
         child: SingleChildScrollView(

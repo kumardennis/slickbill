@@ -72,6 +72,7 @@ flutter:
     - media/logo blue.webp
     - assets/logo_text.png
     - assets/logo_icon.png
+    - assets/logo_icon_big.png
     - assets/logo_text_darkbg.png
     - assets/g-logo.png
     - assets/fb-logo.png

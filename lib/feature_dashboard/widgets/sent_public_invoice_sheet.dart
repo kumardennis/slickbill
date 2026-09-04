@@ -10,6 +10,7 @@ import 'package:slickbill/feature_public/models/public_invoice_model.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../feature_auth/utils/money_formatter.dart';
+import '../../shared_widgets/sb_dark_surface_theme.dart';
 import '../models/invoice_model.dart';
 import 'from_business_badge.dart';
 
@@ -35,7 +36,8 @@ class SentPublicInvoiceSheet extends HookWidget {
     bool dateIsPassed =
         DateTime.now().isAfter(DateTime.parse(invoice.deadline!));
 
-    return Container(
+    return SbDarkSurfaceTheme(
+      builder: (context) => Container(
       decoration: BoxDecoration(
           gradient: LinearGradient(
               colors: [
@@ -54,7 +56,7 @@ class SentPublicInvoiceSheet extends HookWidget {
               tileMode: TileMode.clamp,
               begin: Alignment.topLeft,
               end: Alignment.bottomRight)),
-      height: MediaQuery.of(context).size.height - 100,
+      height: double.infinity,
       child: Padding(
         padding: const EdgeInsets.all(20.0),
         child: SingleChildScrollView(
@@ -593,6 +595,7 @@ class SentPublicInvoiceSheet extends HookWidget {
           ]),
         ),
       ),
+    ),
     );
   }
 }

@@ -1,68 +1,75 @@
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
+  --sb-deep-navy: #0b2545;
+  --sb-primary: #001e33;
+  --sb-electric-cyan: #00c2ff;
+  --sb-surface: #f4fafb;
+  --sb-surface-lowest: #ffffff;
+  --sb-on-surface: #161d1e;
+  --sb-on-surface-variant: #42474d;
+  --sb-outline: #72777e;
+  --sb-outline-variant: #c2c7ce;
+  --sb-secondary: #00629e;
+  --sb-error: #ba1a1a;
+  --sb-success: #10b981;
+  --sb-radius: 12px;
+  --sb-font: Inter, system-ui, -apple-system, sans-serif;
+
+  font-family: var(--sb-font);
+  line-height: 1.45;
   font-weight: 400;
-
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
-
+  color: var(--sb-on-surface);
+  background-color: var(--sb-surface);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
-a:hover {
-  color: #535bf2;
+
+html,
+body,
+#root {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100%;
 }
 
 body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+  background: var(--sb-surface);
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+a {
+  color: var(--sb-secondary, #00629e);
+  font-weight: 600;
+  text-decoration: none;
 }
 
 button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
   font-family: inherit;
-  background-color: #1a1a1a;
+  border-radius: var(--sb-radius);
+  border: none;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--sb-deep-navy);
+  color: var(--sb-on-primary, #fff);
   cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+button:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--sb-electric-cyan);
+  outline-offset: 2px;
 }

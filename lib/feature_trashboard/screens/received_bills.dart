@@ -10,6 +10,7 @@ import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
 import 'package:slickbill/feature_trashboard/utils/received_invoices_class.dart';
 import 'package:slickbill/feature_trashboard/widgets/invoice_card.dart';
 import 'package:slickbill/feature_trashboard/widgets/received_invoice_sheet.dart';
+import 'package:slickbill/shared_widgets/sb_dark_surface_theme.dart';
 
 import '../../feature_auth/getx_controllers/user_controller.dart';
 import '../../feature_auth/utils/money_formatter.dart';
@@ -71,12 +72,14 @@ class ReceivedBills extends HookWidget {
     }
 
     Future<void> openInvoice(InvoiceModel invoice) async {
-      await showModalBottomSheet(
-          context: context,
-          builder: (context) => ReceivedInvoiceSheet(
-              invoice: invoice,
-              updateInvoiceStatus: updateInvoiceStatus,
-              updateInvoiceObsolete: updateInvoiceObsolete));
+      await showInvoiceSheet(
+        context: context,
+        builder: (context) => ReceivedInvoiceSheet(
+          invoice: invoice,
+          updateInvoiceStatus: updateInvoiceStatus,
+          updateInvoiceObsolete: updateInvoiceObsolete,
+        ),
+      );
     }
 
     useEffect(() {

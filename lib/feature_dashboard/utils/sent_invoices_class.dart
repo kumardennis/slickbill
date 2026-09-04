@@ -67,13 +67,35 @@ class SentInvoicesClass {
     }
   }
 
-  Future<double?> getOpenInvoicesSum() async {
+  Future<double?> getOpenInvoicesSum({InvoiceListQuery? period}) async {
     final invoices = await getPrivateSentInvoices(
       openOnly: true,
+      query: period?.periodOnly,
       silent: true,
     );
     if (invoices == null) return null;
-    return invoices.fold<double>(0.0, (sum, invoice) => sum + invoice.amount);
+    return invoices
+        .where((invoice) {
+          final status = invoice.status.trim().toUpperCase();
+          return status != 'PAID';
+        })
+        .fold<double>(0.0, (sum, invoice) => sum + invoice.amount);
+  }
+
+  Future<double?> getPaidInPeriod(InvoiceListQuery period) async {
+    if (period.allTime) {
+      final invoices = await getPrivateSentInvoices(
+        query: InvoiceListQuery(
+          month: period.month,
+          status: InvoiceStatusFilter.paid,
+          allTime: true,
+        ),
+        silent: true,
+      );
+      if (invoices == null) return null;
+      return invoices.fold<double>(0.0, (sum, invoice) => sum + invoice.amount);
+    }
+    return getPaidInMonth(period.monthStart);
   }
 
   Future<double?> getPaidInMonth(DateTime month) async {

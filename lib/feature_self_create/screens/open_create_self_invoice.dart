@@ -215,6 +215,7 @@ class OpenAndCreateSelfInvoice extends HookWidget {
         title: 'hd_Upload',
         appbarIcon: null,
         showSettings: true,
+        showBrand: true,
       ),
       body: SingleChildScrollView(
         child: Column(

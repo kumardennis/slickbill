@@ -1,6 +1,7 @@
 import { WEB3AUTH_NETWORK } from "@web3auth/base";
 import { Web3Auth } from "@web3auth/modal";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { sb } from "../../theme";
 
 type InitState = "idle" | "initializing" | "ready" | "error";
 type AuthState = "idle" | "authenticating" | "authenticated" | "error";
@@ -434,21 +435,19 @@ export function MetamaskAuth() {
         justifyContent: "center",
         padding: 20,
         boxSizing: "border-box",
-        background:
-          "linear-gradient(160deg, #f4f7fb 0%, #eef2f7 45%, #e8eef6 100%)",
-        color: "#0f172a",
-        fontFamily:
-          'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+        background: sb.surface,
+        color: sb.onSurface,
+        fontFamily: "Inter, system-ui, sans-serif",
       }}
     >
       <div
         style={{
           width: "100%",
           maxWidth: 420,
-          borderRadius: 20,
-          border: "1px solid #dbe3ef",
-          background: "#ffffff",
-          boxShadow: "0 18px 40px rgba(15, 23, 42, 0.10)",
+          borderRadius: 12,
+          border: `1px solid ${sb.outlineVariant}`,
+          background: sb.surfaceLowest,
+          boxShadow: "0 2px 12px rgba(0, 52, 83, 0.04)",
           padding: 24,
         }}
       >
@@ -459,8 +458,8 @@ export function MetamaskAuth() {
             gap: 8,
             padding: "6px 10px",
             borderRadius: 999,
-            background: "#eef4ff",
-            color: "#1d4ed8",
+            background: "rgba(0, 194, 255, 0.12)",
+            color: sb.deepNavy,
             fontSize: 12,
             fontWeight: 700,
             letterSpacing: 0.2,
@@ -474,8 +473,8 @@ export function MetamaskAuth() {
             margin: "14px 0 0",
             fontSize: 24,
             lineHeight: 1.2,
-            fontWeight: 750,
-            color: "#0f172a",
+            fontWeight: 700,
+            color: sb.onSurface,
           }}
         >
           Connect wallet
@@ -486,7 +485,7 @@ export function MetamaskAuth() {
             marginBottom: 0,
             fontSize: 15,
             lineHeight: 1.5,
-            color: "#475569",
+            color: sb.onSurfaceVariant,
           }}
         >
           {flowMode.current === "sign"
@@ -562,8 +561,8 @@ export function MetamaskAuth() {
               width: "100%",
               borderRadius: 12,
               border: "none",
-              background: isConnecting ? "#93c5fd" : "#1d4ed8",
-              color: "#ffffff",
+              background: isConnecting ? sb.outlineVariant : sb.deepNavy,
+              color: sb.onPrimary,
               padding: "14px 16px",
               fontSize: 15,
               fontWeight: 700,
@@ -571,7 +570,7 @@ export function MetamaskAuth() {
               cursor: isConnecting ? "not-allowed" : "pointer",
               boxShadow: isConnecting
                 ? "none"
-                : "0 10px 20px rgba(29, 78, 216, 0.28)",
+                : "0 10px 20px rgba(11, 37, 69, 0.2)",
             }}
           >
             {isConnecting ? "Opening Web3Auth..." : "Continue with Web3Auth"}
@@ -604,8 +603,9 @@ export function MetamaskAuth() {
             marginTop: 16,
             marginBottom: 0,
             fontSize: 12,
-            color: "#94a3b8",
-            textAlign: "center",
+          color: sb.outline,
+          textAlign: "center",
+          display: "none",
           }}
         >
           Route: /wallet/metamask-auth

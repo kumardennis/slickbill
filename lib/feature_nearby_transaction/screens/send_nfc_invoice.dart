@@ -25,6 +25,10 @@ import 'package:slickbill/feature_send/utils/send_invoices_class.dart';
 import 'package:slickbill/feature_send/widgets/compact_receiver_row.dart';
 import 'package:slickbill/shared_utils/scanned_qr_router.dart';
 import 'package:slickbill/shared_widgets/custom_appbar.dart';
+import 'package:slickbill/shared_widgets/sb_labeled_field.dart';
+import 'package:slickbill/shared_widgets/sb_segmented_control.dart';
+import 'package:slickbill/shared_widgets/sb_trust_banner.dart';
+import 'package:slickbill/theme/sb_colors.dart';
 
 class SendNfcInvoice extends HookWidget {
   const SendNfcInvoice({super.key});
@@ -40,8 +44,9 @@ class SendNfcInvoice extends HookWidget {
 
     final tabController = useTabController(
       initialLength: 3,
-      initialIndex:
-          digitalInvoiceController.directShareDraft.value != null ? 2 : 0,
+      initialIndex: digitalInvoiceController.directShareDraft.value != null
+          ? 2
+          : navigationController.exchangeTabIndex.value,
     );
     final currentTab = useState(0);
 
@@ -333,10 +338,20 @@ class SendNfcInvoice extends HookWidget {
     useEffect(() {
       void listener() {
         currentTab.value = tabController.index;
+        navigationController.exchangeTabIndex.value = tabController.index;
       }
 
       tabController.addListener(listener);
       return () => tabController.removeListener(listener);
+    }, [tabController]);
+
+    useEffect(() {
+      final worker = ever<int>(navigationController.exchangeTabIndex, (index) {
+        if (tabController.index != index) {
+          tabController.animateTo(index);
+        }
+      });
+      return worker.dispose;
     }, [tabController]);
 
     Future<void> createPublicInvoiceForQR() async {
@@ -423,98 +438,74 @@ class SendNfcInvoice extends HookWidget {
 
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.light,
-      appBar: CustomAppbar(
+      appBar: const CustomAppbar(
         title: 'hd_Exchange',
         appbarIcon: null,
         showSettings: true,
-        tabBar: TabBar(
-          controller: tabController,
-          labelColor: Theme.of(context).colorScheme.blue,
-          unselectedLabelColor: Theme.of(context).colorScheme.darkGray,
-          indicatorColor: Theme.of(context).colorScheme.blue,
-          indicatorWeight: 3,
-          labelStyle: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
-          ),
-          tabs: const [
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FaIcon(FontAwesomeIcons.userGroup, size: 14),
-                  SizedBox(width: 6),
-                  Text('In-app QR'),
-                ],
-              ),
-            ),
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FaIcon(FontAwesomeIcons.qrcode, size: 14),
-                  SizedBox(width: 6),
-                  Text('Public QR'),
-                ],
-              ),
-            ),
-            Tab(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FaIcon(FontAwesomeIcons.paperPlane, size: 14),
-                  SizedBox(width: 6),
-                  Text('Username'),
-                ],
-              ),
-            ),
-          ],
-        ),
+        showBrand: true,
       ),
-      body: TabBarView(
-        controller: tabController,
+      body: Column(
         children: [
-          QuickShareScreen(
-            qrData: qrData,
-            publicInvoiceToken: publicInvoiceToken,
-            receiverUserAmount: receiverUserAmount,
-            descriptionController: descriptionController,
-            dueDateController: dueDateController,
-            referenceNumberController: referenceNumberController,
-            category: category,
-            isCreatingPublicInvoice: isCreatingPublicInvoice,
-            createPublicInvoiceForQR: createPublicInvoiceForQR,
-            changeReceiverAmount: changeReceiverAmount,
-            startReadNfc: () {
-              startReadNfc();
-            },
-            scanQR: () {
-              scanQR();
-            },
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+            child: SbSegmentedControl(
+              index: currentTab.value,
+              onChanged: (i) => tabController.animateTo(i),
+              segments: const [
+                SbSegment(label: 'In-app QR', icon: Icons.qr_code_rounded),
+                SbSegment(label: 'Public QR', icon: Icons.qr_code_2_rounded),
+                SbSegment(label: 'Username', icon: Icons.alternate_email),
+              ],
+            ),
           ),
-          _buildPublicShareTab(
-            context: context,
-            qrData: qrData,
-            publicInvoiceToken: publicInvoiceToken,
-            receiverUserAmount: receiverUserAmount,
-            descriptionController: descriptionController,
-            dueDateController: dueDateController,
-            referenceNumberController: referenceNumberController,
-            category: category,
-            isCreatingPublicInvoice: isCreatingPublicInvoice,
-            createPublicInvoiceForQR: createPublicInvoiceForQR,
-            changeReceiverAmount: changeReceiverAmount,
-          ),
-          _buildDirectShareTab(
-            context: context,
-            descriptionController: descriptionController,
-            dueDateController: dueDateController,
-            referenceNumberController: referenceNumberController,
-            category: category,
-            getOptions: getOptions,
-            createDirectShareInvoice: createDirectShareInvoice,
-            isSendingDirectInvoice: isSendingDirectInvoice,
-            directReceivers: directReceivers,
+          Expanded(
+            child: TabBarView(
+              controller: tabController,
+              children: [
+                QuickShareScreen(
+                  qrData: qrData,
+                  publicInvoiceToken: publicInvoiceToken,
+                  receiverUserAmount: receiverUserAmount,
+                  descriptionController: descriptionController,
+                  dueDateController: dueDateController,
+                  referenceNumberController: referenceNumberController,
+                  category: category,
+                  isCreatingPublicInvoice: isCreatingPublicInvoice,
+                  createPublicInvoiceForQR: createPublicInvoiceForQR,
+                  changeReceiverAmount: changeReceiverAmount,
+                  startReadNfc: () {
+                    startReadNfc();
+                  },
+                  scanQR: () {
+                    scanQR();
+                  },
+                ),
+                _buildPublicShareTab(
+                  context: context,
+                  qrData: qrData,
+                  publicInvoiceToken: publicInvoiceToken,
+                  receiverUserAmount: receiverUserAmount,
+                  descriptionController: descriptionController,
+                  dueDateController: dueDateController,
+                  referenceNumberController: referenceNumberController,
+                  category: category,
+                  isCreatingPublicInvoice: isCreatingPublicInvoice,
+                  createPublicInvoiceForQR: createPublicInvoiceForQR,
+                  changeReceiverAmount: changeReceiverAmount,
+                ),
+                _buildDirectShareTab(
+                  context: context,
+                  descriptionController: descriptionController,
+                  dueDateController: dueDateController,
+                  referenceNumberController: referenceNumberController,
+                  category: category,
+                  getOptions: getOptions,
+                  createDirectShareInvoice: createDirectShareInvoice,
+                  isSendingDirectInvoice: isSendingDirectInvoice,
+                  directReceivers: directReceivers,
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -959,98 +950,127 @@ Widget _buildDirectShareTab({
   final canSend = directReceivers.value.isNotEmpty &&
       directReceivers.value.every((e) => e.amount > 0) &&
       !isSendingDirectInvoice.value;
+  final total =
+      directReceivers.value.fold<double>(0, (sum, e) => sum + e.amount);
 
   return SingleChildScrollView(
     child: Padding(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Send directly by username',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w700,
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: SbColors.surfaceLowest,
+              borderRadius: BorderRadius.circular(SbRadii.md),
+              boxShadow: SbShadows.cardSoft,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'lbl_SendDirectly'.tr,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        color: SbColors.onSurfaceVariant,
+                      ),
                 ),
-          ),
-          const SizedBox(height: 12),
-          TypeAheadField<UsersByUsername>(
-            debounceDuration: const Duration(milliseconds: 280),
-            suggestionsCallback: (pattern) => getOptions(pattern),
-            builder: (context, controller, focusNode) {
-              return TextField(
-                controller: controller,
-                focusNode: focusNode,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.dark,
-                ),
-                decoration: InputDecoration(
-                  hintText: 'lbl_SearchUsers'.tr,
-                  prefixIcon: const Icon(Icons.alternate_email),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-              );
-            },
-            itemBuilder: (context, suggestion) {
-              return ListTile(
-                title: Text('@${suggestion.users.username}'),
-                subtitle: Text(
-                    '${suggestion.firstName} ${suggestion.lastName}'.trim()),
-              );
-            },
-            onSelected: (suggestion) {
-              // debug check
-              debugPrint(
-                  'selected user: ${suggestion.id} / ${suggestion.users.username}');
+                const SizedBox(height: 8),
+                TypeAheadField<UsersByUsername>(
+                  debounceDuration: const Duration(milliseconds: 280),
+                  suggestionsCallback: (pattern) => getOptions(pattern),
+                  builder: (context, controller, focusNode) {
+                    return TextField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      style: const TextStyle(
+                        color: SbColors.onSurface,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'lbl_SearchUsers'.tr,
+                        prefixIcon: const Padding(
+                          padding: EdgeInsets.only(left: 12, right: 4),
+                          child: Text(
+                            '@',
+                            style: TextStyle(
+                              color: SbColors.deepNavy,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                        prefixIconConstraints:
+                            const BoxConstraints(minWidth: 28, minHeight: 0),
+                      ),
+                    );
+                  },
+                  itemBuilder: (context, suggestion) {
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: SbColors.surfaceLow,
+                        child: Text(
+                          '${suggestion.firstName.isNotEmpty ? suggestion.firstName[0] : ''}${suggestion.lastName.isNotEmpty ? suggestion.lastName[0] : ''}'
+                              .toUpperCase(),
+                          style: const TextStyle(
+                            color: SbColors.deepNavy,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      title: Text('@${suggestion.users.username}'),
+                      subtitle: Text(
+                          '${suggestion.firstName} ${suggestion.lastName}'
+                              .trim()),
+                      trailing: const Text(
+                        '+ Add',
+                        style: TextStyle(
+                          color: SbColors.successGreen,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    );
+                  },
+                  onSelected: (suggestion) {
+                    debugPrint(
+                        'selected user: ${suggestion.id} / ${suggestion.users.username}');
 
-              if (suggestion.id == null) {
-                Get.snackbar('Oops..', 'Invalid user id');
-                return;
-              }
+                    if (suggestion.id == null) {
+                      Get.snackbar('Oops..', 'Invalid user id');
+                      return;
+                    }
 
-              final exists =
-                  directReceivers.value.any((e) => e.id == suggestion.id);
-              if (exists) {
-                Get.snackbar(
-                    'Info', '@${suggestion.users.username} already added');
-                return;
-              }
+                    final exists =
+                        directReceivers.value.any((e) => e.id == suggestion.id);
+                    if (exists) {
+                      Get.snackbar('Info',
+                          '@${suggestion.users.username} already added');
+                      return;
+                    }
 
-              // IMPORTANT: immutable update (triggers rebuild)
-              directReceivers.value = [
-                ...directReceivers.value,
-                ReceiverUserModel(
-                  id: suggestion.id,
-                  userId: suggestion.users.id,
-                  firstName: suggestion.firstName,
-                  lastName: suggestion.lastName,
-                  username: suggestion.users.username,
-                  amount: 0.0, // mandatory
+                    directReceivers.value = [
+                      ...directReceivers.value,
+                      ReceiverUserModel(
+                        id: suggestion.id,
+                        userId: suggestion.users.id,
+                        firstName: suggestion.firstName,
+                        lastName: suggestion.lastName,
+                        username: suggestion.users.username,
+                        amount: 0.0,
+                      ),
+                    ];
+                  },
                 ),
-              ];
-            },
-          ),
-          const SizedBox(height: 12),
-          if (directReceivers.value.isNotEmpty)
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: Theme.of(context).colorScheme.blue.withOpacity(0.35),
-                ),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              child: Column(
-                children: [
+                if (directReceivers.value.isNotEmpty) ...[
+                  const SizedBox(height: 12),
                   for (var i = 0; i < directReceivers.value.length; i++)
                     Builder(
                       builder: (context) {
                         final receiver = directReceivers.value[i];
                         return CompactReceiverRow(
                           receiverUser: receiver,
-                          showDivider: i < directReceivers.value.length - 1,
+                          showDivider: false,
                           onAmountChanged: (int id, double amount) {
                             final updated = [...directReceivers.value];
                             final idx = updated.indexWhere((e) => e.id == id);
@@ -1067,42 +1087,74 @@ Widget _buildDirectShareTab({
                       },
                     ),
                 ],
-              ),
+                const SizedBox(height: 12),
+                SbLabeledField(
+                  label: 'Description',
+                  icon: Icons.description_outlined,
+                  controller: descriptionController,
+                ),
+                const SizedBox(height: 8),
+                SbLabeledField(
+                  label: 'Due Date',
+                  icon: Icons.calendar_today_rounded,
+                  controller: dueDateController,
+                  readOnly: true,
+                  onTap: () =>
+                      SbLabeledField.pickDate(context, dueDateController),
+                ),
+                const SizedBox(height: 8),
+                SbLabeledField(
+                  label: 'Reference Number',
+                  icon: Icons.tag_rounded,
+                  controller: referenceNumberController,
+                  hint: 'Optional invoice or ref #',
+                  boldValue: false,
+                ),
+              ],
             ),
-          const SizedBox(height: 20),
-          InputField(
-            icon: Icons.description,
-            label: 'Description',
-            controller: descriptionController,
-          ),
-          const SizedBox(height: 12),
-          InputField(
-            icon: Icons.calendar_today,
-            label: 'Due Date',
-            controller: dueDateController,
-            type: TextInputType.datetime,
-          ),
-          const SizedBox(height: 12),
-          InputField(
-            icon: Icons.numbers,
-            label: 'Reference Number',
-            controller: referenceNumberController,
           ),
           const SizedBox(height: 16),
           SizedBox(
+            height: 56,
             width: double.infinity,
-            height: 52,
             child: ElevatedButton(
               onPressed: canSend ? createDirectShareInvoice : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: SbColors.deepNavy,
+                disabledBackgroundColor: SbColors.surfaceHigh,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(SbRadii.md),
+                ),
+                elevation: 0,
+              ),
               child: isSendingDirectInvoice.value
                   ? const SizedBox(
                       height: 20,
                       width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
                     )
-                  : const Text('Send Invoice'),
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.send_rounded, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          'btn_SendTotal'.trParams({
+                            'amount': total.toStringAsFixed(2),
+                          }),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
             ),
           ),
+          const SizedBox(height: 12),
         ],
       ),
     ),

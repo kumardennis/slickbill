@@ -3,6 +3,7 @@ import { useCurrentUser, useSendUserOperation } from "@coinbase/cdp-hooks";
 import { encodeFunctionData, parseUnits } from "viem";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
+import { sb } from "../../theme";
 
 const eurcContractAddress = "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42"; // EURC on Base
 
@@ -248,10 +249,9 @@ const ui: Record<string, React.CSSProperties> = {
     boxSizing: "border-box",
   },
   card: {
-    borderRadius: 16,
-    border: "1px solid rgba(255,255,255,0.12)",
-    background: "rgba(0,0,0,0.18)",
-    boxShadow: "0 12px 28px rgba(0,0,0,0.35)",
+    borderRadius: 12,
+    background: sb.surfaceLowest,
+    boxShadow: "0 2px 12px rgba(0, 52, 83, 0.04)",
     padding: 14,
   },
   header: {
@@ -260,18 +260,18 @@ const ui: Record<string, React.CSSProperties> = {
     justifyContent: "space-between",
     gap: 10,
   },
-  title: { fontSize: 16, fontWeight: 800, letterSpacing: 0.2 },
-  subtitle: { fontSize: 12, opacity: 0.75 },
+  title: { fontSize: 16, fontWeight: 800, letterSpacing: -0.2, color: sb.onSurface },
+  subtitle: { fontSize: 12, color: sb.onSurfaceVariant },
   pill: {
     borderRadius: 999,
-    border: "1px solid rgba(34,197,94,0.35)",
-    background: "rgba(34,197,94,0.12)",
+    background: "rgba(16, 185, 129, 0.10)",
     padding: "6px 10px",
     display: "inline-flex",
     alignItems: "center",
     gap: 8,
     flexShrink: 0,
     maxWidth: "55%",
+    color: sb.success,
   },
   pillLabel: { fontSize: 11, opacity: 0.8 },
   pillValue: {
@@ -282,19 +282,19 @@ const ui: Record<string, React.CSSProperties> = {
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
-  hr: { height: 1, background: "rgba(255,255,255,0.10)", margin: "12px 0" },
+  hr: { height: 1, background: sb.surfaceHigh, margin: "12px 0" },
   section: { display: "grid", gap: 6, marginBottom: 12 },
-  bigAmount: { fontSize: 28, fontWeight: 900, letterSpacing: -0.2 },
-  smallMuted: { fontSize: 12, opacity: 0.7 },
-  label: { fontSize: 12, opacity: 0.7 },
+  bigAmount: { fontSize: 28, fontWeight: 800, letterSpacing: -0.4, color: sb.onSurface },
+  smallMuted: { fontSize: 12, color: sb.onSurfaceVariant },
+  label: { fontSize: 12, color: sb.onSurfaceVariant },
   monoWrap: {
     fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
     fontSize: 13,
     lineHeight: 1.3,
     wordBreak: "break-all",
     borderRadius: 12,
-    border: "1px solid rgba(255,255,255,0.10)",
-    background: "rgba(255,255,255,0.05)",
+    border: `1px solid ${sb.outlineVariant}`,
+    background: sb.surface,
     padding: "10px 10px",
   },
   monoHint: {
@@ -313,6 +313,7 @@ const ui: Record<string, React.CSSProperties> = {
     borderRadius: 12,
     border: "1px solid rgba(245,158,11,0.35)",
     background: "rgba(245,158,11,0.10)",
+    color: sb.onSurface,
     padding: "10px 10px",
     fontSize: 12,
     lineHeight: 1.4,
@@ -322,10 +323,9 @@ const ui: Record<string, React.CSSProperties> = {
     height: 48,
     borderRadius: 12,
     border: "1px solid rgba(255,255,255,0.14)",
-    background:
-      "linear-gradient(135deg, rgba(59,130,246,0.9), rgba(168,85,247,0.9))",
-    color: "#fff",
-    fontWeight: 800,
+    background: sb.deepNavy,
+    color: sb.onPrimary,
+    fontWeight: 700,
     fontSize: 14,
     cursor: "pointer",
   },

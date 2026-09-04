@@ -16,6 +16,7 @@ import '../../feature_auth/getx_controllers/user_controller.dart';
 import '../../feature_auth/utils/money_formatter.dart';
 import '../widgets/received_invoice_sheet.dart';
 import '../widgets/sent_invoice_sheet.dart';
+import 'package:slickbill/shared_widgets/sb_dark_surface_theme.dart';
 
 class SentBills extends HookWidget {
   SentInvoicesClass sentInvoicesClass = SentInvoicesClass();
@@ -68,10 +69,13 @@ class SentBills extends HookWidget {
     }
 
     Future<void> openInvoice(InvoiceModel invoice) async {
-      await showModalBottomSheet(
-          context: context,
-          builder: (context) => SentInvoiceSheet(
-              invoice: invoice, updateInvoiceObsolete: updateInvoiceObsolete));
+      await showInvoiceSheet(
+        context: context,
+        builder: (context) => SentInvoiceSheet(
+          invoice: invoice,
+          updateInvoiceObsolete: updateInvoiceObsolete,
+        ),
+      );
     }
 
     useEffect(() {

@@ -2,6 +2,15 @@ import 'package:intl/intl.dart';
 
 enum InvoiceStatusFilter { all, unpaid, processing, paid }
 
+/// How a month folder is chosen for the invoice list.
+enum InvoiceMonthBasis {
+  /// Sent tab: invoices created/sent in the selected month.
+  created,
+
+  /// Received / stats: paid by paid-on date; open by created or due date.
+  activity,
+}
+
 class InvoiceListQuery {
   final DateTime month;
   final InvoiceStatusFilter status;
@@ -9,10 +18,13 @@ class InvoiceListQuery {
   /// When true: ignore month and return every matching invoice for [status].
   final bool allTime;
 
+  final InvoiceMonthBasis monthBasis;
+
   InvoiceListQuery({
     required this.month,
     required this.status,
     this.allTime = false,
+    this.monthBasis = InvoiceMonthBasis.activity,
   });
 
   DateTime get monthStart => DateTime(month.year, month.month, 1);
@@ -72,6 +84,27 @@ class InvoiceListQuery {
       emptyListLabelKey == 'lbl_NoUnpaidInMonth' ||
       emptyListLabelKey == 'lbl_NoProcessingInMonth';
 
+  String get paidOverviewLabelKey {
+    if (allTime) return 'lbl_PaidAllTime';
+    if (isCurrentMonth) return 'lbl_PaidThisMonth';
+    return 'lbl_PaidInMonth';
+  }
+
+  String get receivedOverviewLabelKey {
+    if (allTime) return 'lbl_ReceivedAllTime';
+    if (isCurrentMonth) return 'lbl_ReceivedThisMonth';
+    return 'lbl_ReceivedInMonth';
+  }
+
+  bool get overviewLabelNeedsMonth => !allTime && !isCurrentMonth;
+
+  InvoiceListQuery get periodOnly => InvoiceListQuery(
+        month: month,
+        status: InvoiceStatusFilter.all,
+        allTime: allTime,
+        monthBasis: monthBasis,
+      );
+
   String get monthSlug =>
       ignoresMonth ? 'all' : DateFormat('yyyy-MM').format(monthStart);
 
@@ -104,6 +137,7 @@ class InvoiceListQuery {
         month: DateTime(month.year, month.month - 1),
         status: status,
         allTime: false,
+        monthBasis: monthBasis,
       );
 
   InvoiceListQuery? get nextMonth {
@@ -112,6 +146,7 @@ class InvoiceListQuery {
       month: DateTime(month.year, month.month + 1),
       status: status,
       allTime: false,
+      monthBasis: monthBasis,
     );
   }
 
@@ -125,11 +160,13 @@ class InvoiceListQuery {
     DateTime? month,
     InvoiceStatusFilter? status,
     bool? allTime,
+    InvoiceMonthBasis? monthBasis,
   }) {
     return InvoiceListQuery(
       month: month ?? this.month,
       status: status ?? this.status,
       allTime: allTime ?? this.allTime,
+      monthBasis: monthBasis ?? this.monthBasis,
     );
   }
 
@@ -144,6 +181,23 @@ class InvoiceListQuery {
           return {'status': 'PROCESSING', 'allTime': true};
         case InvoiceStatusFilter.paid:
           return {'status': 'PAID', 'allTime': true};
+      }
+    }
+
+    if (monthBasis == InvoiceMonthBasis.created) {
+      final dates = {
+        'createdFrom': createdFrom,
+        'createdTo': createdTo,
+      };
+      switch (status) {
+        case InvoiceStatusFilter.all:
+          return dates;
+        case InvoiceStatusFilter.unpaid:
+          return {'status': 'UNPAID', ...dates};
+        case InvoiceStatusFilter.processing:
+          return {'status': 'PROCESSING', ...dates};
+        case InvoiceStatusFilter.paid:
+          return {'status': 'PAID', ...dates};
       }
     }
 
@@ -176,18 +230,33 @@ class InvoiceListQuery {
     }
   }
 
+  bool _statusMatches(String normalized) {
+    switch (status) {
+      case InvoiceStatusFilter.all:
+        return true;
+      case InvoiceStatusFilter.unpaid:
+        return normalized == 'UNPAID';
+      case InvoiceStatusFilter.processing:
+        return normalized == 'PROCESSING' || normalized == 'PENDING';
+      case InvoiceStatusFilter.paid:
+        return normalized == 'PAID';
+    }
+  }
+
   bool inSelectedMonth(String? raw) {
     if (raw == null || raw.trim().isEmpty) return false;
 
-    final parsed = DateTime.tryParse(raw.trim());
-    if (parsed != null) {
-      final local = parsed.toLocal();
-      return local.year == month.year && local.month == month.month;
+    final trimmed = raw.trim();
+    if (trimmed.length >= 10) {
+      final ymd = trimmed.substring(0, 10);
+      if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(ymd)) {
+        return ymd.compareTo(createdFrom) >= 0 && ymd.compareTo(createdTo) < 0;
+      }
     }
 
-    if (raw.length < 10) return false;
-    final ymd = raw.substring(0, 10);
-    return ymd.compareTo(createdFrom) >= 0 && ymd.compareTo(createdTo) < 0;
+    final parsed = DateTime.tryParse(trimmed);
+    if (parsed == null) return false;
+    return parsed.year == month.year && parsed.month == month.month;
   }
 
   bool matches({
@@ -197,29 +266,20 @@ class InvoiceListQuery {
     String? deadline,
   }) {
     final normalized = status.trim().toUpperCase();
-    final inMonth = inSelectedMonth(createdAt) ||
-        inSelectedMonth(deadline) ||
-        inSelectedMonth(paidOnDate);
+    if (!_statusMatches(normalized)) return false;
+    if (ignoresMonth) return true;
 
-    switch (this.status) {
-      case InvoiceStatusFilter.all:
-        if (ignoresMonth) return true;
-        return inMonth;
-      case InvoiceStatusFilter.unpaid:
-        if (normalized != 'UNPAID') return false;
-        if (ignoresMonth) return true;
-        return inSelectedMonth(createdAt) || inSelectedMonth(deadline);
-      case InvoiceStatusFilter.processing:
-        if (normalized != 'PROCESSING' && normalized != 'PENDING') {
-          return false;
-        }
-        if (ignoresMonth) return true;
-        return inSelectedMonth(createdAt) || inSelectedMonth(deadline);
-      case InvoiceStatusFilter.paid:
-        if (normalized != 'PAID') return false;
-        if (ignoresMonth) return true;
-        return inSelectedMonth(paidOnDate);
+    if (monthBasis == InvoiceMonthBasis.created) {
+      return inSelectedMonth(createdAt);
     }
+
+    if (normalized == 'PAID') {
+      if (paidOnDate != null && paidOnDate.trim().isNotEmpty) {
+        return inSelectedMonth(paidOnDate);
+      }
+      return inSelectedMonth(createdAt);
+    }
+    return inSelectedMonth(createdAt) || inSelectedMonth(deadline);
   }
 }
 

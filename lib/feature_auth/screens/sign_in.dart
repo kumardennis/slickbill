@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/utils/supabase_auth_manger.dart';
 import 'package:slickbill/feature_auth/widgets/continue_with_google_button.dart';
 
@@ -100,6 +101,8 @@ class SignIn extends HookWidget {
         print('🔍 Invoice token after OAuth: $invoiceToken');
 
         isLoadingOAuth.value = false;
+
+        AppLockController.markInteractiveLogin();
 
         // Navigate
         if (invoiceToken != null && invoiceToken.isNotEmpty) {
@@ -237,6 +240,8 @@ class SignIn extends HookWidget {
 
         showResendVerification.value = false;
 
+        AppLockController.markInteractiveLogin();
+
         final invoiceToken = getInvoiceToken();
 
         print('🔍 Invoice token after sign-in: $invoiceToken');
@@ -278,6 +283,7 @@ class SignIn extends HookWidget {
       try {
         final success = await _supabase.signInWithFacebook();
         if (success) {
+          AppLockController.markInteractiveLogin();
           final invoiceToken = getInvoiceToken();
 
           if (invoiceToken != null && invoiceToken.isNotEmpty) {

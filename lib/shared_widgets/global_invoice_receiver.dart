@@ -36,7 +36,7 @@ class GlobalReceiveService {
             ),
             const SizedBox(height: 24),
             Text(
-              'Receive Slickbill',
+              'hd_ScanQr'.tr,
               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: Theme.of(context).colorScheme.darkerBlue,
@@ -44,7 +44,7 @@ class GlobalReceiveService {
             ),
             const SizedBox(height: 8),
             Text(
-              'Receive via QR, more options will be coming soon!',
+              'inf_ScanQrSheet'.tr,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.gray,
                   ),
@@ -57,7 +57,7 @@ class GlobalReceiveService {
                   child: _buildReceiveOption(
                     context: context,
                     icon: FontAwesomeIcons.qrcode,
-                    title: 'QR Code',
+                    title: 'btn_ReceiveSlickbillQR'.tr,
                     subtitle: 'inf_QRInstruction'.tr,
                     color: Theme.of(context).colorScheme.turqouise,
                     onTap: () {
