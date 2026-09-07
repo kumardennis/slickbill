@@ -53,6 +53,7 @@ class SupabaseAuthManger {
 
   Future<bool> loadFreshUser(authUserId, accessToken) async {
     final tokenToUse = accessToken;
+    final epoch = userController.beginRemoteUserLoad();
 
     print('TOKEN IN USE: $tokenToUse');
 
@@ -78,7 +79,8 @@ class SupabaseAuthManger {
     final privateUserResponse = await supabseClient
         .from('private_users')
         .select('*')
-        .eq('userId', userProfileClassed.id);
+        .eq('userId', userProfileClassed.id)
+        .order('id');
 
     final businessUserResponse = await supabseClient
         .from('business_users')
@@ -108,7 +110,7 @@ class SupabaseAuthManger {
       authUserId: userRecordResponse[0]['authUserId'],
       accessToken: tokenToUse,
       isPrivate: privateUserResponse.length > 0,
-      isBusiness: privateRow?['isBusiness'] == true,
+      isBusiness: ClientUserModel.isBusinessFromDb(privateRow?['isBusiness']),
       privateUserId:
           privateUserResponse.length > 0 ? privateUserResponse[0]['id'] : null,
       businessUserId: businessUserResponse.length > 0
@@ -143,7 +145,7 @@ class SupabaseAuthManger {
       metamaskWalletAddress: userRecordResponse[0]['metamask_wallet_address'],
     );
 
-    userController.loadUser(clientUserClassed);
+    userController.loadUser(clientUserClassed, epoch: epoch);
     return true;
   }
 

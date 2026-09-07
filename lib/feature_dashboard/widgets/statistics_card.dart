@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:slickbill/feature_auth/utils/money_formatter.dart';
+import 'package:slickbill/shared_widgets/sb_money_text.dart';
 import 'package:slickbill/theme/sb_colors.dart';
 
 class StatisticsCard extends StatelessWidget {
@@ -22,9 +22,10 @@ class StatisticsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final formatNumber = FormatNumber();
-    final pendingZero = (pendingAmount ?? 0) <= 0;
-    final paidZero = (paidAmount ?? 0) <= 0;
+    final pending = pendingAmount ?? 0;
+    final paid = paidAmount ?? 0;
+    final amountsMatch = (pending - paid).abs() < 0.005;
+    final showIdleCopy = amountsMatch && pending <= 0 && paid <= 0;
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -32,11 +33,9 @@ class StatisticsCard extends StatelessWidget {
         Expanded(
           child: _OverviewTile(
             title: pendingLabel,
-            amount: pendingAmount != null
-                ? formatNumber.formatMoney(pendingAmount!)
-                : '€0.00',
+            amount: pending,
             subtitle: pendingSubtitle ??
-                (pendingZero ? 'All clear' : null),
+                (showIdleCopy ? 'All clear' : null),
             subtitleColor: SbColors.warningAmber,
             icon: Icons.schedule_rounded,
             iconColor: SbColors.warningAmber,
@@ -46,11 +45,9 @@ class StatisticsCard extends StatelessWidget {
         Expanded(
           child: _OverviewTile(
             title: paidLabel,
-            amount: paidAmount != null
-                ? formatNumber.formatMoney(paidAmount!)
-                : '€0.00',
+            amount: paid,
             subtitle: paidSubtitle ??
-                (paidZero ? 'All settled up' : null),
+                (showIdleCopy ? 'All settled up' : null),
             subtitleColor: SbColors.onSurfaceVariant,
             icon: Icons.check_circle_rounded,
             iconColor: SbColors.successGreen,
@@ -63,7 +60,7 @@ class StatisticsCard extends StatelessWidget {
 
 class _OverviewTile extends StatelessWidget {
   final String title;
-  final String amount;
+  final double amount;
   final String? subtitle;
   final Color subtitleColor;
   final IconData icon;
@@ -83,7 +80,7 @@ class _OverviewTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(SbSpace.md),
       decoration: BoxDecoration(
-        color: SbColors.surfaceLowest,
+        gradient: SbGradients.card(tint: iconColor),
         borderRadius: BorderRadius.circular(SbRadii.md),
         boxShadow: SbShadows.card,
       ),
@@ -106,8 +103,8 @@ class _OverviewTile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-          Text(
-            amount,
+          SbMoneyText(
+            amount: amount,
             style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w800,
                   letterSpacing: -0.5,

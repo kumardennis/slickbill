@@ -31,6 +31,10 @@ class BusinessProfileCard extends HookWidget {
       isSaving.value = false;
 
       if (!context.mounted) return;
+      final dbName = userController.user.value.publicName ?? '';
+      if (publicNameController.text != dbName) {
+        publicNameController.text = dbName;
+      }
       Get.snackbar(
         saved ? 'Saved' : 'Oops..',
         saved

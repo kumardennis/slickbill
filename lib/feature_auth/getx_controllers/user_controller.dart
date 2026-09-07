@@ -8,6 +8,7 @@ import 'package:slickbill/feature_auth/repos/user_repo.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/screens/sign_in.dart';
 import 'package:slickbill/feature_auth/services/google_auth_service.dart';
+import 'package:slickbill/feature_auth/utils/supabase_auth_manger.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/user_model.dart';
@@ -29,14 +30,34 @@ class UserController extends GetxController {
   ).obs;
 
   final GoogleAuthService _googleAuthService = GoogleAuthService();
+  int _remoteProfileEpoch = 0;
 
-  loadUser(ClientUserModel updatedUser) {
+  int beginRemoteUserLoad() => ++_remoteProfileEpoch;
+
+  loadUser(ClientUserModel updatedUser, {int? epoch}) {
+    if (epoch != null && epoch != _remoteProfileEpoch) {
+      print(
+          'Ignoring stale user profile load epoch=$epoch current=$_remoteProfileEpoch');
+      return;
+    }
+
     user.value = updatedUser;
     saveUserData();
 
     if (updatedUser.id > 0) {
       unawaited(PushNotificationService.loginUser());
     }
+  }
+
+  /// Re-read the signed-in profile from Postgres. Local cache is not used.
+  Future<bool> reloadFromDatabase() async {
+    final session = supabase.auth.currentSession;
+    if (session == null) return false;
+
+    return SupabaseAuthManger().loadFreshUser(
+      session.user.id,
+      session.accessToken,
+    );
   }
 
   bool _isTokenExpired(Session session) {
@@ -89,28 +110,15 @@ class UserController extends GetxController {
 
   Future<bool> loadUserData() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final userJson = prefs.getString('user_data');
-
-      if (userJson != null) {
-        final userData = jsonDecode(userJson);
-        user.value = ClientUserModel.fromJson(userData);
-
-        // Validate the session
-        final session = supabase.auth.currentSession;
-        if (session != null && !_isTokenExpired(session)) {
-          print('User data loaded and session is valid');
-          return true;
-        } else {
-          print('Session is expired or invalid');
-          await clearUserData();
-          return false;
-        }
+      final session = supabase.auth.currentSession;
+      if (session == null || _isTokenExpired(session)) {
+        await clearUserData();
+        return false;
       }
-      return false;
+
+      return await reloadFromDatabase();
     } catch (e) {
       print('Error loading user data: $e');
-      await clearUserData();
       return false;
     }
   }
@@ -340,6 +348,7 @@ class UserController extends GetxController {
         return false;
       }
 
+      beginRemoteUserLoad();
       final trimmedPublicName = publicName?.trim();
       final response = await _userRepo.updateBusinessProfile(
         privateUserId: privateUserId,
@@ -351,10 +360,12 @@ class UserController extends GetxController {
         return false;
       }
 
+      await reloadFromDatabase();
       user.value = user.value.copyWith(
-        isBusiness: isBusiness,
-        publicName: trimmedPublicName ?? user.value.publicName,
+        isBusiness: ClientUserModel.isBusinessFromDb(response['isBusiness']),
+        publicName: response['publicName'] as String? ?? user.value.publicName,
       );
+      beginRemoteUserLoad();
       await saveUserData();
       return true;
     } catch (e) {

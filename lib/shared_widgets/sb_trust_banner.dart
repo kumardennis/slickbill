@@ -5,10 +5,14 @@ enum SbTrustBannerVariant { custody, p2p }
 
 class SbTrustBanner extends StatelessWidget {
   final SbTrustBannerVariant variant;
+  final String? title;
+  final String? subtitle;
 
   const SbTrustBanner({
     super.key,
     this.variant = SbTrustBannerVariant.custody,
+    this.title,
+    this.subtitle,
   });
 
   @override
@@ -18,6 +22,14 @@ class SbTrustBanner extends StatelessWidget {
     final iconBg = isP2p
         ? SbColors.successGreen.withValues(alpha: 0.1)
         : SbColors.deepNavy.withValues(alpha: 0.08);
+    final heading = title ??
+        (isP2p
+            ? 'Send invoices'
+            : 'Built in Tallinn for European Payments');
+    final body = subtitle ??
+        (isP2p
+            ? '0% hidden fees.'
+            : 'Funds stay in your own account. SlickBills does not custody your funds.');
 
     return Container(
       padding: const EdgeInsets.all(SbSpace.md),
@@ -46,9 +58,7 @@ class SbTrustBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isP2p
-                      ? 'Send invoices'
-                      : 'Built in Tallinn for European Payments',
+                  heading,
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
                         color: SbColors.onSurface,
                         fontSize: 12,
@@ -56,9 +66,7 @@ class SbTrustBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  isP2p
-                      ? '0% hidden fees.'
-                      : 'Funds stay in your own account. SlickBills does not custody your funds.',
+                  body,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: SbColors.onSurfaceVariant,
                         fontSize: 11,

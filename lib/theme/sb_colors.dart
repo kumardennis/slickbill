@@ -73,3 +73,29 @@ abstract final class SbShadows {
     ),
   ];
 }
+
+abstract final class SbGradients {
+  /// Barely-there page wash: cooler at the top, a hint of navy-cyan below.
+  static const LinearGradient page = LinearGradient(
+    begin: Alignment.topCenter,
+    end: Alignment.bottomCenter,
+    colors: [
+      Color(0xFFF9FDFE),
+      Color(0xFFF4FAFB),
+      Color(0xFFE7F2F6),
+    ],
+    stops: [0.0, 0.4, 1.0],
+  );
+
+  /// Overview / surface cards: white into a 6–7% tint.
+  static LinearGradient card({Color tint = SbColors.electricCyan}) {
+    return LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        SbColors.surfaceLowest,
+        Color.alphaBlend(tint.withValues(alpha: 0.07), SbColors.surfaceLowest),
+      ],
+    );
+  }
+}

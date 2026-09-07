@@ -22,6 +22,8 @@ import FirebaseMessaging
         }
 
         GeneratedPluginRegistrant.register(with: self)
+        SbHaptics.register(with: self)
+        SbHaptics.warm()
 
         UNUserNotificationCenter.current().delegate = self
         Messaging.messaging().delegate = self
@@ -30,6 +32,7 @@ import FirebaseMessaging
         guard let controller = window?.rootViewController as? FlutterViewController else {
             return super.application(application, didFinishLaunchingWithOptions: launchOptions)
         }
+        SbHaptics.register(messenger: controller.binaryMessenger)
         
         // NFC Channel
         let nfcChannel = FlutterMethodChannel(name: CHANNEL_NFC,
@@ -108,5 +111,124 @@ import FirebaseMessaging
         }
         
         return super.application(application, continue: userActivity, restorationHandler: restorationHandler)
+    }
+
+    override func applicationDidBecomeActive(_ application: UIApplication) {
+        SbHaptics.warm()
+        super.applicationDidBecomeActive(application)
+    }
+}
+
+/// Retained UIKit generators. Flutter's HapticFeedback often never fires on
+/// iOS 17.5+ because it builds a generator and returns without impactOccurred.
+enum SbHaptics {
+    private static let channelName = "slickbill/haptics"
+    private static let light = UIImpactFeedbackGenerator(style: .light)
+    private static let medium = UIImpactFeedbackGenerator(style: .medium)
+    private static let heavy = UIImpactFeedbackGenerator(style: .heavy)
+    private static let selection = UISelectionFeedbackGenerator()
+    private static let notify = UINotificationFeedbackGenerator()
+
+    static var registered = false
+
+    static func register(with registrarHost: FlutterPluginRegistry) {
+        guard !registered, let registrar = registrarHost.registrar(forPlugin: "SbHaptics") else {
+            return
+        }
+        register(messenger: registrar.messenger())
+    }
+
+    static func register(messenger: FlutterBinaryMessenger) {
+        guard !registered else { return }
+        registered = true
+        let channel = FlutterMethodChannel(
+            name: channelName,
+            binaryMessenger: messenger
+        )
+        channel.setMethodCallHandler { call, result in
+            switch call.method {
+            case "warm":
+                warm()
+                result(nil)
+            case "play":
+                play(call.arguments as? String ?? "medium")
+                result(nil)
+            default:
+                result(FlutterMethodNotImplemented)
+            }
+        }
+    }
+
+    static func warm() {
+        if #available(iOS 17.5, *), let view = keyView() {
+            UIImpactFeedbackGenerator(style: .light, view: view).prepare()
+            UIImpactFeedbackGenerator(style: .medium, view: view).prepare()
+            UIImpactFeedbackGenerator(style: .heavy, view: view).prepare()
+            UISelectionFeedbackGenerator(view: view).prepare()
+            UINotificationFeedbackGenerator(view: view).prepare()
+        }
+        light.prepare()
+        medium.prepare()
+        heavy.prepare()
+        selection.prepare()
+        notify.prepare()
+    }
+
+    static func play(_ kind: String) {
+        if #available(iOS 17.5, *), let view = keyView() {
+            switch kind {
+            case "selection":
+                let generator = UISelectionFeedbackGenerator(view: view)
+                generator.prepare()
+                generator.selectionChanged()
+            case "light":
+                let generator = UIImpactFeedbackGenerator(style: .light, view: view)
+                generator.prepare()
+                generator.impactOccurred()
+            case "heavy", "error":
+                if kind == "error" {
+                    let generator = UINotificationFeedbackGenerator(view: view)
+                    generator.prepare()
+                    generator.notificationOccurred(.error)
+                } else {
+                    let generator = UIImpactFeedbackGenerator(style: .heavy, view: view)
+                    generator.prepare()
+                    generator.impactOccurred()
+                }
+            default:
+                let generator = UIImpactFeedbackGenerator(style: .medium, view: view)
+                generator.prepare()
+                generator.impactOccurred()
+            }
+            return
+        }
+
+        switch kind {
+        case "selection":
+            selection.selectionChanged()
+            selection.prepare()
+        case "light":
+            light.impactOccurred()
+            light.prepare()
+        case "heavy":
+            heavy.impactOccurred()
+            heavy.prepare()
+        case "error":
+            notify.notificationOccurred(.error)
+            notify.prepare()
+        default:
+            medium.impactOccurred()
+            medium.prepare()
+        }
+    }
+
+    private static func keyView() -> UIView? {
+        let windows = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+        if let view = windows.first(where: { $0.isKeyWindow })?.rootViewController?.view {
+            return view
+        }
+        return windows.first?.rootViewController?.view
     }
 }

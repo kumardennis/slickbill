@@ -4,10 +4,10 @@ enum InvoiceStatusFilter { all, unpaid, processing, paid }
 
 /// How a month folder is chosen for the invoice list.
 enum InvoiceMonthBasis {
-  /// Sent tab: invoices created/sent in the selected month.
+  /// Folder by the invoice's created date (local calendar month).
   created,
 
-  /// Received / stats: paid by paid-on date; open by created or due date.
+  /// Paid by paid-on date; open by created or due date.
   activity,
 }
 
@@ -121,9 +121,9 @@ class InvoiceListQuery {
     }
   }
 
-  String get createdFrom => DateFormat('yyyy-MM-dd').format(monthStart);
+  String get createdFrom => monthStart.toUtc().toIso8601String();
 
-  String get createdTo => DateFormat('yyyy-MM-dd').format(nextMonthStart);
+  String get createdTo => nextMonthStart.toUtc().toIso8601String();
 
   List<String> get paidOnDateRange {
     final lastDay = DateTime(month.year, month.month + 1, 0);
@@ -245,18 +245,10 @@ class InvoiceListQuery {
 
   bool inSelectedMonth(String? raw) {
     if (raw == null || raw.trim().isEmpty) return false;
-
-    final trimmed = raw.trim();
-    if (trimmed.length >= 10) {
-      final ymd = trimmed.substring(0, 10);
-      if (RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(ymd)) {
-        return ymd.compareTo(createdFrom) >= 0 && ymd.compareTo(createdTo) < 0;
-      }
-    }
-
-    final parsed = DateTime.tryParse(trimmed);
+    final parsed = DateTime.tryParse(raw.trim());
     if (parsed == null) return false;
-    return parsed.year == month.year && parsed.month == month.month;
+    final local = parsed.toLocal();
+    return local.year == month.year && local.month == month.month;
   }
 
   bool matches({

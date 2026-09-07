@@ -11,6 +11,30 @@ class SendInvoicesClass {
   final UserController userController = Get.find<UserController>();
   CurrentBankController currentBankController = Get.find();
 
+  /// create-private-user-invoice returns `data` as an inserted-row array.
+  String? _createdInvoiceId(dynamic responseData) {
+    if (responseData is! Map) return null;
+    final payload = responseData['data'];
+
+    Map<String, dynamic>? row;
+    if (payload is List && payload.isNotEmpty && payload.first is Map) {
+      row = Map<String, dynamic>.from(payload.first as Map);
+    } else if (payload is Map) {
+      final nested = payload['digitalInvoiceData'];
+      if (nested is List && nested.isNotEmpty && nested.first is Map) {
+        row = Map<String, dynamic>.from(nested.first as Map);
+      } else if (nested is Map) {
+        row = Map<String, dynamic>.from(nested);
+      } else if (payload['id'] != null) {
+        row = Map<String, dynamic>.from(payload);
+      }
+    }
+
+    final id = row?['id'];
+    if (id == null) return null;
+    return id.toString();
+  }
+
   Future<void> createSendPrivateInvoice(originalInvoiceNo, description, dueDate,
       referenceNo, List<ReceiverUserModel> receiverUsers, category) async {
     try {
@@ -169,7 +193,7 @@ class SendInvoicesClass {
 
       if (data['isRequestSuccessfull'] == true) {
         // No local success toast — FCM "X sent you a slickbill" owns that UX.
-        return data['data']['digitalInvoiceData']['id'];
+        return _createdInvoiceId(data) ?? '';
       } else {
         debugPrint(data['error'].toString());
         // Let the QR caller show a single error toast.

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -21,6 +23,8 @@ import 'package:slickbill/feature_dashboard/getx_controllers/payment_setup_contr
 import 'package:slickbill/core/services/invoice_toast_coordinator.dart';
 import 'package:slickbill/feature_navigation/getx_controllers/navigation_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
+import 'package:slickbill/feature_auth/services/metamask_wallet_service.dart';
+import 'package:slickbill/services/sb_feedback.dart';
 import 'package:slickbill/services/coinbase/coinbase_service.dart';
 import 'package:slickbill/shared_widgets/cdp_webview.dart';
 import 'package:slickbill/shared_widgets/sb_quick_request_card.dart';
@@ -50,6 +54,7 @@ class ReceivedBills extends HookWidget {
     final filter = useState(InvoiceListQuery(
       month: currentInvoiceMonth(),
       status: InvoiceStatusFilter.all,
+      monthBasis: InvoiceMonthBasis.created,
     ));
     final fetchRef = useRef<Future<void> Function()>(() async {});
 
@@ -163,54 +168,66 @@ class ReceivedBills extends HookWidget {
         return;
       }
 
-      // Open embedded wallet pay page; auto-close when txHash is available
-      const baseUrl = 'https://slickbills-wallet-client.vercel.app';
-      final result = await Get.to(() => CdpWebView(
-            url:
-                '$baseUrl/wallet/pay?to=${invoice.senders!.privateUsers!.users!.cdpWalletId}&amount=${invoice.amount}&description=${Uri.encodeComponent(invoice.description)}&receiver=${invoice.senders!.privateUsers!.firstName}',
-            title: 'Send Payment',
-            accessToken: userController.user.value.accessToken,
-            autoCloseMode: CdpAutoCloseMode.pay,
-          ));
-
-      if (result == null) {
-        Get.snackbar(
-          'Payment Cancelled',
-          'You cancelled the payment.',
-          backgroundColor: Theme.of(context).colorScheme.red,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 3),
-        );
-
-        return;
-      }
-
-      // If the WebView returns a txHash, consider it success and update invoice status
-      final txHash = result['txHash'];
-      if (txHash == null ||
-          txHash == 'null' ||
-          (txHash is String && txHash.isEmpty)) {
-        Get.snackbar(
-          'Error',
-          'Payment was not completed.',
-          backgroundColor: Theme.of(context).colorScheme.red,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 3),
-        );
-        return;
-      }
-
-      Get.snackbar(
-        'Success',
-        'Transaction: $txHash',
-        backgroundColor: Theme.of(context).colorScheme.green,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 3),
+      final confirmed = await AppLockController.confirmSensitiveAction(
+        reason: 'lbl_ConfirmPayment'.trParams({
+          'amount': '€${invoice.amount.toStringAsFixed(2)}',
+        }),
       );
+      if (!confirmed) return;
 
-      await invoiceController.updateTxHashForInvoice(invoice.id, txHash);
+      AppLockController.beginExternalAuthSession();
+      try {
+        // Open embedded wallet pay page; auto-close when txHash is available
+        const baseUrl = 'https://slickbills-wallet-client.vercel.app';
+        final result = await Get.to(() => CdpWebView(
+              url:
+                  '$baseUrl/wallet/pay?to=${invoice.senders!.privateUsers!.users!.cdpWalletId}&amount=${invoice.amount}&description=${Uri.encodeComponent(invoice.description)}&receiver=${invoice.senders!.privateUsers!.firstName}',
+              title: 'Send Payment',
+              accessToken: userController.user.value.accessToken,
+              autoCloseMode: CdpAutoCloseMode.pay,
+            ));
 
-      await updateInvoiceStatus(invoice, true);
+        if (result == null) {
+          Get.snackbar(
+            'Payment Cancelled',
+            'You cancelled the payment.',
+            backgroundColor: Theme.of(context).colorScheme.red,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 3),
+          );
+
+          return;
+        }
+
+        // If the WebView returns a txHash, consider it success and update invoice status
+        final txHash = result['txHash'];
+        if (txHash == null ||
+            txHash == 'null' ||
+            (txHash is String && txHash.isEmpty)) {
+          Get.snackbar(
+            'Error',
+            'Payment was not completed.',
+            backgroundColor: Theme.of(context).colorScheme.red,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 3),
+          );
+          return;
+        }
+
+        Get.snackbar(
+          'Success',
+          'Transaction: $txHash',
+          backgroundColor: Theme.of(context).colorScheme.green,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 3),
+        );
+
+        await invoiceController.updateTxHashForInvoice(invoice.id, txHash);
+
+        await updateInvoiceStatus(invoice, true);
+      } finally {
+        AppLockController.endExternalAuthSession();
+      }
     }
 
     Future<void> createMoneriumTransaction(InvoiceModel invoice) async {
@@ -254,159 +271,30 @@ class ReceivedBills extends HookWidget {
         return;
       }
 
-      final confirmed = await AppLockController.confirmSensitiveAction(
-        reason: 'lbl_ConfirmPayment'.trParams({
-          'amount': '€${invoice.amount.toStringAsFixed(2)}',
-        }),
-      );
-      if (!confirmed) return;
-
+      AppLockController.beginExternalAuthSession();
+      unawaited(SbFeedback.medium());
       try {
-        await MoneriumService.ensureConnected(
-          userId: moneriumUserId,
-          email: email,
-          onWillOpenLogin: () {
-            Get.snackbar(
-              'Connecting Monerium',
-              'Sign in to continue the payment.',
-              backgroundColor: Theme.of(context).colorScheme.blue,
-              colorText: Colors.white,
-              duration: const Duration(seconds: 3),
-            );
-          },
-        );
-        if (Get.isRegistered<PaymentSetupController>()) {
-          await Get.find<PaymentSetupController>().markMoneriumConnected();
-        }
-      } catch (error) {
-        Get.snackbar(
-          'Monerium connect failed',
-          'Could not connect automatically. Try again, or finish setup in Profile.',
-          backgroundColor: Theme.of(context).colorScheme.yellow,
-          colorText: Colors.black,
-          duration: const Duration(seconds: 4),
-        );
-        return;
-      }
-
-      final recipientName =
-          '${invoice.senders?.privateUsers?.firstName ?? ''} ${invoice.senders?.privateUsers?.lastName ?? ''}'
-              .trim();
-      final normalizedIban =
-          destinationIban.replaceAll(RegExp(r'\s+'), '').toUpperCase();
-      final countryCode = RegExp(r'^[A-Z]{2}').hasMatch(normalizedIban)
-          ? normalizedIban.substring(0, 2)
-          : 'EE';
-      final nowUtc = DateTime.now().toUtc();
-      final timestamp =
-          '${nowUtc.year.toString().padLeft(4, '0')}-${nowUtc.month.toString().padLeft(2, '0')}-${nowUtc.day.toString().padLeft(2, '0')}T${nowUtc.hour.toString().padLeft(2, '0')}:${nowUtc.minute.toString().padLeft(2, '0')}:${nowUtc.second.toString().padLeft(2, '0')}Z';
-      final counterpartName = recipientName.isNotEmpty
-          ? recipientName
-          : (invoice.senderName.trim().isNotEmpty
-              ? invoice.senderName.trim()
-              : 'Invoice Recipient');
-
-      final senderFirstName = invoice.senders?.privateUsers?.firstName.trim();
-      final senderLastName = invoice.senders?.privateUsers?.lastName.trim();
-      final nameParts = counterpartName
-          .split(RegExp(r'\s+'))
-          .where((part) => part.isNotEmpty)
-          .toList(growable: false);
-
-      final counterpartFirstName =
-          (senderFirstName != null && senderFirstName.isNotEmpty)
-              ? senderFirstName
-              : (nameParts.isNotEmpty ? nameParts.first : 'Invoice');
-      final counterpartLastName =
-          (senderLastName != null && senderLastName.isNotEmpty)
-              ? senderLastName
-              : (nameParts.length > 1
-                  ? nameParts.sublist(1).join(' ')
-                  : 'Recipient');
-      final orderMessage =
-          'Send EUR ${invoice.amount.toStringAsFixed(2)} to $normalizedIban at $timestamp';
-      final invoiceRef = (invoice.referenceNo ?? '').trim();
-      final referenceNumber = (invoiceRef.isNotEmpty && invoiceRef != '-')
-          ? invoiceRef
-          : 'sb${invoice.id}';
-
-      final order = <String, dynamic>{
-        'kind': 'redeem',
-        'currency': 'eur',
-        'message': orderMessage,
-        'counterpart': {
-          'identifier': {
-            'standard': 'iban',
-            'iban': normalizedIban,
-          },
-          'details': {
-            'firstName': counterpartFirstName,
-            'lastName': counterpartLastName,
-            'country': countryCode,
-          },
-        },
-        'amount': invoice.amount.toStringAsFixed(2),
-        'memo': '[sb:${invoice.id}]',
-        'referenceNumber': referenceNumber.length > 35
-            ? referenceNumber.substring(0, 35)
-            : referenceNumber,
-      };
-
-      var paymentInitiatedToastShown = false;
-      try {
-        final response =
-            await MoneriumService.createSendMoneyOrderWithSignature(
-          userId: moneriumUserId,
-          walletAddress: walletAddress,
-          order: order,
-          invoiceId: invoice.id.toString(),
-        );
-
-        final orderId = MoneriumService.extractOrderId(response);
-        final initiatedTxHash = MoneriumService.extractOrderTxHash(response);
-
-        if (orderId != null && orderId.isNotEmpty) {
-          await MoneriumService.savePendingOrderForInvoice(
-            invoiceId: invoice.id,
-            orderId: orderId,
+        try {
+          await MoneriumService.ensureConnected(
+            userId: moneriumUserId,
+            email: email,
+            onWillOpenLogin: () {
+              Get.snackbar(
+                'Connecting Monerium',
+                'Sign in to continue the payment.',
+                backgroundColor: Theme.of(context).colorScheme.blue,
+                colorText: Colors.white,
+                duration: const Duration(seconds: 3),
+              );
+            },
           );
-          await invoiceController.updateMoneriumOrderIdForInvoice(
-            invoice.id,
-            orderId,
-          );
-        }
-
-        if (initiatedTxHash != null && initiatedTxHash.isNotEmpty) {
-          await invoiceController.updateTxHashForInvoice(
-            invoice.id,
-            initiatedTxHash,
-          );
-        }
-
-        final latestAfterPay =
-            await invoiceController.getInvoiceById(invoice.id, silent: true);
-        final latestStatus =
-            (latestAfterPay?.status ?? '').trim().toUpperCase();
-        if (latestStatus != 'PAID') {
-          await receivedInvoicesClass.updateInvoiceStatus(
-            invoice.id,
-            'PROCESSING',
-            silent: true,
-          );
-        }
-        await getInvoices();
-
-        paymentInitiatedToastShown = true;
-        if (latestStatus == 'PAID') {
-          InvoiceToastCoordinator.notifyPayerPaidInApp(
-            invoiceId: '${invoice.id}',
-          );
-          return;
-        }
-        if (orderId == null || orderId.isEmpty) {
+          if (Get.isRegistered<PaymentSetupController>()) {
+            await Get.find<PaymentSetupController>().markMoneriumConnected();
+          }
+        } catch (error) {
           Get.snackbar(
-            'Payment Initiated',
-            'Payment was initiated and marked as waiting. Re-check status shortly.',
+            'Monerium connect failed',
+            'Could not connect automatically. Try again, or finish setup in Profile.',
             backgroundColor: Theme.of(context).colorScheme.yellow,
             colorText: Colors.black,
             duration: const Duration(seconds: 4),
@@ -414,25 +302,158 @@ class ReceivedBills extends HookWidget {
           return;
         }
 
-        Get.snackbar(
-          'Payment Initiated',
-          'Invoice marked as waiting. Use Re-check payment status to fetch latest order state.',
-          backgroundColor: Theme.of(context).colorScheme.blue,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 3),
-        );
-      } catch (error) {
-        if (paymentInitiatedToastShown) {
-          debugPrint('Post-initiate error (toast already shown): $error');
-          return;
+        final recipientName =
+            '${invoice.senders?.privateUsers?.firstName ?? ''} ${invoice.senders?.privateUsers?.lastName ?? ''}'
+                .trim();
+        final normalizedIban =
+            destinationIban.replaceAll(RegExp(r'\s+'), '').toUpperCase();
+        final countryCode = RegExp(r'^[A-Z]{2}').hasMatch(normalizedIban)
+            ? normalizedIban.substring(0, 2)
+            : 'EE';
+        final nowUtc = DateTime.now().toUtc();
+        final timestamp =
+            '${nowUtc.year.toString().padLeft(4, '0')}-${nowUtc.month.toString().padLeft(2, '0')}-${nowUtc.day.toString().padLeft(2, '0')}T${nowUtc.hour.toString().padLeft(2, '0')}:${nowUtc.minute.toString().padLeft(2, '0')}:${nowUtc.second.toString().padLeft(2, '0')}Z';
+        final counterpartName = recipientName.isNotEmpty
+            ? recipientName
+            : (invoice.senderName.trim().isNotEmpty
+                ? invoice.senderName.trim()
+                : 'Invoice Recipient');
+
+        final senderFirstName = invoice.senders?.privateUsers?.firstName.trim();
+        final senderLastName = invoice.senders?.privateUsers?.lastName.trim();
+        final nameParts = counterpartName
+            .split(RegExp(r'\s+'))
+            .where((part) => part.isNotEmpty)
+            .toList(growable: false);
+
+        final counterpartFirstName =
+            (senderFirstName != null && senderFirstName.isNotEmpty)
+                ? senderFirstName
+                : (nameParts.isNotEmpty ? nameParts.first : 'Invoice');
+        final counterpartLastName =
+            (senderLastName != null && senderLastName.isNotEmpty)
+                ? senderLastName
+                : (nameParts.length > 1
+                    ? nameParts.sublist(1).join(' ')
+                    : 'Recipient');
+        final orderMessage =
+            'Send EUR ${invoice.amount.toStringAsFixed(2)} to $normalizedIban at $timestamp';
+        final invoiceRef = (invoice.referenceNo ?? '').trim();
+        final referenceNumber = (invoiceRef.isNotEmpty && invoiceRef != '-')
+            ? invoiceRef
+            : 'sb${invoice.id}';
+
+        final order = <String, dynamic>{
+          'kind': 'redeem',
+          'currency': 'eur',
+          'message': orderMessage,
+          'counterpart': {
+            'identifier': {
+              'standard': 'iban',
+              'iban': normalizedIban,
+            },
+            'details': {
+              'firstName': counterpartFirstName,
+              'lastName': counterpartLastName,
+              'country': countryCode,
+            },
+          },
+          'amount': invoice.amount.toStringAsFixed(2),
+          'memo': '[sb:${invoice.id}]',
+          'referenceNumber': referenceNumber.length > 35
+              ? referenceNumber.substring(0, 35)
+              : referenceNumber,
+        };
+
+        var paymentInitiatedToastShown = false;
+        try {
+          final response =
+              await MoneriumService.createSendMoneyOrderWithSignature(
+            userId: moneriumUserId,
+            walletAddress: walletAddress,
+            order: order,
+            invoiceId: invoice.id.toString(),
+          );
+
+          final orderId = MoneriumService.extractOrderId(response);
+          final initiatedTxHash = MoneriumService.extractOrderTxHash(response);
+
+          if (orderId != null && orderId.isNotEmpty) {
+            await MoneriumService.savePendingOrderForInvoice(
+              invoiceId: invoice.id,
+              orderId: orderId,
+            );
+            await invoiceController.updateMoneriumOrderIdForInvoice(
+              invoice.id,
+              orderId,
+            );
+          }
+
+          if (initiatedTxHash != null && initiatedTxHash.isNotEmpty) {
+            await invoiceController.updateTxHashForInvoice(
+              invoice.id,
+              initiatedTxHash,
+            );
+          }
+
+          final latestAfterPay =
+              await invoiceController.getInvoiceById(invoice.id, silent: true);
+          final latestStatus =
+              (latestAfterPay?.status ?? '').trim().toUpperCase();
+          if (latestStatus != 'PAID') {
+            await receivedInvoicesClass.updateInvoiceStatus(
+              invoice.id,
+              'PROCESSING',
+              silent: true,
+            );
+          }
+          await getInvoices();
+
+          paymentInitiatedToastShown = true;
+          if (latestStatus == 'PAID') {
+            InvoiceToastCoordinator.notifyPayerPaidInApp(
+              invoiceId: '${invoice.id}',
+            );
+            return;
+          }
+          unawaited(SbFeedback.medium());
+          if (orderId == null || orderId.isEmpty) {
+            Get.snackbar(
+              'Payment Initiated',
+              'Payment was initiated and marked as waiting. Re-check status shortly.',
+              backgroundColor: Theme.of(context).colorScheme.yellow,
+              colorText: Colors.black,
+              duration: const Duration(seconds: 4),
+            );
+            return;
+          }
+
+          Get.snackbar(
+            'Payment Initiated',
+            'Invoice marked as waiting. Use Re-check payment status to fetch latest order state.',
+            backgroundColor: Theme.of(context).colorScheme.blue,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 3),
+          );
+        } catch (error) {
+          if (paymentInitiatedToastShown) {
+            debugPrint('Post-initiate error (toast already shown): $error');
+            return;
+          }
+          if (MetamaskWalletService.isCancelled(error)) {
+            return;
+          }
+          unawaited(SbFeedback.error());
+          Get.snackbar(
+            'Payment Error',
+            error.toString(),
+            backgroundColor: Theme.of(context).colorScheme.red,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 4),
+          );
         }
-        Get.snackbar(
-          'Payment Error',
-          error.toString(),
-          backgroundColor: Theme.of(context).colorScheme.red,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 4),
-        );
+      } finally {
+        AppLockController.endExternalAuthSession();
       }
     }
 
@@ -610,35 +631,34 @@ class ReceivedBills extends HookWidget {
       await showInvoiceSheet(
         context: context,
         builder: (context) => ReceivedInvoiceSheet(
-            invoice: invoice,
-            payInvoice: payInvoice,
-            updateInvoiceStatus: updateInvoiceStatus,
-            createCoinbaseTransaction: createCoinbaseTransaction,
-            createCDPEmbeddedTransaction: createCDPEmbeddedTransaction,
-            createMoneriumTransaction: createMoneriumTransaction,
-            moneriumUserId: userController.user.value.privateUserId
-                        ?.toString()
-                        .trim()
-                        .isNotEmpty ==
-                    true
-                ? userController.user.value.privateUserId!.toString()
-                : userController.user.value.id.toString(),
-            moneriumWalletAddress:
-                userController.user.value.metamaskWalletAddress?.trim() ?? '',
-            manualRecheckMoneriumStatus: manualRecheckMoneriumStatus,
-            refreshInvoice: (int invoiceId) async {
-              final rows =
-                  await receivedInvoicesClass.getPrivateReceivedInvoices(
-                id: invoiceId,
-              );
+          invoice: invoice,
+          payInvoice: payInvoice,
+          updateInvoiceStatus: updateInvoiceStatus,
+          createCoinbaseTransaction: createCoinbaseTransaction,
+          createCDPEmbeddedTransaction: createCDPEmbeddedTransaction,
+          createMoneriumTransaction: createMoneriumTransaction,
+          moneriumUserId: userController.user.value.privateUserId
+                      ?.toString()
+                      .trim()
+                      .isNotEmpty ==
+                  true
+              ? userController.user.value.privateUserId!.toString()
+              : userController.user.value.id.toString(),
+          moneriumWalletAddress:
+              userController.user.value.metamaskWalletAddress?.trim() ?? '',
+          manualRecheckMoneriumStatus: manualRecheckMoneriumStatus,
+          refreshInvoice: (int invoiceId) async {
+            final rows = await receivedInvoicesClass.getPrivateReceivedInvoices(
+              id: invoiceId,
+            );
 
-              if (rows == null || rows.isEmpty) {
-                return null;
-              }
+            if (rows == null || rows.isEmpty) {
+              return null;
+            }
 
-              return rows.first;
-            },
-            updateInvoiceObsolete: updateInvoiceObsolete,
+            return rows.first;
+          },
+          updateInvoiceObsolete: updateInvoiceObsolete,
         ),
       );
     }
@@ -648,7 +668,12 @@ class ReceivedBills extends HookWidget {
         await getInvoices();
       });
       return null;
-    }, [filter.value.month.year, filter.value.month.month, filter.value.status, filter.value.allTime]);
+    }, [
+      filter.value.month.year,
+      filter.value.month.month,
+      filter.value.status,
+      filter.value.allTime
+    ]);
 
     useEffect(() {
       final refreshWorker =
@@ -679,8 +704,7 @@ class ReceivedBills extends HookWidget {
       };
     }, [userController.user.value.privateUserId]);
 
-    final monthName =
-        DateFormat.MMMM().format(filter.value.monthStart);
+    final monthName = DateFormat.MMMM().format(filter.value.monthStart);
     final rows = invoices.value ?? <InvoiceModel>[];
     final unpaidCount = rows.where((i) {
       final s = i.status.trim().toUpperCase();
@@ -748,39 +772,39 @@ class ReceivedBills extends HookWidget {
                                 Get.to(() => const MoneriumStatements()),
                           ),
                           const SizedBox(height: 16),
-                            InvoiceListFilterBar(
+                          InvoiceListFilterBar(
                             query: filter.value,
                             onChanged: (next) => filter.value = next,
                             showMonthHeader: false,
                           ),
                           const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Text(
-                                'lbl_RecentItems'.tr,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelLarge
-                                    ?.copyWith(fontSize: 14),
-                              ),
-                              const Spacer(),
-                              GestureDetector(
-                                onTap: () => filter.value =
-                                    filter.value.copyWith(allTime: true),
-                                child: Text(
-                                  'lbl_SeeAll'.tr,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .labelMedium
-                                      ?.copyWith(
-                                        color: Theme.of(context)
-                                            .colorScheme
-                                            .secondary,
-                                      ),
-                                ),
-                              ),
-                            ],
-                          ),
+                          // Row(
+                          //   children: [
+                          //     Text(
+                          //       'lbl_RecentItems'.tr,
+                          //       style: Theme.of(context)
+                          //           .textTheme
+                          //           .labelLarge
+                          //           ?.copyWith(fontSize: 14),
+                          //     ),
+                          //     const Spacer(),
+                          //     GestureDetector(
+                          //       onTap: () => filter.value =
+                          //           filter.value.copyWith(allTime: true),
+                          //       child: Text(
+                          //         'lbl_SeeAll'.tr,
+                          //         style: Theme.of(context)
+                          //             .textTheme
+                          //             .labelMedium
+                          //             ?.copyWith(
+                          //               color: Theme.of(context)
+                          //                   .colorScheme
+                          //                   .secondary,
+                          //             ),
+                          //       ),
+                          //     ),
+                          //   ],
+                          // ),
                           const SizedBox(height: 8),
                           if (rows.isEmpty)
                             Padding(

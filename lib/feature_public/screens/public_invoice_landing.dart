@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
-import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/utils/supabase_auth_manger.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
 import 'package:slickbill/feature_public/models/public_invoice_model.dart';
 import 'package:slickbill/feature_dashboard/widgets/from_business_badge.dart';
 import 'package:slickbill/feature_public/screens/public_invoice_view.dart';
+import 'package:slickbill/feature_public/widgets/public_invoice_page.dart';
+import 'package:slickbill/theme/sb_colors.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:universal_html/html.dart' as html;
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -89,7 +90,7 @@ class PublicInvoiceLanding extends HookWidget {
                 Get.snackbar(
                   'Error',
                   'Failed to load user profile. Please sign in again.',
-                  backgroundColor: Theme.of(context).colorScheme.red,
+                  backgroundColor: SbColors.error,
                   colorText: Colors.white,
                 );
               });
@@ -103,7 +104,7 @@ class PublicInvoiceLanding extends HookWidget {
               Get.snackbar(
                 'Error',
                 'Error loading user: ${e.toString()}',
-                backgroundColor: Theme.of(context).colorScheme.red,
+                backgroundColor: SbColors.error,
                 colorText: Colors.white,
               );
             });
@@ -177,27 +178,18 @@ class PublicInvoiceLanding extends HookWidget {
     // }
 
     // Web view with app detection
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.light,
-      body: SizedBox(
-        height: MediaQuery.of(context).size.height,
-        width: MediaQuery.of(context).size.width,
-        child: isLoading.value
-            ? Center(
-                child: CircularProgressIndicator(
-                  color: Theme.of(context).colorScheme.blue,
-                ),
-              )
-            : invoice.value == null
-                ? _buildErrorView(context)
-                : _buildWebView(context, invoice.value!, userController),
-      ),
+    return PublicInvoicePage(
+      child: isLoading.value
+          ? const Center(
+              child: CircularProgressIndicator(color: SbColors.deepNavy),
+            )
+          : invoice.value == null
+              ? _buildErrorView(context)
+              : _buildWebView(context, invoice.value!, userController),
     );
   }
 
   void _showAppInstallDialog(BuildContext context, String token) {
-    // With Universal Links, you use the standard HTTPS URL.
-    // The OS will open the app if it's installed, or the website if it's not.
     final universalLink = 'slickbills://bill/$token';
 
     showDialog<void>(
@@ -205,22 +197,30 @@ class PublicInvoiceLanding extends HookWidget {
       barrierDismissible: true,
       builder: (dialogContext) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF0F172A),
-          title: const Text(
-            'Open in SlickBill App?',
-            style: TextStyle(color: Colors.white),
+          backgroundColor: SbColors.surfaceLowest,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(SbRadii.md),
           ),
-          content: const Text(
-            'Open this invoice in the app now? If the app is installed, it will open immediately.',
-            style: TextStyle(color: Colors.white70),
+          title: Text(
+            'Open in SlickBills?',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: SbColors.onSurface,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          content: Text(
+            'If the app is installed, this invoice opens there. Otherwise stay here.',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: SbColors.onSurfaceVariant,
+                ),
           ),
           actions: [
             TextButton(
               onPressed: () =>
                   Navigator.of(dialogContext, rootNavigator: true).pop(),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Colors.white70),
+              child: Text(
+                'Stay here',
+                style: TextStyle(color: SbColors.onSurfaceVariant),
               ),
             ),
             ElevatedButton(
@@ -228,11 +228,7 @@ class PublicInvoiceLanding extends HookWidget {
                 Navigator.of(dialogContext, rootNavigator: true).pop();
                 html.window.open(universalLink, '_self');
               },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: const Color(0xFF0F172A),
-              ),
-              child: const Text('Open in App'),
+              child: const Text('Open in app'),
             ),
           ],
         );
@@ -242,41 +238,39 @@ class PublicInvoiceLanding extends HookWidget {
 
   Widget _buildErrorView(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.error_outline,
-            size: 64,
-            color: Theme.of(context).colorScheme.red,
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Invoice Not Found',
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.dark,
-                  fontWeight: FontWeight.bold,
-                ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'This invoice link may be invalid or expired',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: Theme.of(context).colorScheme.darkGray,
-                ),
-          ),
-          const SizedBox(height: 20),
-          ElevatedButton.icon(
-            onPressed: () => Get.offAllNamed('/home-screen'),
-            icon: const Icon(Icons.home_rounded),
-            label: const Text('Go to Home'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.blue,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.link_off_rounded,
+              size: 48,
+              color: SbColors.onSurfaceVariant,
             ),
-          ),
-        ],
+            const SizedBox(height: 16),
+            Text(
+              'Invoice not found',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: SbColors.onSurface,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'This link may be invalid or expired.',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: SbColors.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () => Get.offAllNamed('/home-screen'),
+              child: const Text('Go to Home'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -284,671 +278,160 @@ class PublicInvoiceLanding extends HookWidget {
   Widget _buildWebView(BuildContext context, PublicInvoiceModel invoice,
       UserController userController) {
     final isLoggedIn = userController.user.value.privateUserId != null;
-    bool dateIsPassed = invoice.deadline != null &&
+    final dateIsPassed = invoice.deadline != null &&
         DateTime.now().isAfter(DateTime.parse(invoice.deadline!));
+    final invoiceController = Get.find<DigitalInvoiceController>();
+    final urls = invoice.description == null
+        ? const <String>[]
+        : _extractUrls(invoice.description!);
+    final statusColor = invoice.status == 'PAID'
+        ? SbColors.successGreen
+        : dateIsPassed
+            ? SbColors.error
+            : SbColors.warningAmber;
+    final statusLabel = invoice.status == 'PAID'
+        ? 'Paid'
+        : dateIsPassed
+            ? 'Overdue'
+            : 'Unpaid';
 
-    final _digitalInvoiceController = Get.find<DigitalInvoiceController>();
+    Future<void> openUrl(String url) async {
+      var urlToOpen = url;
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        urlToOpen = 'https://$url';
+      }
+      final uri = Uri.parse(urlToOpen);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    }
 
     return Column(
       children: [
-        if (kIsWeb) ...[
-          Container(
-            color: Colors.grey[200],
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text("Have the app?"),
-                SizedBox(width: 8),
-                TextButton(
-                  onPressed: () => _showAppInstallDialog(context, token),
-                  child: Text("Open in App"),
-                ),
-                const SizedBox(width: 8),
-                TextButton.icon(
-                  onPressed: () => Get.offAllNamed('/home-screen'),
-                  icon: const Icon(Icons.home_rounded, size: 18),
-                  label: const Text('Go Home'),
-                ),
-              ],
-            ),
-          )
-        ],
+        if (kIsWeb)
+          PublicInvoiceAppPromptBar(
+            onOpenApp: () => _showAppInstallDialog(context, token),
+            onGoHome: () => Get.offAllNamed('/home-screen'),
+          ),
         Expanded(
-          child: Container(
-            height: MediaQuery.of(context).size.height,
-            width: MediaQuery.of(context).size.width,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Theme.of(context).colorScheme.darkerBlue,
-                  Theme.of(context).colorScheme.blue,
-                  Theme.of(context).colorScheme.turqouise,
-                  Theme.of(context).colorScheme.darkerBlue,
-                ],
-                stops: const [0.0, 0.2, 0.7, 0.85],
-                transform: const GradientRotation(3.14 / 4),
-                tileMode: TileMode.clamp,
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: SafeArea(
-              child: SingleChildScrollView(
-                child: Center(
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 600),
-                    padding: const EdgeInsets.all(24),
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minHeight: MediaQuery.of(context).size.height -
-                            MediaQuery.of(context).padding.top -
-                            MediaQuery.of(context).padding.bottom -
-                            48,
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(28),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.95),
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.1),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 10),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+          child: SafeArea(
+            top: !kIsWeb,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 560),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      PublicInvoiceHeroCard(
+                        amount: invoice.amount,
+                        description: invoice.description,
+                        statusLabel: statusLabel,
+                        statusColor: statusColor,
+                        extra: urls.isEmpty
+                            ? null
+                            : Padding(
+                                padding: const EdgeInsets.only(top: 16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Invoice',
-                                      style: TextStyle(
-                                        color:
-                                            Theme.of(context).colorScheme.dark,
-                                        fontSize: 24,
-                                        fontWeight: FontWeight.bold,
-                                      ),
+                                      'Links',
+                                      style: Theme.of(context)
+                                          .textTheme
+                                          .labelMedium
+                                          ?.copyWith(
+                                            color: SbColors.onSurfaceVariant,
+                                          ),
                                     ),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 16,
-                                        vertical: 8,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: invoice.status == 'PAID'
-                                            ? Theme.of(context)
-                                                .colorScheme
-                                                .green
-                                                .withOpacity(0.15)
-                                            : dateIsPassed
-                                                ? Theme.of(context)
-                                                    .colorScheme
-                                                    .red
-                                                    .withOpacity(0.15)
-                                                : Theme.of(context)
-                                                    .colorScheme
-                                                    .yellow
-                                                    .withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(25),
-                                      ),
-                                      child: Text(
-                                        invoice.status == 'PAID'
-                                            ? 'PAID'
-                                            : 'UNPAID',
-                                        style: TextStyle(
-                                          color: invoice.status == 'PAID'
-                                              ? Theme.of(context)
-                                                  .colorScheme
-                                                  .green
-                                              : dateIsPassed
-                                                  ? Theme.of(context)
-                                                      .colorScheme
-                                                      .red
-                                                  : Theme.of(context)
-                                                      .colorScheme
-                                                      .yellow,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                        ),
+                                    const SizedBox(height: 8),
+                                    ...urls.map(
+                                      (url) => PublicInvoiceLinkRow(
+                                        url: url,
+                                        onOpen: () => openUrl(url),
+                                        onCopy: () async {
+                                          await Clipboard.setData(
+                                              ClipboardData(text: url));
+                                          Get.snackbar(
+                                            'Copied',
+                                            'Link copied',
+                                            snackPosition: SnackPosition.BOTTOM,
+                                            margin: const EdgeInsets.all(16),
+                                            duration:
+                                                const Duration(seconds: 1),
+                                          );
+                                        },
                                       ),
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 20),
-                                Text(
-                                  '€${invoice.amount.toStringAsFixed(2)}',
-                                  style: TextStyle(
-                                    color: Theme.of(context).colorScheme.blue,
-                                    fontSize: 48,
-                                    fontWeight: FontWeight.bold,
-                                    height: 1.1,
-                                  ),
-                                ),
-                                if (invoice.description != null) ...[
-                                  const SizedBox(height: 12),
-                                  Text(
-                                    invoice.description!,
-                                    style: TextStyle(
-                                      color: Theme.of(context).colorScheme.dark,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                      height: 1.5,
-                                    ),
-                                  ),
-                                  if (invoice.description!.isNotEmpty) ...[
-                                    Builder(
-                                      builder: (context) {
-                                        final urls =
-                                            _extractUrls(invoice.description!);
-                                        if (urls.isEmpty)
-                                          return SizedBox.shrink();
-
-                                        return Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            const SizedBox(height: 16),
-                                            Divider(
-                                              color: Theme.of(context)
-                                                  .colorScheme
-                                                  .gray
-                                                  .withOpacity(0.3),
-                                              height: 1,
-                                            ),
-                                            const SizedBox(height: 12),
-                                            Text(
-                                              'Payment Links',
-                                              style: TextStyle(
-                                                color: Theme.of(context)
-                                                    .colorScheme
-                                                    .dark,
-                                                fontSize: 14,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 8),
-                                            ...urls.map((url) {
-                                              return Padding(
-                                                padding: const EdgeInsets.only(
-                                                    bottom: 8.0),
-                                                child: Row(
-                                                  children: [
-                                                    Expanded(
-                                                      child: GestureDetector(
-                                                        onTap: () async {
-                                                          String urlToOpen =
-                                                              url;
-                                                          if (!url.startsWith(
-                                                                  'http://') &&
-                                                              !url.startsWith(
-                                                                  'https://')) {
-                                                            urlToOpen =
-                                                                'https://$url';
-                                                          }
-
-                                                          final uri = Uri.parse(
-                                                              urlToOpen);
-                                                          if (await canLaunchUrl(
-                                                              uri)) {
-                                                            await launchUrl(uri,
-                                                                mode: LaunchMode
-                                                                    .externalApplication);
-                                                          } else {
-                                                            Get.snackbar(
-                                                                'Error',
-                                                                'Could not open link');
-                                                          }
-                                                        },
-                                                        child: Container(
-                                                          padding:
-                                                              EdgeInsets.all(
-                                                                  12),
-                                                          decoration:
-                                                              BoxDecoration(
-                                                            color: Theme.of(
-                                                                    context)
-                                                                .colorScheme
-                                                                .blue
-                                                                .withOpacity(
-                                                                    0.1),
-                                                            borderRadius:
-                                                                BorderRadius
-                                                                    .circular(
-                                                                        8),
-                                                            border: Border.all(
-                                                              color: Theme.of(
-                                                                      context)
-                                                                  .colorScheme
-                                                                  .blue
-                                                                  .withOpacity(
-                                                                      0.3),
-                                                              width: 1.5,
-                                                            ),
-                                                          ),
-                                                          child: Row(
-                                                            children: [
-                                                              Icon(
-                                                                Icons.link,
-                                                                size: 16,
-                                                                color: Theme.of(
-                                                                        context)
-                                                                    .colorScheme
-                                                                    .blue,
-                                                              ),
-                                                              const SizedBox(
-                                                                  width: 8),
-                                                              Expanded(
-                                                                child: Text(
-                                                                  url,
-                                                                  style:
-                                                                      TextStyle(
-                                                                    color: Theme.of(
-                                                                            context)
-                                                                        .colorScheme
-                                                                        .blue,
-                                                                    fontSize:
-                                                                        14,
-                                                                    decoration:
-                                                                        TextDecoration
-                                                                            .underline,
-                                                                    fontWeight:
-                                                                        FontWeight
-                                                                            .w500,
-                                                                  ),
-                                                                  maxLines: 1,
-                                                                  overflow:
-                                                                      TextOverflow
-                                                                          .ellipsis,
-                                                                ),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                    const SizedBox(width: 8),
-                                                    GestureDetector(
-                                                      onTap: () async {
-                                                        await Clipboard.setData(
-                                                            ClipboardData(
-                                                                text: url));
-                                                        Get.snackbar(
-                                                          'Copied',
-                                                          'Link copied to clipboard',
-                                                          backgroundColor:
-                                                              Theme.of(context)
-                                                                  .colorScheme
-                                                                  .green
-                                                                  .withOpacity(
-                                                                      0.2),
-                                                          colorText:
-                                                              Theme.of(context)
-                                                                  .colorScheme
-                                                                  .green,
-                                                          duration: Duration(
-                                                              seconds: 1),
-                                                        );
-                                                      },
-                                                      child: Container(
-                                                        padding:
-                                                            EdgeInsets.all(10),
-                                                        decoration:
-                                                            BoxDecoration(
-                                                          color: Theme.of(
-                                                                  context)
-                                                              .colorScheme
-                                                              .green
-                                                              .withOpacity(0.1),
-                                                          borderRadius:
-                                                              BorderRadius
-                                                                  .circular(8),
-                                                          border: Border.all(
-                                                            color: Theme.of(
-                                                                    context)
-                                                                .colorScheme
-                                                                .green
-                                                                .withOpacity(
-                                                                    0.3),
-                                                            width: 1,
-                                                          ),
-                                                        ),
-                                                        child: Icon(
-                                                          Icons.copy,
-                                                          size: 16,
-                                                          color:
-                                                              Theme.of(context)
-                                                                  .colorScheme
-                                                                  .green,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-                                            }).toList(),
-                                          ],
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ],
-                              ],
+                              ),
+                      ),
+                      const SizedBox(height: 16),
+                      PublicInvoiceDetailsCard(
+                        children: [
+                          if (invoice.displaySenderName.isNotEmpty)
+                            PublicInvoiceDetailRow(
+                              label: 'From',
+                              value: invoice.displaySenderName,
+                              copyable: true,
                             ),
-                          ),
-                          const SizedBox(height: 20),
-                          Container(
-                            padding: const EdgeInsets.all(24),
-                            decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.95),
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.1),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 10),
-                                ),
-                              ],
+                          if (invoice.isFromBusiness)
+                            const Padding(
+                              padding: EdgeInsets.only(bottom: 12),
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: FromBusinessBadge(),
+                              ),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Invoice Details',
-                                  style: TextStyle(
-                                    color: Theme.of(context).colorScheme.dark,
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 20),
-                                if (invoice.displaySenderName.isNotEmpty)
-                                  _buildDetailRow(
-                                    context,
-                                    'From',
-                                    invoice.displaySenderName,
-                                    copyable: true,
-                                  ),
-                                if (invoice.isFromBusiness)
-                                  const Padding(
-                                    padding: EdgeInsets.only(bottom: 16),
-                                    child: Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        SizedBox.shrink(),
-                                        FromBusinessBadge(),
-                                      ],
-                                    ),
-                                  ),
-                                if (invoice.senderIban != null)
-                                  _buildDetailRow(
-                                    context,
-                                    'IBAN',
-                                    invoice.senderIban!,
-                                    copyable: true,
-                                  ),
-                                if (invoice.category != null)
-                                  _buildDetailRow(
-                                    context,
-                                    'Category',
-                                    invoice.category!,
-                                  ),
-                                if (invoice.referenceNo != null &&
-                                    invoice.referenceNo!.isNotEmpty)
-                                  _buildDetailRow(
-                                    context,
-                                    'Reference',
-                                    invoice.referenceNo!,
-                                    copyable: true,
-                                  ),
-                                if (invoice.deadline != null)
-                                  _buildDetailRow(
-                                    context,
-                                    'Due Date',
-                                    DateFormat('EEE, dd MMM yyyy').format(
-                                      DateTime.parse(invoice.deadline!),
-                                    ),
-                                    highlight: dateIsPassed,
-                                  ),
-                              ],
+                          if (invoice.senderIban != null)
+                            PublicInvoiceDetailRow(
+                              label: 'IBAN',
+                              value: invoice.senderIban!,
+                              copyable: true,
                             ),
-                          ),
-                          const SizedBox(height: 32),
+                          if (invoice.category != null)
+                            PublicInvoiceDetailRow(
+                              label: 'Category',
+                              value: invoice.category!,
+                            ),
+                          if (invoice.referenceNo != null &&
+                              invoice.referenceNo!.isNotEmpty)
+                            PublicInvoiceDetailRow(
+                              label: 'Reference',
+                              value: invoice.referenceNo!,
+                              copyable: true,
+                            ),
+                          if (invoice.deadline != null)
+                            PublicInvoiceDetailRow(
+                              label: 'Due',
+                              value: DateFormat('EEE, dd MMM yyyy').format(
+                                DateTime.parse(invoice.deadline!),
+                              ),
+                              highlight: dateIsPassed,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      PublicInvoiceActions(
+                        children: [
                           if (isLoggedIn) ...[
                             ElevatedButton(
-                              onPressed: () async {
-                                try {
-                                  final claimerPrivateUserId =
-                                      userController.user.value.privateUserId;
-
-                                  if (claimerPrivateUserId == null) {
-                                    Get.snackbar(
-                                      'Error',
-                                      'Please sign in again before claiming this invoice.',
-                                      backgroundColor: Theme.of(context)
-                                          .colorScheme
-                                          .red
-                                          .withOpacity(0.2),
-                                      colorText:
-                                          Theme.of(context).colorScheme.red,
-                                    );
-                                    return;
-                                  }
-
-                                  final existingInvoice =
-                                      await _digitalInvoiceController
-                                          .getExistingClaimedInvoice(
-                                    publicInvoiceId: invoice.id,
-                                    claimerPrivateUserId: claimerPrivateUserId,
-                                  );
-
-                                  if (existingInvoice != null) {
-                                    final openExisting = await showDialog<bool>(
-                                          context: context,
-                                          builder: (dialogContext) =>
-                                              AlertDialog(
-                                            backgroundColor:
-                                                const Color(0xFF0F172A),
-                                            title: const Text(
-                                              'Invoice Already Claimed',
-                                              style: TextStyle(
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                            content: const Text(
-                                              'You already claimed this invoice earlier. Open your invoices now?',
-                                              style: TextStyle(
-                                                color: Colors.white70,
-                                              ),
-                                            ),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () => Navigator.of(
-                                                        dialogContext,
-                                                        rootNavigator: true)
-                                                    .pop(false),
-                                                child: const Text(
-                                                  'Cancel',
-                                                  style: TextStyle(
-                                                    color: Colors.white70,
-                                                  ),
-                                                ),
-                                              ),
-                                              ElevatedButton(
-                                                onPressed: () => Navigator.of(
-                                                        dialogContext,
-                                                        rootNavigator: true)
-                                                    .pop(true),
-                                                style: ElevatedButton.styleFrom(
-                                                  backgroundColor: Colors.white,
-                                                  foregroundColor:
-                                                      const Color(0xFF0F172A),
-                                                ),
-                                                child: const Text('Open'),
-                                              ),
-                                            ],
-                                          ),
-                                        ) ??
-                                        false;
-
-                                    if (openExisting) {
-                                      Get.offAllNamed('/home-screen');
-                                    }
-                                    return;
-                                  }
-
-                                  final confirmClaim =
-                                      await showDialog<bool>(
-                                            context: context,
-                                            builder: (dialogContext) =>
-                                                AlertDialog(
-                                              backgroundColor:
-                                                  const Color(0xFF0F172A),
-                                              title: const Text(
-                                                'Confirm Invoice Claim',
-                                                style: TextStyle(
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                              content: const Text(
-                                                'Do you want to claim this invoice to your account?',
-                                                style: TextStyle(
-                                                  color: Colors.white70,
-                                                ),
-                                              ),
-                                              actions: [
-                                                TextButton(
-                                                  onPressed: () =>
-                                                      Navigator.of(
-                                                              dialogContext,
-                                                              rootNavigator:
-                                                                  true)
-                                                          .pop(false),
-                                                  child: const Text(
-                                                    'Cancel',
-                                                    style: TextStyle(
-                                                      color: Colors.white70,
-                                                    ),
-                                                  ),
-                                                ),
-                                                ElevatedButton(
-                                                  onPressed: () =>
-                                                      Navigator.of(
-                                                              dialogContext,
-                                                              rootNavigator:
-                                                                  true)
-                                                          .pop(true),
-                                                  style:
-                                                      ElevatedButton.styleFrom(
-                                                    backgroundColor:
-                                                        Colors.white,
-                                                    foregroundColor:
-                                                        const Color(
-                                                            0xFF0F172A),
-                                                  ),
-                                                  child: const Text('Claim'),
-                                                ),
-                                              ],
-                                            ),
-                                          ) ??
-                                          false;
-
-                                  if (!confirmClaim) return;
-
-                                  final claimedInvoice =
-                                      await _digitalInvoiceController
-                                          .claimPublicInvoice(
-                                    token: token,
-                                    claimerPrivateUserId: claimerPrivateUserId,
-                                  );
-
-                                  if (claimedInvoice != null) {
-                                    Get.snackbar(
-                                      'Success',
-                                      'Invoice claimed successfully!',
-                                      backgroundColor: Theme.of(context)
-                                          .colorScheme
-                                          .green
-                                          .withOpacity(0.2),
-                                      colorText:
-                                          Theme.of(context).colorScheme.green,
-                                    );
-
-                                    Future.delayed(const Duration(seconds: 1),
-                                        () {
-                                      Get.offAllNamed('/home-screen');
-                                    });
-                                  }
-                                } catch (e) {
-                                  Get.snackbar(
-                                    'Error',
-                                    e.toString(),
-                                    backgroundColor: Theme.of(context)
-                                        .colorScheme
-                                        .red
-                                        .withOpacity(0.2),
-                                    colorText:
-                                        Theme.of(context).colorScheme.red,
-                                  );
-                                }
-                              },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    Theme.of(context).colorScheme.blue,
-                                foregroundColor: Colors.white,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 18),
-                                elevation: 8,
-                                shadowColor: Theme.of(context)
-                                    .colorScheme
-                                    .blue
-                                    .withOpacity(0.5),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
+                              onPressed: () => _claimInvoice(
+                                context: context,
+                                invoice: invoice,
+                                userController: userController,
+                                invoiceController: invoiceController,
                               ),
-                              child: const Text(
-                                'Claim This Invoice',
-                                style: TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.5,
-                                  color: Colors.white,
-                                ),
-                              ),
+                              child: const Text('Claim this invoice'),
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 10),
                             OutlinedButton(
                               onPressed: () {
                                 Get.to(() => PublicInvoiceView(token: token));
                               },
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.white,
-                                side: const BorderSide(
-                                    color: Colors.white, width: 2),
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 18),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                              ),
-                              child: const Text(
-                                'View Full Details',
-                                style: TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
+                              child: const Text('View full details'),
                             ),
                           ] else ...[
                             ElevatedButton(
@@ -958,58 +441,24 @@ class PublicInvoiceLanding extends HookWidget {
                                   parameters: {'invoice_token': token},
                                 );
                               },
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor:
-                                    Theme.of(context).colorScheme.blue,
-                                foregroundColor: Colors.white,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 18),
-                                elevation: 8,
-                                shadowColor: Theme.of(context)
-                                    .colorScheme
-                                    .blue
-                                    .withOpacity(0.5),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                              ),
-                              child: const Text(
-                                'Sign Up to Claim Invoice',
-                                style: TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
+                              child: const Text('Sign in to claim'),
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 8),
                             TextButton(
                               onPressed: () {
                                 Get.toNamed(
-                                  '/sign-in',
+                                  '/sign-up',
                                   parameters: {'invoice_token': token},
                                 );
                               },
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.white,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 12),
-                              ),
-                              child: const Text(
-                                'Already have an account? Sign In',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  decoration: TextDecoration.underline,
-                                  decorationColor: Colors.white,
-                                ),
+                              child: Text(
+                                'lbl_GoToSignUp'.tr,
                               ),
                             ),
                           ],
-                          const SizedBox(height: 40),
                         ],
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ),
@@ -1020,81 +469,57 @@ class PublicInvoiceLanding extends HookWidget {
     );
   }
 
-  Widget _buildDetailRow(
-    BuildContext context,
-    String label,
-    String value, {
-    bool highlight = false,
-    bool copyable = false,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.darkGray,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Flexible(
-                  child: Text(
-                    value,
-                    style: TextStyle(
-                      color: highlight
-                          ? Theme.of(context).colorScheme.red
-                          : Theme.of(context).colorScheme.dark,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                    textAlign: TextAlign.right,
-                  ),
-                ),
-                if (copyable) ...[
-                  const SizedBox(width: 8),
-                  GestureDetector(
-                    onTap: () async {
-                      await Clipboard.setData(ClipboardData(text: value));
-                      Get.snackbar(
-                        'Copied!',
-                        '$label copied to clipboard',
-                        backgroundColor:
-                            Theme.of(context).colorScheme.blue.withOpacity(0.2),
-                        colorText: Theme.of(context).colorScheme.blue,
-                        duration: const Duration(seconds: 2),
-                        snackPosition: SnackPosition.BOTTOM,
-                        margin: const EdgeInsets.all(16),
-                      );
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color:
-                            Theme.of(context).colorScheme.blue.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: Icon(
-                        Icons.copy,
-                        size: 16,
-                        color: Theme.of(context).colorScheme.blue,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+  Future<void> _claimInvoice({
+    required BuildContext context,
+    required PublicInvoiceModel invoice,
+    required UserController userController,
+    required DigitalInvoiceController invoiceController,
+  }) async {
+    try {
+      final claimerPrivateUserId = userController.user.value.privateUserId;
+      if (claimerPrivateUserId == null) {
+        Get.snackbar(
+          'Sign in needed',
+          'Please sign in again before claiming this invoice.',
+        );
+        return;
+      }
+
+      final existingInvoice = await invoiceController.getExistingClaimedInvoice(
+        publicInvoiceId: invoice.id,
+        claimerPrivateUserId: claimerPrivateUserId,
+      );
+      if (existingInvoice != null) {
+        final openExisting = await showPublicInvoiceConfirm(
+          context: context,
+          title: 'Already claimed',
+          body: 'You already claimed this invoice. Open your bills?',
+          confirmLabel: 'Open',
+        );
+        if (openExisting) Get.offAllNamed('/home-screen');
+        return;
+      }
+
+      final confirmClaim = await showPublicInvoiceConfirm(
+        context: context,
+        title: 'Claim this invoice?',
+        body: 'It will be added to your SlickBills account.',
+        confirmLabel: 'Claim',
+      );
+      if (!confirmClaim) return;
+
+      final claimedInvoice = await invoiceController.claimPublicInvoice(
+        token: token,
+        claimerPrivateUserId: claimerPrivateUserId,
+      );
+      if (claimedInvoice != null) {
+        Get.snackbar('Claimed', 'This invoice is now in your bills.');
+        Future.delayed(const Duration(seconds: 1), () {
+          Get.offAllNamed('/home-screen');
+        });
+      }
+    } catch (e) {
+      Get.snackbar('Could not claim', e.toString());
+    }
   }
 }

@@ -1,324 +1,212 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:get/get.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:slickbill/color_scheme.dart';
-import 'package:slickbill/constants.dart';
 import 'package:slickbill/feature_nearby_transaction/widgets/big_input_amount.dart';
-import 'package:slickbill/feature_self_create/widgets/input_field.dart';
+import 'package:slickbill/feature_nearby_transaction/widgets/invoice_request_fields.dart';
+import 'package:slickbill/shared_widgets/sb_trust_banner.dart';
+import 'package:slickbill/theme/sb_colors.dart';
 
 class QuickShareScreen extends HookWidget {
   final ValueNotifier<String> qrData;
-  final ValueNotifier<String?> publicInvoiceToken;
-  final ValueNotifier<double> receiverUserAmount;
   final TextEditingController descriptionController;
   final TextEditingController dueDateController;
   final TextEditingController referenceNumberController;
   final ValueNotifier<String> category;
-  final ValueNotifier<bool> isCreatingPublicInvoice;
-  final Future<void> Function() createPublicInvoiceForQR;
   final Function(double) changeReceiverAmount;
-  final VoidCallback startReadNfc;
   final VoidCallback scanQR;
 
   const QuickShareScreen({
     super.key,
     required this.qrData,
-    required this.publicInvoiceToken,
-    required this.receiverUserAmount,
     required this.descriptionController,
     required this.dueDateController,
     required this.referenceNumberController,
     required this.category,
-    required this.isCreatingPublicInvoice,
-    required this.createPublicInvoiceForQR,
     required this.changeReceiverAmount,
-    required this.startReadNfc,
     required this.scanQR,
   });
 
   @override
   Widget build(BuildContext context) {
     final qrExpanded = useState(false);
+    final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 80;
 
-    return Scaffold(
-      resizeToAvoidBottomInset: true,
-      body: _buildP2PTab(
-        context: context,
-        qrData: qrData,
-        qrExpanded: qrExpanded,
-        receiverUserAmount: receiverUserAmount,
-        descriptionController: descriptionController,
-        dueDateController: dueDateController,
-        referenceNumberController: referenceNumberController,
-        category: category,
-        changeReceiverAmount: changeReceiverAmount,
-        startReadNfc: startReadNfc,
-        scanQR: scanQR,
-      ),
-    );
-  }
-
-  Widget _buildP2PTab({
-    required BuildContext context,
-    required ValueNotifier<String> qrData,
-    required ValueNotifier<bool> qrExpanded,
-    required ValueNotifier<double> receiverUserAmount,
-    required TextEditingController descriptionController,
-    required TextEditingController dueDateController,
-    required TextEditingController referenceNumberController,
-    required ValueNotifier<String> category,
-    required VoidCallback startReadNfc,
-    required VoidCallback scanQR,
-    required Function(double) changeReceiverAmount,
-  }) {
-    final bool isKeyboardOpen = MediaQuery.of(context).viewInsets.bottom > 100;
-    final colors = Theme.of(context).colorScheme;
-
-    return Column(
-      children: [
-        // Info Banner
-        Container(
-          padding: EdgeInsets.all(16),
-          color: colors.blue.withOpacity(0.1),
-          child: Row(
-            children: [
-              Icon(Icons.info_outline, color: colors.blue),
-              SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Exchange invoices offline with other SlickBill users via QR/NFC',
-                  style: TextStyle(
-                    color: colors.dark,
-                    fontSize: 13,
-                  ),
+    return ColoredBox(
+      color: Colors.transparent,
+      child: Column(
+        children: [
+          if (!keyboardOpen)
+            Container(
+              decoration: BoxDecoration(
+                color: SbColors.surfaceLowest,
+                borderRadius: const BorderRadius.only(
+                  bottomLeft: Radius.circular(SbRadii.md),
+                  bottomRight: Radius.circular(SbRadii.md),
                 ),
+                boxShadow: SbShadows.cardSoft,
               ),
-            ],
-          ),
-        ),
-
-        // Collapsible QR (hidden entirely while keyboard is open)
-        if (!isKeyboardOpen)
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: const BorderRadius.only(
-                bottomLeft: Radius.circular(24),
-                bottomRight: Radius.circular(24),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: colors.blue.withOpacity(0.15),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    onTap: () => qrExpanded.value = !qrExpanded.value,
-                    borderRadius: qrExpanded.value
-                        ? BorderRadius.zero
-                        : const BorderRadius.only(
-                            bottomLeft: Radius.circular(24),
-                            bottomRight: Radius.circular(24),
-                          ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      child: Row(
-                        children: [
-                          FaIcon(
-                            FontAwesomeIcons.qrcode,
-                            size: 16,
-                            color: colors.blue,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              qrExpanded.value
-                                  ? 'Hide QR code'
-                                  : 'Show QR code',
-                              style: TextStyle(
-                                color: colors.dark,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
+              child: Column(
+                children: [
+                  Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => qrExpanded.value = !qrExpanded.value,
+                      borderRadius: qrExpanded.value
+                          ? BorderRadius.zero
+                          : const BorderRadius.only(
+                              bottomLeft: Radius.circular(SbRadii.md),
+                              bottomRight: Radius.circular(SbRadii.md),
+                            ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.qr_code_rounded,
+                              size: 18,
+                              color: SbColors.deepNavy,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                qrExpanded.value
+                                    ? 'Hide QR code'
+                                    : 'Show QR code',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelLarge
+                                    ?.copyWith(
+                                      color: SbColors.onSurface,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                               ),
                             ),
+                            Icon(
+                              qrExpanded.value
+                                  ? Icons.expand_less_rounded
+                                  : Icons.expand_more_rounded,
+                              color: SbColors.onSurfaceVariant,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  AnimatedCrossFade(
+                    firstChild:
+                        const SizedBox(width: double.infinity, height: 0),
+                    secondChild: Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                      child: Column(
+                        children: [
+                          Text(
+                            'Hold this up. They scan it in SlickBills — not Camera.',
+                            textAlign: TextAlign.center,
+                            style:
+                                Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: SbColors.onSurfaceVariant,
+                                    ),
                           ),
-                          Icon(
-                            qrExpanded.value
-                                ? Icons.expand_less
-                                : Icons.expand_more,
-                            color: colors.darkGray,
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius:
+                                  BorderRadius.circular(SbRadii.md),
+                              border: Border.all(
+                                color: SbColors.surfaceContainer,
+                              ),
+                            ),
+                            child: QrImageView(
+                              data: qrData.value.isEmpty
+                                  ? 'slickbills'
+                                  : qrData.value,
+                              version: QrVersions.auto,
+                              size: 140,
+                              gapless: true,
+                              eyeStyle: const QrEyeStyle(
+                                eyeShape: QrEyeShape.square,
+                                color: SbColors.deepNavy,
+                              ),
+                              dataModuleStyle: const QrDataModuleStyle(
+                                dataModuleShape: QrDataModuleShape.square,
+                                color: SbColors.deepNavy,
+                              ),
+                              backgroundColor: Colors.white,
+                            ),
                           ),
                         ],
                       ),
                     ),
+                    crossFadeState: qrExpanded.value
+                        ? CrossFadeState.showSecond
+                        : CrossFadeState.showFirst,
+                    duration: const Duration(milliseconds: 200),
+                    sizeCurve: Curves.easeInOut,
                   ),
-                ),
-                AnimatedCrossFade(
-                  firstChild: const SizedBox(width: double.infinity, height: 0),
-                  secondChild: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                ],
+              ),
+            ),
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(SbSpace.md),
+                    decoration: BoxDecoration(
+                      color: SbColors.surfaceLowest,
+                      borderRadius: BorderRadius.circular(SbRadii.md),
+                      boxShadow: SbShadows.cardSoft,
+                    ),
                     child: Column(
                       children: [
-                        Text(
-                          'Scan with SlickBill app to create invoice',
-                          style: TextStyle(
-                            color: colors.darkGray,
-                            fontSize: 12,
-                          ),
+                        BigInputAmount(
+                          changeReceiverAmount: changeReceiverAmount,
                         ),
-                        const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: colors.blue.withOpacity(0.2),
-                              width: 2,
-                            ),
-                          ),
-                          child: QrImageView(
-                            data: qrData.value.isEmpty
-                                ? 'placeholder'
-                                : qrData.value,
-                            version: QrVersions.auto,
-                            size: 100,
-                            eyeStyle: QrEyeStyle(
-                              eyeShape: QrEyeShape.circle,
-                              color: colors.blue,
-                            ),
-                          ),
+                        const SizedBox(height: 8),
+                        InvoiceRequestFields(
+                          descriptionController: descriptionController,
+                          dueDateController: dueDateController,
+                          referenceNumberController:
+                              referenceNumberController,
+                          category: category.value,
+                          onCategoryChanged: (value) =>
+                              category.value = value,
                         ),
                       ],
                     ),
                   ),
-                  crossFadeState: qrExpanded.value
-                      ? CrossFadeState.showSecond
-                      : CrossFadeState.showFirst,
-                  duration: const Duration(milliseconds: 200),
-                  sizeCurve: Curves.easeInOut,
-                ),
-              ],
-            ),
-          ),
-
-        // Scrollable Form Content
-        Expanded(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Amount Input
-                  BigInputAmount(
-                    changeReceiverAmount: changeReceiverAmount,
-                  ),
-                  SizedBox(height: 24),
-
-                  InputField(
-                    icon: Icons.description,
-                    label: 'Description',
-                    controller: descriptionController,
-                  ),
-                  SizedBox(height: 16),
-
-                  InputField(
-                    icon: Icons.calendar_today,
-                    label: 'Due Date',
-                    controller: dueDateController,
-                    type: TextInputType.datetime,
-                  ),
-                  SizedBox(height: 16),
-
-                  InputField(
-                    icon: Icons.numbers,
-                    label: 'Reference Number',
-                    controller: referenceNumberController,
-                  ),
-                  SizedBox(height: 24),
-
-                  // Category Dropdown
-                  Text(
-                    'Category',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.dark,
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.light,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .darkGray
-                            .withOpacity(0.2),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: OutlinedButton.icon(
+                      onPressed: scanQR,
+                      icon: const Icon(
+                        Icons.qr_code_scanner_rounded,
+                        size: 20,
                       ),
-                    ),
-                    child: DropdownButton<String>(
-                      value: category.value,
-                      isExpanded: true,
-                      underline: SizedBox(),
-                      icon: Icon(Icons.arrow_drop_down),
-                      items: Constants().categories.map((String value) {
-                        return DropdownMenuItem<String>(
-                          value: value,
-                          child: Text(value),
-                        );
-                      }).toList(),
-                      onChanged: (String? newValue) {
-                        if (newValue != null) {
-                          category.value = newValue;
-                        }
-                      },
+                      label: const Text('Scan a SlickBills QR'),
                     ),
                   ),
-                  SizedBox(height: 32),
-
-                  // Action Buttons Row
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: scanQR,
-                          icon: FaIcon(FontAwesomeIcons.qrcode, size: 18),
-                          label: Text('Scan QR'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Theme.of(context).colorScheme.blue,
-                            foregroundColor: Colors.white,
-                            padding: EdgeInsets.symmetric(vertical: 16),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                  const SizedBox(height: 12),
+                  const SbTrustBanner(
+                    variant: SbTrustBannerVariant.p2p,
+                    title: 'SlickBills to SlickBills',
+                    subtitle:
+                        'This QR stays in the app. No public link, no browser page.',
                   ),
                 ],
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

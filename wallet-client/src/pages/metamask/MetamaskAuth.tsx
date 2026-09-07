@@ -1,14 +1,30 @@
 import { WEB3AUTH_NETWORK } from "@web3auth/base";
 import { Web3Auth } from "@web3auth/modal";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import logo from "../../assets/logo_icon.png";
 import { sb } from "../../theme";
 
 type InitState = "idle" | "initializing" | "ready" | "error";
 type AuthState = "idle" | "authenticating" | "authenticated" | "error";
+type PaymentKind = "pay" | "withdraw" | "link";
+
+type PaymentPreview = {
+  amount: string | null;
+  payee: string | null;
+  iban: string | null;
+  ref: string | null;
+  kind: PaymentKind;
+};
+
 const sessionStorageKeys = {
   callbackUri: "sb_metamask_callback_uri",
   flowMode: "sb_metamask_flow_mode",
   signMessage: "sb_metamask_sign_message",
+  amount: "sb_pay_amount",
+  payee: "sb_pay_payee",
+  iban: "sb_pay_iban",
+  ref: "sb_pay_ref",
+  kind: "sb_pay_kind",
 } as const;
 
 declare global {
@@ -19,12 +35,116 @@ declare global {
   }
 }
 
+function readQueryOrSession(key: string, sessionKey: string): string | null {
+  const params = new URLSearchParams(window.location.search);
+  const fromQuery = params.get(key)?.trim();
+  if (fromQuery) return fromQuery;
+  return window.sessionStorage.getItem(sessionKey)?.trim() || null;
+}
+
+function readFlowMode(): "connect" | "sign" {
+  const params = new URLSearchParams(window.location.search);
+  const mode =
+    params.get("mode")?.trim().toLowerCase() ||
+    window.sessionStorage.getItem(sessionStorageKeys.flowMode)?.trim().toLowerCase();
+  return mode === "sign" ? "sign" : "connect";
+}
+
+function readPaymentPreview(): PaymentPreview {
+  const kindRaw = (
+    readQueryOrSession("kind", sessionStorageKeys.kind) || ""
+  ).toLowerCase();
+  const kind: PaymentKind =
+    kindRaw === "withdraw" ? "withdraw" : kindRaw === "pay" ? "pay" : "link";
+
+  return {
+    amount: readQueryOrSession("amount", sessionStorageKeys.amount),
+    payee: readQueryOrSession("payee", sessionStorageKeys.payee),
+    iban: readQueryOrSession("iban", sessionStorageKeys.iban),
+    ref: readQueryOrSession("ref", sessionStorageKeys.ref),
+    kind,
+  };
+}
+
+function persistPaymentPreview(preview: PaymentPreview) {
+  const entries: Array<[string, string | null]> = [
+    [sessionStorageKeys.amount, preview.amount],
+    [sessionStorageKeys.payee, preview.payee],
+    [sessionStorageKeys.iban, preview.iban],
+    [sessionStorageKeys.ref, preview.ref],
+    [sessionStorageKeys.kind, preview.kind],
+  ];
+  for (const [key, value] of entries) {
+    if (value) {
+      window.sessionStorage.setItem(key, value);
+    }
+  }
+}
+
+function clearSessionKeys() {
+  Object.values(sessionStorageKeys).forEach((key) => {
+    window.sessionStorage.removeItem(key);
+  });
+}
+
+function formatAmount(raw: string | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (/^[€$£]/.test(trimmed) || /^EUR\s/i.test(trimmed)) return trimmed;
+  const n = Number(trimmed.replace(",", "."));
+  if (!Number.isFinite(n)) return trimmed;
+  return `€${n.toFixed(2)}`;
+}
+
+function isUserCancel(message: string): boolean {
+  return /user rejected|user denied|user closed|modal closed|closed before|cancelled|canceled/i.test(
+    message,
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 16,
+        padding: "10px 0",
+        borderTop: `1px solid ${sb.outlineVariant}`,
+        fontSize: 14,
+        lineHeight: 1.4,
+      }}
+    >
+      <span style={{ color: sb.onSurfaceVariant }}>{label}</span>
+      <span
+        style={{
+          color: sb.onSurface,
+          fontWeight: 600,
+          textAlign: "right",
+          wordBreak: "break-word",
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
 export function MetamaskAuth() {
   const [initState, setInitState] = useState<InitState>("idle");
   const [authState, setAuthState] = useState<AuthState>("idle");
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isSignFlow] = useState(() => readFlowMode() === "sign");
+  const [paymentPreview] = useState<PaymentPreview>(() => readPaymentPreview());
   const web3AuthRef = useRef<Web3Auth | null>(null);
   const initStartedRef = useRef(false);
   const connectInFlightRef = useRef(false);
@@ -33,8 +153,73 @@ export function MetamaskAuth() {
   const authCompletedRef = useRef(false);
 
   const callbackUri = useRef<string | null>(null);
-  const flowMode = useRef<"connect" | "sign">("connect");
+  const flowMode = useRef<"connect" | "sign">(isSignFlow ? "sign" : "connect");
   const signMessageRef = useRef<string | null>(null);
+  const completeWithProviderRef = useRef<
+    ((provider: unknown) => Promise<void>) | null
+  >(null);
+
+  const amountLabel = formatAmount(paymentPreview.amount);
+  const hasPaymentDetails = Boolean(
+    amountLabel || paymentPreview.payee || paymentPreview.iban,
+  );
+
+  const copy = useMemo(() => {
+    if (!isSignFlow) {
+      return {
+        title: "Connect wallet",
+        subtitle: "Choose how you want to sign in to SlickBills.",
+        cta: "Connect wallet",
+        trust: "Your keys stay in your wallet. SlickBills never stores them.",
+      };
+    }
+    if (paymentPreview.kind === "withdraw") {
+      return {
+        title: "Confirm withdrawal",
+        subtitle: "Review the bank details, then confirm to send euros.",
+        cta: "Confirm withdrawal",
+        trust:
+          "This authorizes a SEPA transfer to your saved bank account. SlickBills never holds your money.",
+      };
+    }
+    if (hasPaymentDetails) {
+      return {
+        title: "Confirm payment",
+        subtitle: "Review the details, then confirm to send euros.",
+        cta: "Confirm payment",
+        trust:
+          "This authorizes a SEPA euro transfer from your Monerium account. SlickBills never holds your money.",
+      };
+    }
+    return {
+      title: "Confirm wallet",
+      subtitle: "Confirm you own this wallet to continue.",
+      cta: "Confirm wallet",
+      trust:
+        "This proves you own the wallet linked to your Monerium euro account.",
+    };
+  }, [hasPaymentDetails, isSignFlow, paymentPreview.kind]);
+
+  const statusCopy = useMemo(() => {
+    if (initState === "initializing") {
+      return isSignFlow
+        ? "Preparing a secure confirmation…"
+        : "Preparing a secure connection…";
+    }
+    if (authState === "authenticating") {
+      return isSignFlow
+        ? "Waiting for you to confirm…"
+        : "Waiting for you to connect…";
+    }
+    if (authState === "authenticated") {
+      return "Confirmed. Returning to SlickBills…";
+    }
+    return null;
+  }, [authState, initState, isSignFlow]);
+
+  useEffect(() => {
+    document.title = `${copy.title} · SlickBills`;
+  }, [copy.title]);
 
   const buildCallbackUrl = useCallback((params: Record<string, string>) => {
     const base = callbackUri.current;
@@ -64,11 +249,8 @@ export function MetamaskAuth() {
 
       try {
         window.location.assign(callbackUrl);
-        window.sessionStorage.removeItem(sessionStorageKeys.callbackUri);
-        window.sessionStorage.removeItem(sessionStorageKeys.flowMode);
-        window.sessionStorage.removeItem(sessionStorageKeys.signMessage);
+        clearSessionKeys();
       } catch {
-        // Ignore failures when callback URL cannot be opened.
         callbackSentRef.current = false;
       }
     },
@@ -83,7 +265,7 @@ export function MetamaskAuth() {
 
       completionInFlightRef.current = true;
       const providerWithRequest = provider as {
-        request?: (args: { method: string }) => Promise<unknown>;
+        request?: (args: { method: string; params?: unknown }) => Promise<unknown>;
         accounts?: unknown;
         selectedAddress?: unknown;
         address?: unknown;
@@ -146,13 +328,13 @@ export function MetamaskAuth() {
             const signed = await providerWithRequest.request({
               method: "personal_sign",
               params: [message, address],
-            } as unknown as { method: string });
+            });
             return typeof signed === "string" ? signed : null;
           } catch {
             const signed = await providerWithRequest.request({
               method: "eth_sign",
               params: [address, message],
-            } as unknown as { method: string });
+            });
             return typeof signed === "string" ? signed : null;
           }
         };
@@ -197,12 +379,23 @@ export function MetamaskAuth() {
             ? { signature, flow: "sign" }
             : {}),
         });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        setErrorMessage(
+          isUserCancel(message)
+            ? "Confirmation was cancelled. You can try again."
+            : message,
+        );
+        setAuthState("error");
+        throw err;
       } finally {
         completionInFlightRef.current = false;
       }
     },
     [returnToCallback],
   );
+
+  completeWithProviderRef.current = completeWithProvider;
 
   const connectAndGetAddress = useCallback(async () => {
     const web3Auth = web3AuthRef.current;
@@ -227,12 +420,19 @@ export function MetamaskAuth() {
       await completeWithProvider(provider);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      setErrorMessage(message);
+      const cancelled = isUserCancel(message);
+      setErrorMessage(
+        cancelled
+          ? "Confirmation was cancelled. You can try again."
+          : message,
+      );
       setAuthState("error");
-      returnToCallback({
-        success: "0",
-        error: message,
-      });
+      if (!cancelled) {
+        returnToCallback({
+          success: "0",
+          error: message,
+        });
+      }
       console.error("[MetaMaskWeb3Auth] login failed", err);
     } finally {
       connectInFlightRef.current = false;
@@ -298,6 +498,7 @@ export function MetamaskAuth() {
             signMessageRef.current,
           );
         }
+        persistPaymentPreview(readPaymentPreview());
 
         const clientId = import.meta.env.VITE_WEB3AUTH_CLIENT_ID as
           | string
@@ -324,6 +525,7 @@ export function MetamaskAuth() {
           web3AuthNetwork: resolvedNetwork,
           uiConfig: {
             uxMode: "redirect",
+            appName: "SlickBills",
           },
           modalConfig: {
             hideWalletDiscovery: false,
@@ -353,9 +555,32 @@ export function MetamaskAuth() {
         await web3Auth.init();
         if (cancelled) return;
 
-        // If Web3Auth cached a previous session (different Slickbill account),
-        // log it out immediately so the modal always shows fresh.
-        if ((web3Auth as unknown as { connected?: boolean }).connected) {
+        const connected = Boolean(
+          (web3Auth as unknown as { connected?: boolean }).connected,
+        );
+        const existingProvider = (
+          web3Auth as unknown as { provider?: unknown }
+        ).provider;
+
+        web3AuthRef.current = web3Auth;
+        setInitState("ready");
+
+        if (
+          flowMode.current === "sign" &&
+          connected &&
+          existingProvider
+        ) {
+          setAuthState("authenticating");
+          try {
+            await completeWithProviderRef.current?.(existingProvider);
+          } catch {
+            setAuthState("error");
+          }
+          return;
+        }
+
+        // Connect (link) flow: always start fresh so the right account is chosen.
+        if (connected) {
           console.log(
             "[MetaMaskWeb3Auth] existing session found — logging out to force fresh login",
           );
@@ -365,12 +590,6 @@ export function MetamaskAuth() {
             // logout may throw if session is already stale; safe to ignore
           }
         }
-
-        web3AuthRef.current = web3Auth;
-        setInitState("ready");
-        console.log("[MetaMaskWeb3Auth] init completed", {
-          network: resolvedNetwork,
-        });
 
         setAuthState("idle");
       } catch (err) {
@@ -383,7 +602,7 @@ export function MetamaskAuth() {
       }
     };
 
-    initAndConnect();
+    void initAndConnect();
 
     return () => {
       cancelled = true;
@@ -425,6 +644,13 @@ export function MetamaskAuth() {
     };
   }, [initState, authState, walletAddress]);
 
+  const showCta =
+    (authState === "idle" || authState === "error") && initState === "ready";
+  const busy =
+    initState === "initializing" ||
+    authState === "authenticating" ||
+    authState === "authenticated";
+
   return (
     <div
       style={{
@@ -435,7 +661,8 @@ export function MetamaskAuth() {
         justifyContent: "center",
         padding: 20,
         boxSizing: "border-box",
-        background: sb.surface,
+        background:
+          "linear-gradient(180deg, #F4FAFB 0%, #EEF6F8 48%, #F7FBFC 100%)",
         color: sb.onSurface,
         fontFamily: "Inter, system-ui, sans-serif",
       }}
@@ -444,41 +671,50 @@ export function MetamaskAuth() {
         style={{
           width: "100%",
           maxWidth: 420,
-          borderRadius: 12,
+          borderRadius: 16,
           border: `1px solid ${sb.outlineVariant}`,
           background: sb.surfaceLowest,
-          boxShadow: "0 2px 12px rgba(0, 52, 83, 0.04)",
+          boxShadow: "0 8px 28px rgba(0, 52, 83, 0.06)",
           padding: 24,
         }}
       >
         <div
           style={{
-            display: "inline-flex",
+            display: "flex",
             alignItems: "center",
-            gap: 8,
-            padding: "6px 10px",
-            borderRadius: 999,
-            background: "rgba(0, 194, 255, 0.12)",
-            color: sb.deepNavy,
-            fontSize: 12,
-            fontWeight: 700,
-            letterSpacing: 0.2,
+            gap: 10,
           }}
         >
-          Web3Auth
+          <img
+            src={logo}
+            alt="SlickBills"
+            width={32}
+            height={32}
+            style={{ borderRadius: 8 }}
+          />
+          <span
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              letterSpacing: 0.2,
+              color: sb.deepNavy,
+            }}
+          >
+            SlickBills
+          </span>
         </div>
 
-        <h2
+        <h1
           style={{
-            margin: "14px 0 0",
+            margin: "18px 0 0",
             fontSize: 24,
             lineHeight: 1.2,
             fontWeight: 700,
             color: sb.onSurface,
           }}
         >
-          Connect wallet
-        </h2>
+          {copy.title}
+        </h1>
         <p
           style={{
             marginTop: 8,
@@ -488,48 +724,65 @@ export function MetamaskAuth() {
             color: sb.onSurfaceVariant,
           }}
         >
-          {flowMode.current === "sign"
-            ? "Open Web3Auth and sign the required Monerium ownership message."
-            : "Open Web3Auth and choose how you want to sign in."}
+          {copy.subtitle}
         </p>
 
-        <div
-          style={{
-            marginTop: 18,
-            padding: 14,
-            borderRadius: 14,
-            border: "1px solid #e2e8f0",
-            background: "#f8fafc",
-            fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-            fontSize: 13,
-            lineHeight: 1.7,
-            color: "#334155",
-          }}
-        >
-          <div>
-            <span style={{ color: "#64748b" }}>init:</span> {initState}
+        {hasPaymentDetails ? (
+          <div
+            style={{
+              marginTop: 20,
+              padding: "16px 16px 6px",
+              borderRadius: 14,
+              border: `1px solid ${sb.outlineVariant}`,
+              background: sb.surface,
+            }}
+          >
+            {amountLabel ? (
+              <div
+                style={{
+                  fontSize: 32,
+                  fontWeight: 700,
+                  letterSpacing: -0.6,
+                  color: sb.deepNavy,
+                  paddingBottom: 12,
+                }}
+              >
+                {amountLabel}
+              </div>
+            ) : null}
+            {paymentPreview.payee ? (
+              <DetailRow
+                label={paymentPreview.kind === "withdraw" ? "To account" : "To"}
+                value={paymentPreview.payee}
+              />
+            ) : null}
+            {paymentPreview.iban ? (
+              <DetailRow label="IBAN" value={paymentPreview.iban} />
+            ) : null}
+            {paymentPreview.ref ? (
+              <DetailRow label="Reference" value={paymentPreview.ref} />
+            ) : null}
           </div>
-          <div>
-            <span style={{ color: "#64748b" }}>auth:</span> {authState}
-          </div>
-          <div>
-            <span style={{ color: "#64748b" }}>address:</span>{" "}
-            {walletAddress ?? "(pending)"}
-          </div>
-        </div>
+        ) : null}
 
-        <p
-          style={{
-            marginTop: 14,
-            marginBottom: 0,
-            fontSize: 13,
-            lineHeight: 1.5,
-            color: "#64748b",
-          }}
-        >
-          Google returns the Web3Auth embedded wallet address. MetaMask and
-          WalletConnect return the connected external wallet address.
-        </p>
+        {statusCopy ? (
+          <div
+            style={{
+              marginTop: 18,
+              width: "100%",
+              borderRadius: 12,
+              border: `1px solid ${sb.outlineVariant}`,
+              background: sb.surface,
+              color: sb.onSurfaceVariant,
+              padding: "14px 16px",
+              fontSize: 14,
+              fontWeight: 600,
+              textAlign: "center",
+            }}
+          >
+            {statusCopy}
+          </div>
+        ) : null}
 
         {authState === "error" && errorMessage ? (
           <div
@@ -548,8 +801,7 @@ export function MetamaskAuth() {
           </div>
         ) : null}
 
-        {(authState === "idle" || authState === "error") &&
-        initState === "ready" ? (
+        {showCta ? (
           <button
             type="button"
             onClick={() => {
@@ -573,43 +825,24 @@ export function MetamaskAuth() {
                 : "0 10px 20px rgba(11, 37, 69, 0.2)",
             }}
           >
-            {isConnecting ? "Opening Web3Auth..." : "Continue with Web3Auth"}
+            {isConnecting ? "Opening confirmation…" : copy.cta}
           </button>
         ) : null}
 
-        {authState === "authenticating" || initState === "initializing" ? (
-          <div
+        {!busy || authState === "authenticated" ? (
+          <p
             style={{
-              marginTop: 18,
-              width: "100%",
-              borderRadius: 12,
-              border: "1px solid #dbe3ef",
-              background: "#f1f5f9",
-              color: "#334155",
-              padding: "14px 16px",
-              fontSize: 14,
-              fontWeight: 600,
+              marginTop: 16,
+              marginBottom: 0,
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: sb.outline,
               textAlign: "center",
             }}
           >
-            {initState === "initializing"
-              ? "Preparing Web3Auth..."
-              : "Waiting for wallet..."}
-          </div>
+            {copy.trust}
+          </p>
         ) : null}
-
-        <p
-          style={{
-            marginTop: 16,
-            marginBottom: 0,
-            fontSize: 12,
-          color: sb.outline,
-          textAlign: "center",
-          display: "none",
-          }}
-        >
-          Route: /wallet/metamask-auth
-        </p>
       </div>
     </div>
   );

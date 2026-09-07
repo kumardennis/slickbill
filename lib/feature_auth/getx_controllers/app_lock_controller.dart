@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/services/biometric_auth_service.dart';
+import 'package:slickbill/services/sb_feedback.dart';
 
 class AppLockController extends GetxController with WidgetsBindingObserver {
   static const gracePeriod = Duration(seconds: 12);
+  static const _externalAuthTimeout = Duration(minutes: 15);
+  static const _postAuthLifecycleGrace = Duration(milliseconds: 800);
 
   final BiometricAuthService _auth = BiometricAuthService();
 
@@ -13,6 +18,9 @@ class AppLockController extends GetxController with WidgetsBindingObserver {
   final routeEpoch = 0.obs;
 
   DateTime? _backgroundedAt;
+  int _externalAuthDepth = 0;
+  DateTime? _externalAuthUntil;
+  DateTime? _ignoreLifecycleUntil;
 
   static void markInteractiveLogin() {
     if (!Get.isRegistered<AppLockController>()) return;
@@ -30,6 +38,18 @@ class AppLockController extends GetxController with WidgetsBindingObserver {
     return Get.find<AppLockController>()._confirm(reason);
   }
 
+  /// Wallet-client / SFSafariView / Web3Auth leave the Flutter view.
+  /// Returning from that must not re-lock — Face ID already confirmed the action.
+  static void beginExternalAuthSession() {
+    if (!Get.isRegistered<AppLockController>()) return;
+    Get.find<AppLockController>()._beginExternalAuthSession();
+  }
+
+  static void endExternalAuthSession() {
+    if (!Get.isRegistered<AppLockController>()) return;
+    Get.find<AppLockController>()._endExternalAuthSession();
+  }
+
   void unlockAfterInteractiveLogin() {
     isUnlocked.value = true;
     _backgroundedAt = null;
@@ -39,6 +59,9 @@ class AppLockController extends GetxController with WidgetsBindingObserver {
     isUnlocked.value = false;
     isAuthenticating.value = false;
     _backgroundedAt = null;
+    _externalAuthDepth = 0;
+    _externalAuthUntil = null;
+    _ignoreLifecycleUntil = null;
   }
 
   void onRouteChanged() => routeEpoch.value++;
@@ -55,10 +78,54 @@ class AppLockController extends GetxController with WidgetsBindingObserver {
     super.onClose();
   }
 
+  bool get _inExternalAuthSession {
+    if (_externalAuthDepth <= 0) return false;
+    final until = _externalAuthUntil;
+    if (until != null && DateTime.now().isAfter(until)) {
+      _externalAuthDepth = 0;
+      _externalAuthUntil = null;
+      return false;
+    }
+    return true;
+  }
+
+  bool get _shouldIgnoreLifecycle {
+    if (isAuthenticating.value) return true;
+    final ignoreUntil = _ignoreLifecycleUntil;
+    if (ignoreUntil != null && DateTime.now().isBefore(ignoreUntil)) {
+      return true;
+    }
+    return _inExternalAuthSession;
+  }
+
+  void _beginExternalAuthSession() {
+    _externalAuthDepth++;
+    _externalAuthUntil = DateTime.now().add(_externalAuthTimeout);
+    _backgroundedAt = null;
+  }
+
+  void _endExternalAuthSession() {
+    if (_externalAuthDepth > 0) _externalAuthDepth--;
+    if (_externalAuthDepth == 0) {
+      _externalAuthUntil = null;
+    }
+    _backgroundedAt = null;
+  }
+
+  void _absorbAuthLifecycle() {
+    _backgroundedAt = null;
+    _ignoreLifecycleUntil = DateTime.now().add(_postAuthLifecycleGrace);
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (kIsWeb) return;
-    if (isAuthenticating.value) return;
+    if (_shouldIgnoreLifecycle) {
+      if (state == AppLifecycleState.resumed) {
+        _backgroundedAt = null;
+      }
+      return;
+    }
 
     switch (state) {
       case AppLifecycleState.inactive:
@@ -84,7 +151,7 @@ class AppLockController extends GetxController with WidgetsBindingObserver {
     final result = await _authenticate(reason);
     if (result == DeviceAuthResult.success) {
       isUnlocked.value = true;
-      _backgroundedAt = null;
+      _absorbAuthLifecycle();
     }
     return result;
   }
@@ -99,7 +166,17 @@ class AppLockController extends GetxController with WidgetsBindingObserver {
 
   Future<bool> _confirm(String reason) async {
     final result = await _authenticate(reason);
-    return result == DeviceAuthResult.success;
+    if (result == DeviceAuthResult.success) {
+      isUnlocked.value = true;
+      _absorbAuthLifecycle();
+      return true;
+    }
+    if (result == DeviceAuthResult.failed ||
+        result == DeviceAuthResult.lockedOut ||
+        result == DeviceAuthResult.unavailable) {
+      unawaited(SbFeedback.error());
+    }
+    return false;
   }
 
   Future<DeviceAuthResult> _authenticate(String reason) async {

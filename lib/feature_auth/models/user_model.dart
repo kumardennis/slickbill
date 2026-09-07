@@ -188,7 +188,7 @@ class ClientUserModel {
       fullName: json['fullName'] as String?,
       publicName: json['publicName'] as String?,
       isPrivate: json['isPrivate'] as bool? ?? true,
-      isBusiness: json['isBusiness'] as bool? ?? false,
+      isBusiness: isBusinessFromDb(json['isBusiness']),
       strigaUserId: json['strigaUserId'] as String?,
       strigaWalletId: json['strigaWalletId'] as String?,
       cdpWalletId: json['cdpWalletId'] as String?,
@@ -270,6 +270,15 @@ class ClientUserModel {
       metamaskWalletAddress:
           metamaskWalletAddress ?? this.metamaskWalletAddress,
     );
+  }
+
+  /// Postgres/PostgREST may return bool, 0/1, or "t"/"true".
+  static bool isBusinessFromDb(dynamic value) {
+    return value == true ||
+        value == 1 ||
+        value == 'true' ||
+        value == 't' ||
+        value == '1';
   }
 
   /// Name shown on requests: public business name, else first + last.

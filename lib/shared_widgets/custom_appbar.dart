@@ -137,7 +137,7 @@ class CustomAppbar extends HookWidget implements PreferredSizeWidget {
           ),
         ],
         bottom: tabBar,
-        backgroundColor: SbColors.surface.withValues(alpha: 0.88),
+        backgroundColor: SbColors.surface.withValues(alpha: 0.55),
         elevation: 0,
         shadowColor: Colors.black.withValues(alpha: 0.04),
         surfaceTintColor: Colors.transparent,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -7,10 +9,12 @@ import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/models/user_model.dart';
+import 'package:slickbill/feature_auth/services/metamask_wallet_service.dart';
 import 'package:slickbill/feature_auth/services/monerium_service.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/payment_setup_controller.dart';
 import 'package:slickbill/feature_dashboard/screens/add_ibans.dart';
 import 'package:slickbill/shared_widgets/custom_appbar.dart';
+import 'package:slickbill/services/sb_feedback.dart';
 
 class AddWithdrawMoneyScreen extends HookWidget {
   final bool startOnWithdraw;
@@ -269,7 +273,9 @@ class AddWithdrawMoneyScreen extends HookWidget {
       );
       if (!confirmed) return;
 
+      unawaited(SbFeedback.medium());
       isWithdrawing.value = true;
+      AppLockController.beginExternalAuthSession();
       try {
         await MoneriumService.ensureConnected(
           userId: userId,
@@ -338,6 +344,7 @@ class AddWithdrawMoneyScreen extends HookWidget {
         }
 
         if (state == 'rejected') {
+          unawaited(SbFeedback.error());
           Get.snackbar(
             'Withdrawal rejected',
             'Monerium rejected this transfer. Check the amount and try again.',
@@ -349,6 +356,7 @@ class AddWithdrawMoneyScreen extends HookWidget {
 
         amountController.clear();
         await loadMoneriumData();
+        unawaited(SbFeedback.medium());
         Get.snackbar(
           state == 'processed' ? 'Withdrawal sent' : 'Withdrawal submitted',
           state == 'processed'
@@ -360,6 +368,10 @@ class AddWithdrawMoneyScreen extends HookWidget {
         );
       } catch (error) {
         debugPrint('[AddWithdraw] withdraw failed: $error');
+        if (MetamaskWalletService.isCancelled(error)) {
+          return;
+        }
+        unawaited(SbFeedback.error());
         Get.snackbar(
           'Withdrawal failed',
           'Could not complete the transfer. Reconnect Monerium and try again.',
@@ -367,6 +379,7 @@ class AddWithdrawMoneyScreen extends HookWidget {
           colorText: Colors.white,
         );
       } finally {
+        AppLockController.endExternalAuthSession();
         isWithdrawing.value = false;
       }
     }

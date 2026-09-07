@@ -12,6 +12,7 @@ import 'package:slickbill/shared_screens/received_invoice.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
 import 'package:slickbill/core/services/invoice_toast_coordinator.dart';
+import 'package:slickbill/services/sb_feedback.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PushNotificationService {
@@ -302,6 +303,10 @@ class PushNotificationService {
 
     if (title == null || body == null) return;
 
+    if (type == 'NEW_SLICKBILL' || type == 'invoice_received') {
+      unawaited(SbFeedback.received());
+    }
+
     // Pay flow already shows a local "Payment Initiated" toast.
     if (type == 'SLICKBILL_PROCESSING' ||
         type == 'monerium_payment_processing') {
@@ -319,6 +324,7 @@ class PushNotificationService {
       if (Get.isRegistered<DigitalInvoiceController>()) {
         Get.find<DigitalInvoiceController>().requestSentListRefresh();
       }
+      unawaited(SbFeedback.settled());
     } else if (type == 'SLICKBILL_PAYMENT_SUCCESS') {
       InvoiceToastCoordinator.notifyPayerPaidInApp(invoiceId: invoiceId);
       return;

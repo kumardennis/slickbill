@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,6 +7,7 @@ import 'package:get/get.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/services/biometric_auth_service.dart';
+import 'package:slickbill/services/sb_feedback.dart';
 import 'package:slickbill/theme/sb_colors.dart';
 
 class AppLockGate extends StatelessWidget {
@@ -75,15 +78,22 @@ class _AppLockOverlayState extends State<AppLockOverlay> {
     if (!mounted) return;
 
     if (availability == DeviceAuthResult.unavailable) {
+      unawaited(SbFeedback.error());
       setState(() => _lastResult = DeviceAuthResult.unavailable);
       return;
     }
 
     final result = await _lock.unlock(reason: 'lbl_UnlockToContinue'.tr);
     if (!mounted) return;
-    if (result != DeviceAuthResult.success) {
-      setState(() => _lastResult = result);
+    if (result == DeviceAuthResult.success) {
+      unawaited(SbFeedback.confirm());
+      return;
     }
+    if (result == DeviceAuthResult.failed ||
+        result == DeviceAuthResult.lockedOut) {
+      unawaited(SbFeedback.error());
+    }
+    setState(() => _lastResult = result);
   }
 
   Future<void> _signOut() async {

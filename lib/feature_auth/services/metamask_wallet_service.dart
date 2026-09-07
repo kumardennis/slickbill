@@ -1,8 +1,88 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/services/native_web3auth_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+class WalletClientCancelledException implements Exception {
+  WalletClientCancelledException([this.message = 'Payment cancelled']);
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
+/// Payment summary shown on the wallet-client confirm page.
+/// IBAN is masked before it is put in the URL.
+class WalletClientPaymentPreview {
+  const WalletClientPaymentPreview({
+    required this.kind,
+    this.amount,
+    this.payee,
+    this.maskedIban,
+    this.reference,
+  });
+
+  /// `pay`, `withdraw`, or `link`.
+  final String kind;
+  final String? amount;
+  final String? payee;
+  final String? maskedIban;
+  final String? reference;
+
+  Map<String, String> toQueryParameters() {
+    return {
+      'kind': kind,
+      if (amount != null && amount!.trim().isNotEmpty) 'amount': amount!.trim(),
+      if (payee != null && payee!.trim().isNotEmpty) 'payee': payee!.trim(),
+      if (maskedIban != null && maskedIban!.trim().isNotEmpty)
+        'iban': maskedIban!.trim(),
+      if (reference != null && reference!.trim().isNotEmpty)
+        'ref': reference!.trim(),
+    };
+  }
+
+  static String maskIban(String iban) {
+    final compact = iban.replaceAll(RegExp(r'\s+'), '').toUpperCase();
+    if (compact.length < 8) return compact;
+    return '${compact.substring(0, 4)} •••• ${compact.substring(compact.length - 4)}';
+  }
+
+  static WalletClientPaymentPreview fromOrder(
+    Map<String, dynamic> order, {
+    required String kind,
+  }) {
+    var payee = '';
+    var iban = '';
+    final counterpart = order['counterpart'];
+    if (counterpart is Map) {
+      final details = counterpart['details'];
+      if (details is Map) {
+        payee =
+            '${details['firstName'] ?? ''} ${details['lastName'] ?? ''}'.trim();
+        if (payee.isEmpty) {
+          payee = (details['companyName'] ?? details['name'] ?? '')
+              .toString()
+              .trim();
+        }
+      }
+      final identifier = counterpart['identifier'];
+      if (identifier is Map) {
+        iban = identifier['iban']?.toString() ?? '';
+      }
+    }
+
+    return WalletClientPaymentPreview(
+      kind: kind,
+      amount: order['amount']?.toString(),
+      payee: payee.isEmpty ? null : payee,
+      maskedIban: iban.isEmpty ? null : maskIban(iban),
+      reference: order['referenceNumber']?.toString(),
+    );
+  }
+}
 
 class MetamaskWalletService {
   // Toggle via --dart-define=WEB3AUTH_MODE=redirect|native (default is redirect)
@@ -24,6 +104,9 @@ class MetamaskWalletService {
   static String? _lastConnectedAddress;
   static Completer<String?>? _pendingAuthCompleter;
   static Completer<String>? _pendingSignCompleter;
+  static _WalletClientLifecycleObserver? _lifecycleObserver;
+  static Timer? _resumeCancelTimer;
+  static bool _leftForWalletClient = false;
 
   static String _callbackUriForPlatform() {
     if (kIsWeb) {
@@ -59,6 +142,89 @@ class MetamaskWalletService {
     debugPrint('[MetaMaskWebViewFlow] $message');
   }
 
+  static bool isCancelled(Object error) {
+    if (error is WalletClientCancelledException) return true;
+    final text = error.toString().toLowerCase();
+    return text.contains('cancelled') || text.contains('canceled');
+  }
+
+  static void _ensureLifecycleWatch() {
+    if (_lifecycleObserver != null) return;
+    _lifecycleObserver = _WalletClientLifecycleObserver();
+    WidgetsBinding.instance.addObserver(_lifecycleObserver!);
+  }
+
+  static bool get _hasPendingFlow {
+    final sign = _pendingSignCompleter;
+    final auth = _pendingAuthCompleter;
+    return (sign != null && !sign.isCompleted) ||
+        (auth != null && !auth.isCompleted);
+  }
+
+  static void _onAppLifecycle(AppLifecycleState state) {
+    switch (state) {
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.hidden:
+      case AppLifecycleState.paused:
+        if (_hasPendingFlow) {
+          _leftForWalletClient = true;
+        }
+        break;
+      case AppLifecycleState.resumed:
+        if (!_leftForWalletClient || !_hasPendingFlow) {
+          return;
+        }
+        _resumeCancelTimer?.cancel();
+        _resumeCancelTimer = Timer(const Duration(milliseconds: 800), () {
+          if (!_hasPendingFlow) return;
+          _log('wallet-client closed without callback — treating as cancel');
+          cancelPendingFlows();
+        });
+        break;
+      case AppLifecycleState.detached:
+        break;
+    }
+  }
+
+  static void cancelPendingFlows([String message = 'Payment cancelled']) {
+    _resumeCancelTimer?.cancel();
+    _resumeCancelTimer = null;
+    _leftForWalletClient = false;
+
+    final sign = _pendingSignCompleter;
+    if (sign != null && !sign.isCompleted) {
+      sign.completeError(WalletClientCancelledException(message));
+    }
+    _pendingSignCompleter = null;
+
+    final auth = _pendingAuthCompleter;
+    if (auth != null && !auth.isCompleted) {
+      auth.completeError(WalletClientCancelledException(message));
+    }
+    _pendingAuthCompleter = null;
+
+    unawaited(_closeWalletTab());
+  }
+
+  static void _abortStalePending() {
+    _resumeCancelTimer?.cancel();
+    _resumeCancelTimer = null;
+    _leftForWalletClient = false;
+
+    final sign = _pendingSignCompleter;
+    if (sign != null && !sign.isCompleted) {
+      sign.completeError(WalletClientCancelledException());
+    }
+    _pendingSignCompleter = null;
+
+    final auth = _pendingAuthCompleter;
+    if (auth != null && !auth.isCompleted) {
+      auth.completeError(WalletClientCancelledException());
+    }
+    _pendingAuthCompleter = null;
+    unawaited(_closeWalletTab());
+  }
+
   static Future<void> _closeWalletTab() async {
     try {
       await closeInAppWebView();
@@ -67,6 +233,8 @@ class MetamaskWalletService {
 
   /// Chrome Custom Tab (Android) / Safari View (iOS). Full Chrome only if that fails.
   static Future<bool> _openWalletClientTab(Uri uri) async {
+    _ensureLifecycleWatch();
+
     if (kIsWeb) {
       return launchUrl(uri, mode: LaunchMode.platformDefault);
     }
@@ -90,6 +258,9 @@ class MetamaskWalletService {
       return;
     }
 
+    _resumeCancelTimer?.cancel();
+    _resumeCancelTimer = null;
+    _leftForWalletClient = false;
     unawaited(_closeWalletTab());
     _log('onAuthCallbackUri() received: $uri');
 
@@ -165,10 +336,7 @@ class MetamaskWalletService {
       );
     }
 
-    if (_pendingAuthCompleter != null && !_pendingAuthCompleter!.isCompleted) {
-      _log('connectWalletAddress() auth already in progress');
-      return _pendingAuthCompleter!.future;
-    }
+    _abortStalePending();
 
     final completer = Completer<String?>();
     _pendingAuthCompleter = completer;
@@ -184,9 +352,11 @@ class MetamaskWalletService {
 
     _log('opening wallet connect in custom tab: $authUri');
 
+    AppLockController.beginExternalAuthSession();
     final opened = await _openWalletClientTab(authUri);
 
     if (!opened) {
+      AppLockController.endExternalAuthSession();
       _pendingAuthCompleter = null;
       throw Exception('Unable to open wallet connect');
     }
@@ -200,8 +370,10 @@ class MetamaskWalletService {
       _log('connectWalletAddress() received address');
       return address;
     } finally {
+      AppLockController.endExternalAuthSession();
       if (identical(_pendingAuthCompleter, completer)) {
         _pendingAuthCompleter = null;
+        _leftForWalletClient = false;
       }
     }
   }
@@ -209,6 +381,7 @@ class MetamaskWalletService {
   static Future<String> signAddressOwnershipMessage({
     required String address,
     String message = moneriumOwnershipMessage,
+    WalletClientPaymentPreview? preview,
   }) async {
     if (useNativeFlow) {
       return NativeWeb3AuthService.signAddressOwnershipMessage(
@@ -217,10 +390,7 @@ class MetamaskWalletService {
       );
     }
 
-    if (_pendingSignCompleter != null && !_pendingSignCompleter!.isCompleted) {
-      _log('signAddressOwnershipMessage() signing already in progress');
-      return _pendingSignCompleter!.future;
-    }
+    _abortStalePending();
 
     final completer = Completer<String>();
     _pendingSignCompleter = completer;
@@ -233,14 +403,17 @@ class MetamaskWalletService {
         'address': address,
         'sign_message': message,
         'callback_uri': _callbackUriForPlatform(),
+        ...?preview?.toQueryParameters(),
       },
     );
 
     _log('opening payment sign in custom tab: $signUri');
 
+    AppLockController.beginExternalAuthSession();
     final opened = await _openWalletClientTab(signUri);
 
     if (!opened) {
+      AppLockController.endExternalAuthSession();
       _pendingSignCompleter = null;
       throw Exception('Unable to open payment signing');
     }
@@ -253,8 +426,10 @@ class MetamaskWalletService {
       _log('signAddressOwnershipMessage() received signature');
       return signature;
     } finally {
+      AppLockController.endExternalAuthSession();
       if (identical(_pendingSignCompleter, completer)) {
         _pendingSignCompleter = null;
+        _leftForWalletClient = false;
       }
     }
   }
@@ -266,5 +441,12 @@ class MetamaskWalletService {
 
     _log('getWalletAddress() cached=${_lastConnectedAddress != null}');
     return _lastConnectedAddress;
+  }
+}
+
+class _WalletClientLifecycleObserver with WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    MetamaskWalletService._onAppLifecycle(state);
   }
 }

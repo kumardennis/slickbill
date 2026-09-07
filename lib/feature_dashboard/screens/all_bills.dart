@@ -13,7 +13,6 @@ import 'package:slickbill/feature_navigation/getx_controllers/navigation_control
 import 'package:slickbill/feature_trashboard/screens/all_trash_bills.dart';
 import 'package:slickbill/shared_widgets/custom_appbar.dart';
 import 'package:slickbill/shared_widgets/sb_segmented_control.dart';
-import 'package:slickbill/theme/sb_colors.dart';
 
 class AllBills extends HookWidget {
   @override
@@ -44,7 +43,7 @@ class AllBills extends HookWidget {
     }, [tabController]);
 
     return Scaffold(
-      backgroundColor: SbColors.surface,
+      backgroundColor: Colors.transparent,
       appBar: CustomAppbar(
         title: 'hd_Bills',
         showBrand: true,

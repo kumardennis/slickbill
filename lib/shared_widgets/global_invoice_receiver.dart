@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -11,6 +12,7 @@ import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
 import '../feature_navigation/getx_controllers/navigation_controller.dart';
 import '../feature_send/utils/send_invoices_class.dart';
 import '../shared_utils/scanned_qr_router.dart';
+import '../services/sb_feedback.dart';
 
 class GlobalReceiveService {
   static void showReceiveOptions(BuildContext context) {
@@ -248,15 +250,23 @@ class GlobalReceiveService {
         throw Exception('Failed to create slickbill from QR code.');
       }
 
-      final invoices = await receivedInvoicesClass.getPrivateReceivedInvoices(
-          id: int.parse(invoiceId), silent: true);
+      final parsedId = int.tryParse(invoiceId);
+      final invoices = parsedId == null
+          ? null
+          : await receivedInvoicesClass.getPrivateReceivedInvoices(
+              id: parsedId,
+              silent: true,
+            );
 
       navigationController.changeIndex(0);
 
+      unawaited(SbFeedback.received());
       // FCM NEW_SLICKBILL ("X sent you a slickbill") is the user-facing toast.
-      return invoices?.first;
+      if (invoices == null || invoices.isEmpty) return null;
+      return invoices.first;
     } catch (e) {
       print('Error parsing QR code: $e');
+      unawaited(SbFeedback.error());
       Get.snackbar(
         'Error',
         e.toString().replaceFirst('Exception: ', ''),
@@ -299,6 +309,8 @@ class _GlobalQrScannerPageState extends State<_GlobalQrScannerPage> {
       _isProcessing = false;
       return;
     }
+
+    unawaited(SbFeedback.confirm());
 
     try {
       await _scannerController.stop();

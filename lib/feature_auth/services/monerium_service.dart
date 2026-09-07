@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/services/app_callback_in_app_browser.dart';
 import 'package:slickbill/feature_auth/services/metamask_wallet_service.dart';
 import 'package:slickbill/services/coinbase/coinbase_service.dart';
@@ -354,6 +355,7 @@ class MoneriumService {
     final connectFuture = (() async {
       final completer = Completer<Map<String, dynamic>>();
       _pendingOAuthCompleter = completer;
+      var openedAuthTab = false;
 
       try {
         if (!forceLogin) {
@@ -386,6 +388,8 @@ class MoneriumService {
           );
 
           _log('Opening Monerium SIWE flow');
+          openedAuthTab = true;
+          AppLockController.beginExternalAuthSession();
           final opened = await _openAuthTab(siweUri);
 
           if (!opened) {
@@ -449,6 +453,8 @@ class MoneriumService {
         }
 
         _log('Opening Monerium OAuth');
+        openedAuthTab = true;
+        AppLockController.beginExternalAuthSession();
         final opened = await _openAuthTab(Uri.parse(authUrl));
 
         if (!opened) {
@@ -485,6 +491,9 @@ class MoneriumService {
         _lastOAuthMessage = null;
         return callbackResult;
       } finally {
+        if (openedAuthTab) {
+          AppLockController.endExternalAuthSession();
+        }
         if (identical(_pendingOAuthCompleter, completer)) {
           _pendingOAuthCompleter = null;
         }
@@ -1183,6 +1192,7 @@ class MoneriumService {
     final signature = await MetamaskWalletService.signAddressOwnershipMessage(
       address: walletAddress,
       message: resolvedMessage,
+      preview: WalletClientPaymentPreview.fromOrder(order, kind: 'pay'),
     );
 
     final signedOrder = <String, dynamic>{
@@ -1235,6 +1245,7 @@ class MoneriumService {
     final signature = await MetamaskWalletService.signAddressOwnershipMessage(
       address: walletAddress,
       message: resolvedMessage,
+      preview: WalletClientPaymentPreview.fromOrder(order, kind: 'withdraw'),
     );
 
     final signedOrder = <String, dynamic>{

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
@@ -9,6 +10,7 @@ import 'package:slickbill/feature_auth/getx_controllers/current_bank_controller.
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/models/user_model.dart';
 import 'package:slickbill/core/services/invoice_toast_coordinator.dart';
+import 'package:slickbill/services/sb_feedback.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/intent_controller.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/payment_setup_controller.dart';
@@ -20,6 +22,7 @@ import 'package:slickbill/shared_widgets/global_invoice_receiver.dart';
 import 'package:slickbill/feature_loyalty/getx_controllers/customer_active_visit_controller.dart';
 import 'package:slickbill/feature_loyalty/getx_controllers/merchant_open_sessions_controller.dart';
 import 'package:slickbill/shared_widgets/sb_bottom_nav.dart';
+import 'package:slickbill/shared_widgets/sb_page_background.dart';
 import 'package:slickbill/theme/sb_colors.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart' as launcher;
@@ -109,6 +112,7 @@ class HomeScreen extends HookWidget {
                     return;
                   }
                   invoiceController.requestSentListRefresh();
+                  unawaited(SbFeedback.settled());
                 }
 
                 if (Get.isSnackbarOpen) {
@@ -286,8 +290,10 @@ class HomeScreen extends HookWidget {
     }
 
     return Scaffold(
-      backgroundColor: SbColors.surface,
-      body: Obx(() => _pages[navigationController.currentIndex.value]),
+      backgroundColor: Colors.transparent,
+      body: SbPageBackground(
+        child: Obx(() => _pages[navigationController.currentIndex.value]),
+      ),
       bottomNavigationBar: Obx(
         () => SbBottomNav(
           currentIndex: navigationController.currentIndex.value,
@@ -296,7 +302,10 @@ class HomeScreen extends HookWidget {
       ),
       floatingActionButton: FloatingActionButton(
         heroTag: 'receive',
-        onPressed: () => GlobalReceiveService.showReceiveOptions(context),
+        onPressed: () {
+          unawaited(SbFeedback.selection());
+          GlobalReceiveService.showReceiveOptions(context);
+        },
         backgroundColor: SbColors.electricCyan,
         foregroundColor: SbColors.deepNavy,
         elevation: 2,

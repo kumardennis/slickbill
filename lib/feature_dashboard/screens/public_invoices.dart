@@ -9,12 +9,13 @@ import 'package:slickbill/feature_dashboard/models/invoice_list_query.dart';
 import 'package:slickbill/feature_dashboard/widgets/invoice_list_filter_bar.dart';
 import 'package:slickbill/feature_dashboard/utils/invoice_csv_exporter.dart';
 import 'package:slickbill/feature_dashboard/widgets/sent_public_invoice_sheet.dart';
+import 'package:slickbill/feature_auth/utils/money_formatter.dart';
 import 'package:slickbill/shared_widgets/sb_dark_surface_theme.dart';
+import 'package:slickbill/shared_widgets/sb_qr_panel.dart';
+import 'package:slickbill/theme/sb_colors.dart';
 import 'package:slickbill/feature_public/models/public_invoice_model.dart';
 import 'package:flutter/services.dart';
 import 'package:slickbill/feature_dashboard/widgets/sent_invoice_sheet.dart';
-import 'package:qr_flutter/qr_flutter.dart';
-// ✅ Add this import
 
 class PublicInvoices extends HookWidget {
   PublicInvoices({super.key});
@@ -132,247 +133,99 @@ class PublicInvoices extends HookWidget {
       );
     }
 
-    // ✅ Updated QR code dialog function with brand colors
     void showQRCode(
         BuildContext context, String token, String description, double amount) {
       final publicLink = 'https://app.slickbills.com/bill/$token';
 
       Get.dialog(
         Dialog(
+          backgroundColor: SbColors.surfaceLowest,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(SbRadii.md),
           ),
-          child: Container(
+          child: ConstrainedBox(
             constraints: BoxConstraints(
               maxHeight: MediaQuery.of(context).size.height * 0.85,
             ),
             child: SingleChildScrollView(
               child: Padding(
-                padding: const EdgeInsets.all(24),
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Header
                     Row(
                       children: [
-                        Container(
-                          padding: EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .blue
-                                .withOpacity(0.15), // ✅ Blue
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Icon(
-                            Icons.qr_code_2,
-                            color: Theme.of(context).colorScheme.blue, // ✅ Blue
-                            size: 28,
-                          ),
-                        ),
-                        SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Public Invoice QR',
+                                description,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
                                 style: Theme.of(context)
                                     .textTheme
-                                    .titleLarge
+                                    .titleMedium
                                     ?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                      color: Theme.of(context).colorScheme.dark,
+                                      color: SbColors.onSurface,
+                                      fontWeight: FontWeight.w700,
                                     ),
                               ),
-                              SizedBox(height: 2),
+                              const SizedBox(height: 2),
                               Text(
-                                'Anyone can scan to view',
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.darkGray,
-                                  fontSize: 13,
-                                ),
+                                FormatNumber().formatMoney(amount),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                      color: SbColors.onSurface,
+                                    ),
                               ),
                             ],
                           ),
                         ),
                         IconButton(
                           onPressed: () => Get.back(),
-                          icon: Icon(Icons.close),
-                          color: Theme.of(context).colorScheme.darkGray,
+                          icon: const Icon(Icons.close_rounded),
+                          color: SbColors.onSurfaceVariant,
                         ),
                       ],
                     ),
-                    SizedBox(height: 24),
-
-                    // Invoice Info
-                    Container(
-                      padding: EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.light,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .gray
-                              .withOpacity(0.3),
-                        ),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            description,
-                            style:
-                                Theme.of(context).textTheme.bodyLarge?.copyWith(
-                                      fontWeight: FontWeight.w600,
-                                      color: Theme.of(context).colorScheme.dark,
-                                    ),
-                            textAlign: TextAlign.center,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            '€${amount.toStringAsFixed(2)}',
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineMedium
-                                ?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .blue, // ✅ Blue for amount
-                                ),
-                          ),
-                        ],
+                    const SizedBox(height: 16),
+                    SbQrPanel(
+                      data: publicLink,
+                      title: 'Public QR',
+                      caption:
+                          'Anyone can scan this. Opens in SlickBills, or the web.',
+                      size: 200,
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Clipboard.setData(ClipboardData(text: publicLink));
+                          Get.snackbar(
+                            'Copied',
+                            'Public link is on the clipboard.',
+                            snackPosition: SnackPosition.BOTTOM,
+                            margin: const EdgeInsets.all(16),
+                          );
+                        },
+                        icon: const Icon(Icons.link_rounded, size: 18),
+                        label: const Text('Copy link'),
                       ),
                     ),
-                    SizedBox(height: 24),
-
-                    // QR Code
-                    Container(
-                      padding: EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .lighterBlue
-                              .withOpacity(0.3), // ✅ Lighter blue
-                          width: 2,
-                        ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        onPressed: () => Get.back(),
+                        child: const Text('Done'),
                       ),
-                      child: QrImageView(
-                        data: publicLink,
-                        version: QrVersions.auto,
-                        size: 220,
-                        eyeStyle: QrEyeStyle(
-                          eyeShape: QrEyeShape.circle,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .blue, // ✅ Blue QR eyes
-                        ),
-                        dataModuleStyle: QrDataModuleStyle(
-                          dataModuleShape: QrDataModuleShape.circle,
-                          color: Theme.of(context).colorScheme.dark,
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 24),
-
-                    // Info text
-                    Container(
-                      padding: EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .lighterBlue
-                            .withOpacity(0.1), // ✅ Lighter blue bg
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.info_outline,
-                            color: Theme.of(context).colorScheme.blue, // ✅ Blue
-                            size: 18,
-                          ),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Opens in app if installed, or web browser',
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.dark,
-                                fontSize: 12,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    SizedBox(height: 20),
-
-                    // Action buttons
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: () {
-                              Clipboard.setData(
-                                  ClipboardData(text: publicLink));
-                              Get.snackbar(
-                                'Copied!',
-                                'Link copied to clipboard',
-                                backgroundColor: Theme.of(context)
-                                    .colorScheme
-                                    .lighterBlue
-                                    .withOpacity(0.1), // ✅ Blue
-                                colorText: Theme.of(context)
-                                    .colorScheme
-                                    .blue, // ✅ Blue
-                                icon: Icon(Icons.check_circle,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .blue), // ✅ Blue
-                                duration: Duration(seconds: 2),
-                              );
-                            },
-                            icon: Icon(Icons.copy, size: 18),
-                            label: Text('Copy Link'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor:
-                                  Theme.of(context).colorScheme.blue, // ✅ Blue
-                              side: BorderSide(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .blue, // ✅ Blue
-                              ),
-                              padding: EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: () => Get.back(),
-                            icon: Icon(Icons.close, size: 18),
-                            label: Text('Close'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  Theme.of(context).colorScheme.blue, // ✅ Blue
-                              foregroundColor: Colors.white,
-                              padding: EdgeInsets.symmetric(vertical: 14),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
                     ),
                   ],
                 ),
@@ -386,7 +239,7 @@ class PublicInvoices extends HookWidget {
     final monthName = DateFormat.MMMM().format(filter.value.monthStart);
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.light,
+      backgroundColor: Colors.transparent,
       body: Column(
         children: [
           Padding(

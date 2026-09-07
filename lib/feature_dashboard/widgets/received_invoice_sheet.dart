@@ -6,6 +6,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:slickbill/color_scheme.dart';
+import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/services/monerium_service.dart';
 import 'package:slickbill/feature_auth/services/monerium_transfer_listener_service.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -999,9 +1000,21 @@ class ReceivedInvoiceSheet extends HookWidget {
                             style: ElevatedButton.styleFrom(
                                 backgroundColor:
                                     Theme.of(context).colorScheme.green),
-                            onPressed: () async {
-                              if (!isMounted()) return;
+                            onPressed: paymentStarted.value
+                                ? null
+                                : () async {
+                              if (!isMounted() || paymentStarted.value) return;
 
+                              final confirmed =
+                                  await AppLockController.confirmSensitiveAction(
+                                reason: 'lbl_ConfirmPayment'.trParams({
+                                  'amount':
+                                      '€${displayedInvoice.amount.toStringAsFixed(2)}',
+                                }),
+                              );
+                              if (!confirmed || !isMounted()) return;
+
+                              AppLockController.beginExternalAuthSession();
                               paymentStarted.value = true;
                               try {
                                 await createMoneriumTransaction(
@@ -1018,6 +1031,7 @@ class ReceivedInvoiceSheet extends HookWidget {
                                   }
                                 }
                               } finally {
+                                AppLockController.endExternalAuthSession();
                                 if (isMounted()) {
                                   paymentStarted.value = false;
                                 }

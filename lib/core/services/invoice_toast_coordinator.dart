@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
+import 'package:slickbill/services/sb_feedback.dart';
 
 /// Dedupes settle toasts when FCM, Realtime, and the pay flow all fire.
 class InvoiceToastCoordinator {
@@ -43,6 +46,7 @@ class InvoiceToastCoordinator {
     if (Get.isRegistered<DigitalInvoiceController>()) {
       Get.find<DigitalInvoiceController>().requestReceivedListRefresh();
     }
+    unawaited(SbFeedback.settled());
     Get.snackbar(
       'Payment successful',
       'Your slickbill payment went through.',

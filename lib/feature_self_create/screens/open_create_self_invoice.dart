@@ -210,7 +210,7 @@ class OpenAndCreateSelfInvoice extends HookWidget {
     }, []);
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.light,
+      backgroundColor: Colors.transparent,
       appBar: const CustomAppbar(
         title: 'hd_Upload',
         appbarIcon: null,

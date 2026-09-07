@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:slickbill/services/sb_feedback.dart';
 import 'package:slickbill/theme/sb_colors.dart';
 
 class SbBottomNav extends StatelessWidget {
@@ -15,7 +18,7 @@ class SbBottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: SbColors.surface.withValues(alpha: 0.92),
+        color: SbColors.surface,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -41,7 +44,7 @@ class SbBottomNav extends StatelessWidget {
                 ),
                 _NavItem(
                   icon: Icons.swap_horiz_rounded,
-                  label: 'Exchange',
+                  label: 'Request',
                   selected: currentIndex == 1,
                   onTap: () => onTap(1),
                 ),
@@ -76,7 +79,12 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      onTap: onTap,
+      onTap: () {
+        if (!selected) {
+          unawaited(SbFeedback.selection());
+        }
+        onTap();
+      },
       borderRadius: BorderRadius.circular(SbRadii.md),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),

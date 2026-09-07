@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/src/widgets/framework.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -13,6 +15,8 @@ import 'package:slickbill/feature_auth/services/monerium_service.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/payment_setup_controller.dart';
 import 'package:slickbill/core/services/invoice_toast_coordinator.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
+import 'package:slickbill/feature_auth/services/metamask_wallet_service.dart';
+import 'package:slickbill/services/sb_feedback.dart';
 import 'package:slickbill/services/coinbase/coinbase_service.dart';
 import 'package:slickbill/shared_widgets/cdp_webview.dart';
 import 'package:slickbill/shared_widgets/custom_appbar.dart';
@@ -113,54 +117,66 @@ class ReceivedInvoice extends HookWidget {
         return;
       }
 
-      // Open embedded wallet pay page; auto-close when txHash is available
-      const baseUrl = 'https://slickbills-wallet-client.vercel.app';
-      final result = await Get.to(() => CdpWebView(
-            url:
-                '$baseUrl/wallet/pay?to=${invoice.senders!.privateUsers!.users!.cdpWalletId}&amount=${invoice.amount}&description=${Uri.encodeComponent(invoice.description)}&receiver=${invoice.senders!.privateUsers!.firstName}',
-            title: 'Send Payment',
-            accessToken: userController.user.value.accessToken,
-            autoCloseMode: CdpAutoCloseMode.pay,
-          ));
-
-      if (result == null) {
-        Get.snackbar(
-          'Payment Cancelled',
-          'You cancelled the payment.',
-          backgroundColor: Theme.of(context).colorScheme.red,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 3),
-        );
-
-        return;
-      }
-
-      // If the WebView returns a txHash, consider it success and update invoice status
-      final txHash = result['txHash'];
-      if (txHash == null ||
-          txHash == 'null' ||
-          (txHash is String && txHash.isEmpty)) {
-        Get.snackbar(
-          'Error',
-          'Payment was not completed.',
-          backgroundColor: Theme.of(context).colorScheme.red,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 3),
-        );
-        return;
-      }
-
-      Get.snackbar(
-        'Success',
-        'Transaction: $txHash',
-        backgroundColor: Theme.of(context).colorScheme.green,
-        colorText: Colors.white,
-        duration: const Duration(seconds: 3),
+      final confirmed = await AppLockController.confirmSensitiveAction(
+        reason: 'lbl_ConfirmPayment'.trParams({
+          'amount': '€${invoice.amount.toStringAsFixed(2)}',
+        }),
       );
+      if (!confirmed) return;
 
-      await invoiceController.updateTxHashForInvoice(invoice.id, txHash);
+      AppLockController.beginExternalAuthSession();
+      try {
+        // Open embedded wallet pay page; auto-close when txHash is available
+        const baseUrl = 'https://slickbills-wallet-client.vercel.app';
+        final result = await Get.to(() => CdpWebView(
+              url:
+                  '$baseUrl/wallet/pay?to=${invoice.senders!.privateUsers!.users!.cdpWalletId}&amount=${invoice.amount}&description=${Uri.encodeComponent(invoice.description)}&receiver=${invoice.senders!.privateUsers!.firstName}',
+              title: 'Send Payment',
+              accessToken: userController.user.value.accessToken,
+              autoCloseMode: CdpAutoCloseMode.pay,
+            ));
 
-      await updateInvoiceStatus(invoice, true);
+        if (result == null) {
+          Get.snackbar(
+            'Payment Cancelled',
+            'You cancelled the payment.',
+            backgroundColor: Theme.of(context).colorScheme.red,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 3),
+          );
+
+          return;
+        }
+
+        // If the WebView returns a txHash, consider it success and update invoice status
+        final txHash = result['txHash'];
+        if (txHash == null ||
+            txHash == 'null' ||
+            (txHash is String && txHash.isEmpty)) {
+          Get.snackbar(
+            'Error',
+            'Payment was not completed.',
+            backgroundColor: Theme.of(context).colorScheme.red,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 3),
+          );
+          return;
+        }
+
+        Get.snackbar(
+          'Success',
+          'Transaction: $txHash',
+          backgroundColor: Theme.of(context).colorScheme.green,
+          colorText: Colors.white,
+          duration: const Duration(seconds: 3),
+        );
+
+        await invoiceController.updateTxHashForInvoice(invoice.id, txHash);
+
+        await updateInvoiceStatus(invoice, true);
+      } finally {
+        AppLockController.endExternalAuthSession();
+      }
     }
 
     Future<void> createMoneriumTransaction(InvoiceModel invoice) async {
@@ -203,40 +219,36 @@ class ReceivedInvoice extends HookWidget {
         return;
       }
 
-      final confirmed = await AppLockController.confirmSensitiveAction(
-        reason: 'lbl_ConfirmPayment'.trParams({
-          'amount': '€${invoice.amount.toStringAsFixed(2)}',
-        }),
-      );
-      if (!confirmed) return;
-
+      AppLockController.beginExternalAuthSession();
+      unawaited(SbFeedback.medium());
       try {
-        await MoneriumService.ensureConnected(
-          userId: moneriumUserId,
-          email: email,
-          onWillOpenLogin: () {
-            Get.snackbar(
-              'Connecting Monerium',
-              'Sign in to continue the payment.',
-              backgroundColor: Theme.of(context).colorScheme.blue,
-              colorText: Colors.white,
-              duration: const Duration(seconds: 3),
-            );
-          },
-        );
-        if (Get.isRegistered<PaymentSetupController>()) {
-          await Get.find<PaymentSetupController>().markMoneriumConnected();
+        try {
+          await MoneriumService.ensureConnected(
+            userId: moneriumUserId,
+            email: email,
+            onWillOpenLogin: () {
+              Get.snackbar(
+                'Connecting Monerium',
+                'Sign in to continue the payment.',
+                backgroundColor: Theme.of(context).colorScheme.blue,
+                colorText: Colors.white,
+                duration: const Duration(seconds: 3),
+              );
+            },
+          );
+          if (Get.isRegistered<PaymentSetupController>()) {
+            await Get.find<PaymentSetupController>().markMoneriumConnected();
+          }
+        } catch (error) {
+          Get.snackbar(
+            'Monerium connect failed',
+            'Could not connect automatically. Try again, or finish setup in Profile.',
+            backgroundColor: Theme.of(context).colorScheme.yellow,
+            colorText: Colors.black,
+            duration: const Duration(seconds: 4),
+          );
+          return;
         }
-      } catch (error) {
-        Get.snackbar(
-          'Monerium connect failed',
-          'Could not connect automatically. Try again, or finish setup in Profile.',
-          backgroundColor: Theme.of(context).colorScheme.yellow,
-          colorText: Colors.black,
-          duration: const Duration(seconds: 4),
-        );
-        return;
-      }
 
       final recipientName =
           '${invoice.senders?.privateUsers?.firstName ?? ''} ${invoice.senders?.privateUsers?.lastName ?? ''}'
@@ -350,6 +362,7 @@ class ReceivedInvoice extends HookWidget {
           );
           return;
         }
+        unawaited(SbFeedback.medium());
         if (orderId == null || orderId.isEmpty) {
           Get.snackbar(
             'Payment Initiated',
@@ -373,6 +386,10 @@ class ReceivedInvoice extends HookWidget {
           debugPrint('Post-initiate error (toast already shown): $error');
           return;
         }
+        if (MetamaskWalletService.isCancelled(error)) {
+          return;
+        }
+        unawaited(SbFeedback.error());
         Get.snackbar(
           'Payment Error',
           error.toString(),
@@ -380,6 +397,9 @@ class ReceivedInvoice extends HookWidget {
           colorText: Colors.white,
           duration: const Duration(seconds: 4),
         );
+      }
+      } finally {
+        AppLockController.endExternalAuthSession();
       }
     }
 

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:slickbill/config/env_config.dart';
+import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:web3auth_flutter/enums.dart';
 import 'package:web3auth_flutter/input.dart';
 import 'package:web3auth_flutter/output.dart';
@@ -91,12 +92,18 @@ class NativeWeb3AuthService {
 
     _log('connectWalletAddress() invoking Web3AuthFlutter.login()');
 
-    final response = await Web3AuthFlutter.login(
-      LoginParams(
-        loginProvider: _resolveProvider(loginProvider),
-        redirectUrl: _redirectUrlForPlatform(),
-      ),
-    );
+    AppLockController.beginExternalAuthSession();
+    final Web3AuthResponse response;
+    try {
+      response = await Web3AuthFlutter.login(
+        LoginParams(
+          loginProvider: _resolveProvider(loginProvider),
+          redirectUrl: _redirectUrlForPlatform(),
+        ),
+      );
+    } finally {
+      AppLockController.endExternalAuthSession();
+    }
 
     _log(
       'connectWalletAddress() login returned error=${response.error} hasPrivKey=${response.privKey != null && response.privKey!.trim().isNotEmpty} hasSession=${response.sessionId != null && response.sessionId!.trim().isNotEmpty}',

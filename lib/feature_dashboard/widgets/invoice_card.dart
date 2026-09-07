@@ -48,11 +48,11 @@ class InvoiceCard extends HookWidget {
     final isProcessing =
         normalizedStatus == 'PROCESSING' || normalizedStatus == 'PENDING';
 
-    DateTime? parsedDate = DateTime.tryParse(date);
+    DateTime? parsedDate = DateTime.tryParse(date)?.toLocal();
     DateTime? parsedPaid = paidOnDate != null && paidOnDate!.isNotEmpty
-        ? DateTime.tryParse(paidOnDate!)
+        ? DateTime.tryParse(paidOnDate!)?.toLocal()
         : null;
-    final parsedDue = DateTime.tryParse(dueDate);
+    final parsedDue = DateTime.tryParse(dueDate)?.toLocal();
     final isOverdue = !isPaid &&
         !isProcessing &&
         parsedDue != null &&
@@ -100,11 +100,10 @@ class InvoiceCard extends HookWidget {
                 ? 'lbl_SendReminder'.tr
                 : 'btn_Pay'.tr;
 
-    final dateLabelSource =
-        role == InvoiceCardRole.received ? parsedDue ?? parsedDate : parsedDate;
+    final dateLabelSource = parsedDate;
     final dateLabel = dateLabelSource != null
         ? DateFormat('EEE, dd MMM yyyy').format(dateLabelSource)
-        : (role == InvoiceCardRole.received ? dueDate : date);
+        : date;
 
     return SbSurfaceCard(
       padding: const EdgeInsets.all(SbSpace.md),

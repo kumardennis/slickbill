@@ -4,20 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:flutter_typeahead/flutter_typeahead.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:nfc_manager/nfc_manager.dart';
-import 'package:qr_flutter/qr_flutter.dart';
-import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/constants.dart';
 import 'package:slickbill/feature_auth/getx_controllers/current_bank_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
 import 'package:slickbill/feature_navigation/getx_controllers/navigation_controller.dart';
 import 'package:slickbill/feature_nearby_transaction/widgets/big_input_amount.dart';
-import 'package:slickbill/feature_self_create/widgets/input_field.dart';
+import 'package:slickbill/feature_nearby_transaction/widgets/invoice_request_fields.dart';
+import 'package:slickbill/services/sb_feedback.dart';
 import 'package:slickbill/feature_send/models/receiver_user_model.dart';
 import 'package:slickbill/feature_send/models/users_by_username_model.dart';
 import 'package:slickbill/feature_send/screens/quick_share.dart';
@@ -26,6 +24,7 @@ import 'package:slickbill/feature_send/widgets/compact_receiver_row.dart';
 import 'package:slickbill/shared_utils/scanned_qr_router.dart';
 import 'package:slickbill/shared_widgets/custom_appbar.dart';
 import 'package:slickbill/shared_widgets/sb_labeled_field.dart';
+import 'package:slickbill/shared_widgets/sb_qr_panel.dart';
 import 'package:slickbill/shared_widgets/sb_segmented_control.dart';
 import 'package:slickbill/shared_widgets/sb_trust_banner.dart';
 import 'package:slickbill/theme/sb_colors.dart';
@@ -160,6 +159,7 @@ class SendNfcInvoice extends HookWidget {
                     Get.snackbar('NFC Received!',
                         'Sending a slickbill to a user! ${receiverUserName.value}');
 
+                    unawaited(SbFeedback.confirm());
                     await createInvoice();
                   }
                 }
@@ -168,12 +168,14 @@ class SendNfcInvoice extends HookWidget {
               }
             } catch (e) {
               debugPrint('Error emitting NFC data: $e');
+              unawaited(SbFeedback.error());
               NfcManager.instance.stopSession();
             }
           });
         }
       } catch (e) {
         debugPrint('Error writing to NFC: $e');
+        unawaited(SbFeedback.error());
       }
     }
 
@@ -204,10 +206,11 @@ class SendNfcInvoice extends HookWidget {
         );
 
         navigationController.changeIndex(0);
-
+        unawaited(SbFeedback.received());
         // FCM NEW_SLICKBILL ("X sent you a slickbill") is the user-facing toast.
       } catch (e) {
         debugPrint('Error parsing QR code: $e');
+        unawaited(SbFeedback.error());
         Get.snackbar(
           'Error',
           e.toString().replaceFirst('Exception: ', ''),
@@ -227,6 +230,7 @@ class SendNfcInvoice extends HookWidget {
                 final scannedResult = _handleBarcode(barcodes);
                 if (scannedResult != null) {
                   qrCodeReadValue.value = scannedResult;
+                  unawaited(SbFeedback.confirm());
 
                   Navigator.of(context).pop();
 
@@ -437,7 +441,7 @@ class SendNfcInvoice extends HookWidget {
     }
 
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.light,
+      backgroundColor: Colors.transparent,
       appBar: const CustomAppbar(
         title: 'hd_Exchange',
         appbarIcon: null,
@@ -464,18 +468,11 @@ class SendNfcInvoice extends HookWidget {
               children: [
                 QuickShareScreen(
                   qrData: qrData,
-                  publicInvoiceToken: publicInvoiceToken,
-                  receiverUserAmount: receiverUserAmount,
                   descriptionController: descriptionController,
                   dueDateController: dueDateController,
                   referenceNumberController: referenceNumberController,
                   category: category,
-                  isCreatingPublicInvoice: isCreatingPublicInvoice,
-                  createPublicInvoiceForQR: createPublicInvoiceForQR,
                   changeReceiverAmount: changeReceiverAmount,
-                  startReadNfc: () {
-                    startReadNfc();
-                  },
                   scanQR: () {
                     scanQR();
                   },
@@ -484,7 +481,6 @@ class SendNfcInvoice extends HookWidget {
                   context: context,
                   qrData: qrData,
                   publicInvoiceToken: publicInvoiceToken,
-                  receiverUserAmount: receiverUserAmount,
                   descriptionController: descriptionController,
                   dueDateController: dueDateController,
                   referenceNumberController: referenceNumberController,
@@ -516,7 +512,6 @@ class SendNfcInvoice extends HookWidget {
     required BuildContext context,
     required ValueNotifier<String> qrData,
     required ValueNotifier<String?> publicInvoiceToken,
-    required ValueNotifier<double> receiverUserAmount,
     required TextEditingController descriptionController,
     required TextEditingController dueDateController,
     required TextEditingController referenceNumberController,
@@ -525,413 +520,113 @@ class SendNfcInvoice extends HookWidget {
     required Future<void> Function() createPublicInvoiceForQR,
     required Function(double) changeReceiverAmount,
   }) {
-    return Column(
-      children: [
-        // Info Banner
-        Container(
-          padding: EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Theme.of(context).colorScheme.lightGray.withOpacity(0.15),
-                Theme.of(context).colorScheme.light.withOpacity(0.1),
-              ],
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  Icons.public,
-                  color: Theme.of(context).colorScheme.blue,
-                  size: 20,
-                ),
-              ),
-              SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Public Invoice',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.dark,
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Anyone can scan to view (opens in app or web)',
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.darkGray,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
+    final hasQr = publicInvoiceToken.value != null;
+    final publicLink = hasQr
+        ? 'https://app.slickbills.com/bill/${publicInvoiceToken.value}'
+        : '';
+    final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 80;
+
+    return ColoredBox(
+      color: Colors.transparent,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
+        child: Column(
+          children: [
+            if (hasQr && !keyboardOpen) ...[
+              SbQrPanel(
+                data: qrData.value,
+                title: 'Public QR',
+                caption:
+                    'Anyone can scan this. Opens in SlickBills, or the web if they do not have the app.',
+                size: 196,
+                footer: SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: publicLink));
+                      Get.snackbar(
+                        'Copied',
+                        'Public link is on the clipboard.',
+                        snackPosition: SnackPosition.BOTTOM,
+                        margin: const EdgeInsets.all(16),
+                      );
+                    },
+                    icon: const Icon(Icons.link_rounded, size: 18),
+                    label: const Text('Copy link'),
+                  ),
                 ),
               ),
+              const SizedBox(height: 16),
             ],
-          ),
-        ),
-
-        // Sticky QR Code (if created)
-        if (publicInvoiceToken.value != null)
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Theme.of(context).colorScheme.blue.withOpacity(0.05),
-                  Theme.of(context).colorScheme.turqouise.withOpacity(0.05),
-                ],
+            Container(
+              padding: const EdgeInsets.all(SbSpace.md),
+              decoration: BoxDecoration(
+                color: SbColors.surfaceLowest,
+                borderRadius: BorderRadius.circular(SbRadii.md),
+                boxShadow: SbShadows.cardSoft,
               ),
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(24),
-                bottomRight: Radius.circular(24),
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: Theme.of(context).colorScheme.blue.withOpacity(0.15),
-                  blurRadius: 20,
-                  offset: Offset(0, 8),
-                ),
-              ],
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(20),
               child: Column(
                 children: [
-                  // Badge
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color:
-                          Theme.of(context).colorScheme.blue.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.check_circle,
-                          color: Theme.of(context).colorScheme.blue,
-                          size: 16,
-                        ),
-                        SizedBox(width: 6),
-                        Text(
-                          'Public QR Generated',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.blue,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: 16),
-
-                  // QR Code with modern design
-                  Container(
-                    padding: EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color:
-                            Theme.of(context).colorScheme.blue.withOpacity(0.3),
-                        width: 2,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .blue
-                              .withOpacity(0.1),
-                          blurRadius: 15,
-                          offset: Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      children: [
-                        QrImageView(
-                          data: qrData.value,
-                          version: QrVersions.auto,
-                          size: 180,
-                          eyeStyle: QrEyeStyle(
-                            eyeShape: QrEyeShape.circle,
-                            color: Theme.of(context).colorScheme.blue,
-                          ),
-                          dataModuleStyle: QrDataModuleStyle(
-                            dataModuleShape: QrDataModuleShape.circle,
-                            color: Theme.of(context).colorScheme.dark,
-                          ),
-                        ),
-                        SizedBox(height: 12),
-                        Text(
-                          'Scan to view invoice',
-                          style: TextStyle(
-                            color: Theme.of(context).colorScheme.darkGray,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: 16),
-
-                  // Action Buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            final linkToCopy =
-                                'https://app.slickbills.com/bill/${publicInvoiceToken.value}';
-                            Clipboard.setData(ClipboardData(text: linkToCopy));
-                            Get.snackbar(
-                              'Copied!',
-                              'Link copied to clipboard',
-                              backgroundColor: Theme.of(context)
-                                  .colorScheme
-                                  .green
-                                  .withOpacity(0.1),
-                              colorText: Theme.of(context).colorScheme.green,
-                              icon: Icon(Icons.check_circle,
-                                  color: Theme.of(context).colorScheme.green),
-                              snackPosition: SnackPosition.BOTTOM,
-                              margin: EdgeInsets.all(16),
-                              borderRadius: 12,
-                            );
-                          },
-                          icon: Icon(Icons.copy, size: 18),
-                          label: Text('Copy Link'),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(
-                              color: Theme.of(context).colorScheme.blue,
-                              width: 1.5,
-                            ),
-                            foregroundColor: Theme.of(context).colorScheme.blue,
-                            padding: EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () {
-                            // Share functionality
-                            Get.snackbar('Share', 'Share feature coming soon!');
-                          },
-                          icon: Icon(Icons.share, size: 18),
-                          label: Text('Share'),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(
-                              color: Theme.of(context).colorScheme.blue,
-                              width: 1.5,
-                            ),
-                            foregroundColor: Theme.of(context).colorScheme.blue,
-                            padding: EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-        // Scrollable Form Content
-        Expanded(
-          child: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Amount Input
                   BigInputAmount(
                     changeReceiverAmount: changeReceiverAmount,
                   ),
-                  SizedBox(height: 24),
-
-                  InputField(
-                    icon: Icons.description,
-                    label: 'Description',
-                    controller: descriptionController,
+                  const SizedBox(height: 8),
+                  InvoiceRequestFields(
+                    descriptionController: descriptionController,
+                    dueDateController: dueDateController,
+                    referenceNumberController: referenceNumberController,
+                    category: category.value,
+                    onCategoryChanged: (value) => category.value = value,
                   ),
-                  SizedBox(height: 16),
-
-                  InputField(
-                    icon: Icons.calendar_today,
-                    label: 'Due Date',
-                    controller: dueDateController,
-                    type: TextInputType.datetime,
-                  ),
-                  SizedBox(height: 16),
-
-                  InputField(
-                    icon: Icons.numbers,
-                    label: 'Reference Number',
-                    controller: referenceNumberController,
-                  ),
-                  SizedBox(height: 24),
-
-                  // Category Dropdown
-                  Text(
-                    'Category',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: Theme.of(context).colorScheme.dark,
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Container(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.light,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .darkGray
-                            .withOpacity(0.2),
-                      ),
-                    ),
-                    child: DropdownButton<String>(
-                      value: category.value,
-                      isExpanded: true,
-                      underline: SizedBox(),
-                      icon: Icon(Icons.arrow_drop_down),
-                      items: Constants().categories.map((String value) {
-                        return DropdownMenuItem<String>(
-                          value: value,
-                          child: Text(value),
-                        );
-                      }).toList(),
-                      onChanged: (String? newValue) {
-                        if (newValue != null) {
-                          category.value = newValue;
-                        }
-                      },
-                    ),
-                  ),
-                  SizedBox(height: 32),
-
-                  // Generate Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 56,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Theme.of(context).colorScheme.blue,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shadowColor:
-                            Theme.of(context).colorScheme.blue.withOpacity(0.3),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      onPressed: isCreatingPublicInvoice.value
-                          ? null
-                          : createPublicInvoiceForQR,
-                      child: isCreatingPublicInvoice.value
-                          ? Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Colors.white,
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                                SizedBox(width: 12),
-                                Text('Generating...'),
-                              ],
-                            )
-                          : Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                FaIcon(FontAwesomeIcons.qrcode, size: 20),
-                                SizedBox(width: 12),
-                                Text(
-                                  publicInvoiceToken.value != null
-                                      ? 'Regenerate Public QR'
-                                      : 'Generate Public QR',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 16,
-                                  ),
-                                ),
-                              ],
-                            ),
-                    ),
-                  ),
-                  SizedBox(height: 16),
-
-                  // Help Text
-                  if (publicInvoiceToken.value == null)
-                    Container(
-                      padding: EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .blue
-                            .withOpacity(0.05),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .blue
-                              .withOpacity(0.1),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.lightbulb_outline,
-                            color: Theme.of(context).colorScheme.blue,
-                            size: 20,
-                          ),
-                          SizedBox(width: 12),
-                          Expanded(
-                            child: Text(
-                              'This creates a trackable invoice that can be viewed by anyone with the link',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Theme.of(context).colorScheme.darkGray,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                 ],
               ),
             ),
-          ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 56,
+              child: ElevatedButton(
+                onPressed: isCreatingPublicInvoice.value
+                    ? null
+                    : createPublicInvoiceForQR,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: SbColors.deepNavy,
+                  disabledBackgroundColor: SbColors.surfaceHigh,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(SbRadii.md),
+                  ),
+                  elevation: 0,
+                ),
+                child: isCreatingPublicInvoice.value
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text(
+                        hasQr ? 'Update public QR' : 'Generate public QR',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                        ),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SbTrustBanner(
+              variant: SbTrustBannerVariant.custody,
+              title: hasQr ? 'This request is public' : 'A QR anyone can open',
+              subtitle: hasQr
+                  ? 'Share the code or the link. They do not need a SlickBills account to see it.'
+                  : 'Fill the request, then generate. The QR and link stay the same until you update them.',
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

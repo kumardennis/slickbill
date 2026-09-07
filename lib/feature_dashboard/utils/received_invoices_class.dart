@@ -87,19 +87,17 @@ class ReceivedInvoicesClass {
   }
 
   Future<double?> getPaidInPeriod(InvoiceListQuery period) async {
-    if (period.allTime) {
-      final invoices = await getPrivateReceivedInvoices(
-        query: InvoiceListQuery(
-          month: period.month,
-          status: InvoiceStatusFilter.paid,
-          allTime: true,
-        ),
-        silent: true,
-      );
-      if (invoices == null) return null;
-      return invoices.fold<double>(0.0, (sum, invoice) => sum + invoice.amount);
-    }
-    return getPaidInMonth(period.monthStart);
+    final invoices = await getPrivateReceivedInvoices(
+      query: InvoiceListQuery(
+        month: period.month,
+        status: InvoiceStatusFilter.paid,
+        allTime: period.allTime,
+        monthBasis: period.monthBasis,
+      ),
+      silent: true,
+    );
+    if (invoices == null) return null;
+    return invoices.fold<double>(0.0, (sum, invoice) => sum + invoice.amount);
   }
 
   Future<double?> getPaidInMonth(DateTime month) async {
