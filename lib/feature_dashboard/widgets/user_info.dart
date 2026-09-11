@@ -13,23 +13,26 @@ class UserInfo extends HookWidget {
 
   @override
   Widget build(BuildContext context) {
-    final user = userController.user.value;
-    final personalName = [
-      user.firstName,
-      user.lastName,
-    ]
-        .whereType<String>()
-        .map((part) => part.trim())
-        .where((part) => part.isNotEmpty)
-        .join(' ');
-    final displayName = personalName.isNotEmpty
-        ? personalName
-        : (user.fullName?.trim().isNotEmpty == true ? user.fullName! : "No user");
-    final avatarLetter =
-        displayName.isNotEmpty ? displayName[0].toUpperCase() : "U";
+    return Obx(() {
+      final user = userController.user.value;
+      final personalName = [
+        user.firstName,
+        user.lastName,
+      ]
+          .whereType<String>()
+          .map((part) => part.trim())
+          .where((part) => part.isNotEmpty)
+          .join(' ');
+      final displayName = personalName.isNotEmpty
+          ? personalName
+          : (user.fullName?.trim().isNotEmpty == true
+              ? user.fullName!
+              : 'No user');
+      final avatarLetter =
+          displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U';
 
-    // Placeholder for user info widget
-    return Container(
+      // Placeholder for user info widget
+      return Container(
       width: double.infinity,
       margin: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -245,5 +248,6 @@ class UserInfo extends HookWidget {
         ),
       ),
     );
+    });
   }
 }

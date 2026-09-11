@@ -26,27 +26,24 @@ class AppLockGate extends StatelessWidget {
   Widget build(BuildContext context) {
     if (kIsWeb) return child;
 
-    return Obx(() {
-      final lock = Get.find<AppLockController>();
-      lock.routeEpoch.value;
-      final signedIn = Get.isRegistered<UserController>() &&
-          Get.find<UserController>().user.value.id > 0;
-      final showLock = signedIn && !lock.isUnlocked.value && !_isAuthRoute();
-
-      return Stack(
-        fit: StackFit.expand,
-        children: [
-          IgnorePointer(
-            ignoring: showLock,
-            child: ExcludeSemantics(
-              excluding: showLock,
-              child: child,
-            ),
-          ),
-          if (showLock) const AppLockOverlay(),
-        ],
-      );
-    });
+    // Keep the navigator out of this Obx. Route restores run during the
+    // navigator's first build; rebuilding this ancestor mid-frame crashes startup.
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        child,
+        Obx(() {
+          final lock = Get.find<AppLockController>();
+          lock.routeEpoch.value;
+          final signedIn = Get.isRegistered<UserController>() &&
+              Get.find<UserController>().user.value.id > 0;
+          final showLock =
+              signedIn && !lock.isUnlocked.value && !_isAuthRoute();
+          if (!showLock) return const SizedBox.shrink();
+          return const AppLockOverlay();
+        }),
+      ],
+    );
   }
 }
 

@@ -100,6 +100,7 @@ class _SplashScreenState extends State<SplashScreen> {
       }
     }
 
+    await userController.ensureFreshSession();
     final session = Supabase.instance.client.auth.currentSession;
 
     print('🔍 Splash: Session exists: ${session != null}');

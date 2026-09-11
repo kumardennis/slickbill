@@ -30,7 +30,7 @@ class CdpWalletBalance extends HookWidget {
       print('openWebView called page=$page');
 
       try {
-        const baseUrl = 'https://slickbills-wallet-client.vercel.app';
+        const baseUrl = 'https://wallet.slickbills.com';
         String url = '';
         String title = '';
         CdpAutoCloseMode autoCloseMode = CdpAutoCloseMode.none;

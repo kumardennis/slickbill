@@ -29,7 +29,7 @@ class AppLockController extends GetxController with WidgetsBindingObserver {
 
   static void noteRouteChange() {
     if (!Get.isRegistered<AppLockController>()) return;
-    Get.find<AppLockController>().routeEpoch.value++;
+    Get.find<AppLockController>().onRouteChanged();
   }
 
   static Future<bool> confirmSensitiveAction({required String reason}) async {
@@ -64,7 +64,14 @@ class AppLockController extends GetxController with WidgetsBindingObserver {
     _ignoreLifecycleUntil = null;
   }
 
-  void onRouteChanged() => routeEpoch.value++;
+  void onRouteChanged() {
+    // First-app attach builds from a Timer while schedulerPhase is still idle,
+    // so never bump Obx listeners synchronously from routingCallback.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (isClosed) return;
+      routeEpoch.value++;
+    });
+  }
 
   @override
   void onInit() {

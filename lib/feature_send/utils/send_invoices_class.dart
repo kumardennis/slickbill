@@ -40,7 +40,7 @@ class SendInvoicesClass {
     try {
       final response = await Supabase.instance.client.functions
           .invoke('invoices/create-private-user-invoice', headers: {
-        'Authorization': 'Bearer ${userController.user.value.accessToken}'
+        'Authorization': 'Bearer ${userController.accessToken}'
       }, body: {
         "privateUserId": userController.user.value.privateUserId,
         "senderName": userController.user.value.requestDisplayName,
@@ -84,7 +84,7 @@ class SendInvoicesClass {
     try {
       final response = await Supabase.instance.client.functions
           .invoke('invoices/create-private-user-invoice', headers: {
-        'Authorization': 'Bearer ${userController.user.value.accessToken}'
+        'Authorization': 'Bearer ${userController.accessToken}'
       }, body: {
         "privateUserId": userController.user.value.privateUserId,
         "senderName": userController.user.value.requestDisplayName,
@@ -172,7 +172,7 @@ class SendInvoicesClass {
 
       final response = await Supabase.instance.client.functions
           .invoke('invoices/create-private-user-invoice', headers: {
-        'Authorization': 'Bearer ${userController.user.value.accessToken}'
+        'Authorization': 'Bearer ${userController.accessToken}'
       }, body: {
         "privateUserId": senderPrivateUserId,
         "senderName": senderName,
@@ -220,7 +220,7 @@ class SendInvoicesClass {
     try {
       final response = await Supabase.instance.client.functions
           .invoke('invoices/create-private-group-invoice', headers: {
-        'Authorization': 'Bearer ${userController.user.value.accessToken}'
+        'Authorization': 'Bearer ${userController.accessToken}'
       }, body: {
         "privateUserId": userController.user.value.privateUserId,
         "senderName": userController.user.value.requestDisplayName,
@@ -256,7 +256,7 @@ class SendInvoicesClass {
     try {
       final response = await Supabase.instance.client.functions
           .invoke('auth-and-settings/get-users-by-username', headers: {
-        'Authorization': 'Bearer ${userController.user.value.accessToken}'
+        'Authorization': 'Bearer ${userController.accessToken}'
       }, body: {
         'query': normalized,
         if (userController.user.value.privateUserId != null)

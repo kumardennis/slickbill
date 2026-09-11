@@ -68,7 +68,7 @@ Map<String, String> loyaltyLocales_EN = {
   'lbl_RewardsHistoryRedeem': 'Used at checkout',
   'lbl_RewardsHistoryExpire': 'Expired',
   'lbl_NoRewardsHistoryYet':
-      'No points yet. Pay a SlickBill to start earning.',
+      'No points yet. Pay a bill from a business to start earning.',
   'btn_ViewRewards': 'View rewards',
   'btn_OpenCashier': 'Open cashier (@count)',
   'lbl_MerchantCheckInAlertTitle': 'Customer checked in',

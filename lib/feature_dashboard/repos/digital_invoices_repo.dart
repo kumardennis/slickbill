@@ -171,20 +171,18 @@ class DigitalInvoiceRepository {
       return null;
     }
 
-    final response = await _client
-        .from('public_digital_invoices')
-        .select('''
-        *,
-        sender:private_users!public_digital_invoices_senderPrivateUserId_fkey(*),
-        receiver:private_users!public_digital_invoices_receiverPrivateUserId_fkey(*)
-      ''')
-        .eq('publicToken', normalizedToken)
-        .not('publicToken', 'is', null)
-        .maybeSingle();
+    final response = await _client.rpc(
+      'get_public_invoice_by_token',
+      params: {'p_token': normalizedToken},
+    );
 
-    if (response == null) return null;
-
-    return PublicInvoiceModel.fromJson(response);
+    if (response is Map<String, dynamic>) {
+      return PublicInvoiceModel.fromJson(response);
+    }
+    if (response is Map) {
+      return PublicInvoiceModel.fromJson(Map<String, dynamic>.from(response));
+    }
+    return null;
   }
 
   /// Claim a public invoice (creates sender, receiver, digital_invoice + claim record)
@@ -192,82 +190,33 @@ class DigitalInvoiceRepository {
     required String token,
     required int claimerPrivateUserId,
   }) async {
-    try {
-      final normalizedToken = token.trim();
-      if (normalizedToken.isEmpty) {
-        throw Exception('Missing public invoice token');
-      }
+    final normalizedToken = token.trim();
+    if (normalizedToken.isEmpty) {
+      throw Exception('Missing public invoice token');
+    }
 
-      // Step 1: Fetch public invoice by token
-      final publicInvoiceResponse = await _client
-          .from('public_digital_invoices')
-          .select()
-          .eq('publicToken', normalizedToken)
-          .single();
+    final response = await _client.rpc(
+      'claim_public_invoice',
+      params: {'p_token': normalizedToken},
+    );
 
-      final publicInvoice = PublicInvoiceModel.fromJson(publicInvoiceResponse);
+    if (response is! Map) {
+      throw Exception('Invoice not found');
+    }
 
-      // Step 2: Check if already claimed by this user
-      final existingClaim = await _client
-          .from('public_invoice_claims')
-          .select()
-          .eq('public_invoice_id', publicInvoice.id)
-          .eq('claimed_by_user_id', claimerPrivateUserId)
-          .maybeSingle();
+    final payload = Map<String, dynamic>.from(response);
+    if (payload['alreadyClaimed'] == true) {
+      throw Exception('You have already claimed this invoice');
+    }
 
-      if (existingClaim != null) {
-        // Already claimed, return existing invoice
-        final existingInvoiceId = existingClaim['digital_invoice_id'];
-        final existingInvoice = await getInvoiceById(existingInvoiceId);
-        if (existingInvoice != null) {
-          throw Exception('You have already claimed this invoice');
-        }
-      }
+    final invoiceId = payload['id'];
+    if (invoiceId is! int) {
+      throw Exception('Invoice not found');
+    }
 
-      // Step 3: Create sender record (from the original public invoice sender)
-      final senderResponse = await _client
-          .from('senders')
-          .insert({
-            'privateUserId': publicInvoice.senderPrivateUserId,
-          })
-          .select()
-          .single();
-
-      final senderId = senderResponse['id'];
-
-      // Step 4: Create receiver record (the person claiming the invoice)
-      final receiverResponse = await _client
-          .from('receivers')
-          .insert({
-            'privateUserId': claimerPrivateUserId,
-          })
-          .select()
-          .single();
-
-      final receiverId = receiverResponse['id'];
-
-      // Step 5: Create digital invoice
-      final digitalInvoiceResponse =
-          await _client.from('digital_invoices').insert({
-        'senderId': senderId,
-        'receiverId': receiverId,
-        'amount': publicInvoice.amount,
-        'description': publicInvoice.description,
-        'category': publicInvoice.category,
-        'status': publicInvoice.status,
-        'deadline': publicInvoice.deadline,
-        'senderIban': publicInvoice.senderIban,
-        'senderName': publicInvoice.senderName,
-        'senderIsBusiness': publicInvoice.senderIsBusiness,
-        'referenceNo': publicInvoice.referenceNo,
-        'invoiceNo':
-            '${claimerPrivateUserId}${DateTime.now().millisecondsSinceEpoch}',
-        'receiverPrivateUserId': claimerPrivateUserId,
-        'senderPrivateUserId': publicInvoice.senderPrivateUserId,
-        'originalInvoiceNo': publicInvoice.originalInvoiceNo,
-        'data': publicInvoice.data,
-        'isSeen': false,
-      }).select('''
+    final digitalInvoiceResponse = await _client
+        .from('digital_invoices')
+        .select('''
           *,
           senders(*,
             private_users(*)
@@ -276,38 +225,11 @@ class DigitalInvoiceRepository {
             private_users(*),
             business_users(*)
           )
-        ''').single();
+        ''')
+        .eq('id', invoiceId)
+        .single();
 
-      final digitalInvoice = InvoiceModel.fromJson(digitalInvoiceResponse);
-
-      print('Digital invoice created: ${digitalInvoiceResponse['id']}');
-
-      // Step 6: Create the claim record linking public invoice to digital invoice
-      final claimResponse = await _client
-          .from('public_invoice_claims')
-          .insert({
-            'public_invoice_id': publicInvoice.id,
-            'digital_invoice_id': digitalInvoice.id,
-            'claimed_by_user_id': claimerPrivateUserId,
-          })
-          .select()
-          .single();
-
-      print('Claim record created: ${claimResponse['id']}');
-
-      // Step 7: Increment view count and claim count
-      await _client.from('public_digital_invoices').update({
-        'viewCount': publicInvoice.viewCount + 1,
-        'claimCount': publicInvoice.claimCount + 1,
-      }).eq('id', publicInvoice.id);
-
-      print('Invoice claimed successfully: ${digitalInvoice.id}');
-
-      return digitalInvoice;
-    } catch (e) {
-      print('Error claiming invoice: $e');
-      rethrow;
-    }
+    return InvoiceModel.fromJson(digitalInvoiceResponse);
   }
 
   /// Get all claims for a public invoice (for creator analytics)
@@ -540,20 +462,10 @@ class DigitalInvoiceRepository {
   Future<void> incrementPublicInvoiceViewCount(String publicToken) async {
     try {
       // ✅ First fetch current value, then increment
-      final response = await _client
-          .from('public_digital_invoices')
-          .select('viewCount')
-          .eq('publicToken', publicToken)
-          .maybeSingle();
-
-      if (response == null) {
-        throw Exception('Invoice not found');
-      }
-
-      final currentCount = (response['viewCount'] as int?) ?? 0;
-
-      await _client.from('public_digital_invoices').update(
-          {'viewCount': currentCount + 1}).eq('publicToken', publicToken);
+      await _client.rpc(
+        'increment_public_invoice_view',
+        params: {'p_token': publicToken},
+      );
 
       print('✅ View count incremented in DB for: $publicToken');
     } catch (e) {

@@ -3,6 +3,7 @@ import { Web3Auth } from "@web3auth/modal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import logo from "../../assets/logo_icon.png";
 import { sb } from "../../theme";
+import { web3AuthSocialLoginMethods } from "../../web3authSocialLogin";
 
 type InitState = "idle" | "initializing" | "ready" | "error";
 type AuthState = "idle" | "authenticating" | "authenticated" | "error";
@@ -20,12 +21,113 @@ const sessionStorageKeys = {
   callbackUri: "sb_metamask_callback_uri",
   flowMode: "sb_metamask_flow_mode",
   signMessage: "sb_metamask_sign_message",
+  expectedAddress: "sb_metamask_expected_address",
   amount: "sb_pay_amount",
   payee: "sb_pay_payee",
   iban: "sb_pay_iban",
   ref: "sb_pay_ref",
   kind: "sb_pay_kind",
 } as const;
+
+const HEX_ADDRESS = /^0x[a-fA-F0-9]{40}$/;
+
+type RpcProvider = {
+  request?: (args: { method: string; params?: unknown }) => Promise<unknown>;
+  accounts?: unknown;
+  selectedAddress?: unknown;
+  address?: unknown;
+  provider?: unknown;
+};
+
+function isHexAddress(value: unknown): value is string {
+  return typeof value === "string" && HEX_ADDRESS.test(value.trim());
+}
+
+function collectAddresses(raw: unknown, into: string[] = []): string[] {
+  if (isHexAddress(raw)) {
+    into.push(raw.trim());
+    return into;
+  }
+  if (Array.isArray(raw)) {
+    for (const item of raw) collectAddresses(item, into);
+    return into;
+  }
+  if (raw && typeof raw === "object") {
+    const obj = raw as Record<string, unknown>;
+    for (const key of [
+      "result",
+      "accounts",
+      "address",
+      "selectedAddress",
+      "data",
+    ]) {
+      if (key in obj) collectAddresses(obj[key], into);
+    }
+  }
+  return into;
+}
+
+async function requestAccounts(
+  provider: RpcProvider | null | undefined,
+  method: string,
+): Promise<string[]> {
+  if (!provider || typeof provider.request !== "function") return [];
+  try {
+    return collectAddresses(await provider.request({ method }));
+  } catch {
+    return [];
+  }
+}
+
+async function resolveWalletAddress(
+  provider: unknown,
+  expectedAddress?: string | null,
+): Promise<string> {
+  const expected = expectedAddress?.trim() || null;
+  const wrappers: RpcProvider[] = [];
+  const root = provider as RpcProvider | null;
+  if (root) wrappers.push(root);
+  if (root?.provider && root.provider !== root) {
+    wrappers.push(root.provider as RpcProvider);
+  }
+
+  const candidates: string[] = [];
+  for (const wrapper of wrappers) {
+    candidates.push(
+      ...collectAddresses([
+        wrapper.accounts,
+        wrapper.selectedAddress,
+        wrapper.address,
+      ]),
+    );
+    candidates.push(...(await requestAccounts(wrapper, "eth_accounts")));
+  }
+
+  if (candidates.length === 0) {
+    for (const wrapper of wrappers) {
+      candidates.push(
+        ...(await requestAccounts(wrapper, "eth_requestAccounts")),
+      );
+    }
+  }
+
+  const unique = [...new Set(candidates.map((value) => value.toLowerCase()))];
+  if (expected && isHexAddress(expected)) {
+    const match = unique.find((value) => value === expected.toLowerCase());
+    if (match) {
+      return (
+        candidates.find((value) => value.toLowerCase() === match) ?? expected
+      );
+    }
+    if (unique.length === 0) return expected;
+  }
+
+  const first = candidates[0];
+  if (first) return first;
+  if (expected && isHexAddress(expected)) return expected;
+
+  throw new Error("No wallet address returned by authenticated provider");
+}
 
 declare global {
   interface Window {
@@ -155,6 +257,7 @@ export function MetamaskAuth() {
   const callbackUri = useRef<string | null>(null);
   const flowMode = useRef<"connect" | "sign">(isSignFlow ? "sign" : "connect");
   const signMessageRef = useRef<string | null>(null);
+  const expectedAddressRef = useRef<string | null>(null);
   const completeWithProviderRef = useRef<
     ((provider: unknown) => Promise<void>) | null
   >(null);
@@ -208,8 +311,8 @@ export function MetamaskAuth() {
     }
     if (authState === "authenticating") {
       return isSignFlow
-        ? "Waiting for you to confirm…"
-        : "Waiting for you to connect…";
+        ? "Choose your wallet, then approve the request…"
+        : "Choose your wallet to connect…";
     }
     if (authState === "authenticated") {
       return "Confirmed. Returning to SlickBills…";
@@ -242,10 +345,72 @@ export function MetamaskAuth() {
         return;
       }
 
-      const callbackUrl = buildCallbackUrl(params);
-      if (!callbackUrl) return;
-
       callbackSentRef.current = true;
+
+      const success = params.success !== "0";
+      const payload: Record<string, unknown> = {
+        type: "SB_METAMASK_AUTH",
+        provider: params.provider || "metamask",
+        success,
+        ...(params.address ? { address: params.address } : {}),
+        ...(params.signature ? { signature: params.signature } : {}),
+        ...(params.flow ? { flow: params.flow } : {}),
+        ...(params.kind ? { kind: params.kind } : {}),
+        ...(params.error ? { error: params.error } : {}),
+      };
+
+      let openerOrigin = "*";
+      try {
+        openerOrigin = callbackUri.current
+          ? new URL(callbackUri.current).origin
+          : "*";
+      } catch {
+        openerOrigin = "*";
+      }
+
+      try {
+        const opener = window.opener as Window | null;
+        if (opener && !opener.closed) {
+          opener.postMessage(payload, openerOrigin);
+        }
+      } catch {
+        // Cross-origin opener access can throw; BroadcastChannel still works.
+      }
+
+      try {
+        const channel = new BroadcastChannel("slickbills-wallet");
+        channel.postMessage(payload);
+        channel.close();
+      } catch {
+        // Ignore if BroadcastChannel is unavailable.
+      }
+
+      try {
+        window.localStorage.setItem(
+          "sb_wallet_callback",
+          JSON.stringify({ ...payload, ts: Date.now() }),
+        );
+        window.localStorage.removeItem("sb_wallet_callback");
+      } catch {
+        // Ignore storage failures (private mode, etc).
+      }
+
+      try {
+        const opener = window.opener as Window | null;
+        if (opener && !opener.closed) {
+          clearSessionKeys();
+          window.setTimeout(() => window.close(), 50);
+          return;
+        }
+      } catch {
+        // Fall through to same-tab redirect.
+      }
+
+      const callbackUrl = buildCallbackUrl(params);
+      if (!callbackUrl) {
+        callbackSentRef.current = false;
+        return;
+      }
 
       try {
         window.location.assign(callbackUrl);
@@ -272,43 +437,10 @@ export function MetamaskAuth() {
       };
 
       try {
-        let accounts: string[] = [];
-
-        if (typeof providerWithRequest.request === "function") {
-          const accountsRaw = (await providerWithRequest.request({
-            method: "eth_accounts",
-          })) as unknown;
-
-          accounts = Array.isArray(accountsRaw)
-            ? accountsRaw.filter(
-                (value): value is string => typeof value === "string",
-              )
-            : [];
-        }
-
-        const providerAccounts = Array.isArray(providerWithRequest.accounts)
-          ? providerWithRequest.accounts.filter(
-              (value): value is string => typeof value === "string",
-            )
-          : [];
-
-        const candidateAddress =
-          accounts[0] ??
-          providerAccounts[0] ??
-          (typeof providerWithRequest.selectedAddress === "string"
-            ? providerWithRequest.selectedAddress
-            : undefined) ??
-          (typeof providerWithRequest.address === "string"
-            ? providerWithRequest.address
-            : undefined);
-
-        const address = candidateAddress?.trim();
-
-        if (!address) {
-          throw new Error(
-            "No wallet address returned by authenticated provider",
-          );
-        }
+        const address = await resolveWalletAddress(
+          provider,
+          expectedAddressRef.current,
+        );
 
         const signIfNeeded = async () => {
           if (flowMode.current !== "sign") return null;
@@ -318,25 +450,34 @@ export function MetamaskAuth() {
             throw new Error("Missing sign_message for wallet signing flow.");
           }
 
-          if (typeof providerWithRequest.request !== "function") {
-            throw new Error(
-              "Connected wallet provider does not support signing.",
-            );
+          const signers: RpcProvider[] = [providerWithRequest];
+          const nested = (providerWithRequest as RpcProvider).provider;
+          if (nested && nested !== providerWithRequest) {
+            signers.push(nested as RpcProvider);
           }
 
-          try {
-            const signed = await providerWithRequest.request({
-              method: "personal_sign",
-              params: [message, address],
-            });
-            return typeof signed === "string" ? signed : null;
-          } catch {
-            const signed = await providerWithRequest.request({
-              method: "eth_sign",
-              params: [address, message],
-            });
-            return typeof signed === "string" ? signed : null;
+          for (const signer of signers) {
+            if (typeof signer.request !== "function") continue;
+            try {
+              const signed = await signer.request({
+                method: "personal_sign",
+                params: [message, address],
+              });
+              if (typeof signed === "string" && signed.trim()) return signed;
+            } catch {
+              try {
+                const signed = await signer.request({
+                  method: "eth_sign",
+                  params: [address, message],
+                });
+                if (typeof signed === "string" && signed.trim()) return signed;
+              } catch {
+                // Try the next provider.
+              }
+            }
           }
+
+          throw new Error("Connected wallet provider does not support signing.");
         };
 
         const signature = await signIfNeeded();
@@ -353,6 +494,7 @@ export function MetamaskAuth() {
           provider: "metamask",
           success: true,
           address,
+          ...(signature ? { signature, flow: "sign" as const } : {}),
         };
 
         try {
@@ -376,7 +518,11 @@ export function MetamaskAuth() {
           provider: "metamask",
           address,
           ...(flowMode.current === "sign" && signature
-            ? { signature, flow: "sign" }
+            ? {
+                signature,
+                flow: "sign",
+                kind: readPaymentPreview().kind,
+              }
             : {}),
         });
       } catch (err) {
@@ -407,11 +553,48 @@ export function MetamaskAuth() {
     setErrorMessage(null);
 
     try {
-      const provider = await (
-        web3Auth as unknown as {
-          connect: () => Promise<unknown>;
+      if (flowMode.current === "sign") {
+        const connected = Boolean(
+          (web3Auth as unknown as { connected?: boolean }).connected,
+        );
+        // Always show the picker. A cached WalletConnect session (often Rabby)
+        // would otherwise resume silently with no modal.
+        if (connected) {
+          try {
+            await web3Auth.logout({ cleanup: true });
+          } catch {
+            // Stale sessions can throw; still show the modal.
+          }
         }
-      ).connect();
+
+        const provider = await (
+          web3Auth as unknown as {
+            connect: () => Promise<unknown>;
+          }
+        ).connect();
+        if (!provider) {
+          throw new Error("Web3Auth modal closed before a wallet connected.");
+        }
+        await completeWithProvider(provider);
+        return;
+      }
+
+      const connected = Boolean(
+        (web3Auth as unknown as { connected?: boolean }).connected,
+      );
+      const existingProvider = (
+        web3Auth as unknown as { provider?: unknown }
+      ).provider;
+
+      let provider: unknown =
+        connected && existingProvider ? existingProvider : null;
+      if (!provider) {
+        provider = await (
+          web3Auth as unknown as {
+            connect: () => Promise<unknown>;
+          }
+        ).connect();
+      }
 
       if (!provider) {
         throw new Error("Web3Auth modal closed before a wallet connected.");
@@ -427,7 +610,7 @@ export function MetamaskAuth() {
           : message,
       );
       setAuthState("error");
-      if (!cancelled) {
+      if (!cancelled && flowMode.current !== "sign") {
         returnToCallback({
           success: "0",
           error: message,
@@ -457,6 +640,7 @@ export function MetamaskAuth() {
         const callbackFromQuery = params.get("callback_uri")?.trim();
         const modeFromQuery = params.get("mode")?.trim().toLowerCase();
         const signMessageFromQuery = params.get("sign_message")?.trim();
+        const addressFromQuery = params.get("address")?.trim();
         const callbackFromSession = window.sessionStorage
           .getItem(sessionStorageKeys.callbackUri)
           ?.trim();
@@ -467,6 +651,9 @@ export function MetamaskAuth() {
         const signMessageFromSession = window.sessionStorage
           .getItem(sessionStorageKeys.signMessage)
           ?.trim();
+        const addressFromSession = window.sessionStorage
+          .getItem(sessionStorageKeys.expectedAddress)
+          ?.trim();
 
         flowMode.current =
           modeFromQuery === "sign" || modeFromSession === "sign"
@@ -474,6 +661,8 @@ export function MetamaskAuth() {
             : "connect";
         signMessageRef.current =
           signMessageFromQuery || signMessageFromSession || null;
+        expectedAddressRef.current =
+          addressFromQuery || addressFromSession || null;
 
         callbackUri.current =
           callbackFromQuery && callbackFromQuery.length > 0
@@ -496,6 +685,12 @@ export function MetamaskAuth() {
           window.sessionStorage.setItem(
             sessionStorageKeys.signMessage,
             signMessageRef.current,
+          );
+        }
+        if (expectedAddressRef.current) {
+          window.sessionStorage.setItem(
+            sessionStorageKeys.expectedAddress,
+            expectedAddressRef.current,
           );
         }
         persistPaymentPreview(readPaymentPreview());
@@ -528,17 +723,14 @@ export function MetamaskAuth() {
             appName: "SlickBills",
           },
           modalConfig: {
-            hideWalletDiscovery: false,
+            // Don't auto-surface explorer wallets (Rabby often sits at the top
+            // as "recent" and then waits forever inside a mobile custom tab).
+            hideWalletDiscovery: true,
             connectors: {
               auth: {
                 label: "Web3Auth",
                 showOnModal: true,
-                loginMethods: {
-                  google: {
-                    name: "Google",
-                    showOnModal: true,
-                  },
-                },
+                loginMethods: web3AuthSocialLoginMethods(),
               },
               metamask: {
                 label: "MetaMask",
@@ -558,28 +750,11 @@ export function MetamaskAuth() {
         const connected = Boolean(
           (web3Auth as unknown as { connected?: boolean }).connected,
         );
-        const existingProvider = (
-          web3Auth as unknown as { provider?: unknown }
-        ).provider;
 
         web3AuthRef.current = web3Auth;
         setInitState("ready");
 
-        if (
-          flowMode.current === "sign" &&
-          connected &&
-          existingProvider
-        ) {
-          setAuthState("authenticating");
-          try {
-            await completeWithProviderRef.current?.(existingProvider);
-          } catch {
-            setAuthState("error");
-          }
-          return;
-        }
-
-        // Connect (link) flow: always start fresh so the right account is chosen.
+        // Always start fresh so Confirm/Connect shows the wallet picker.
         if (connected) {
           console.log(
             "[MetaMaskWeb3Auth] existing session found — logging out to force fresh login",

@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_auth/utils/supabase_auth_manger.dart';
+import 'package:slickbill/feature_auth/widgets/auth_page_scaffold.dart';
 import 'package:slickbill/feature_auth/widgets/continue_with_google_button.dart';
-import 'package:slickbill/shared_widgets/input_field.dart';
 
 class SignUp extends HookWidget {
   SignUp({Key? key}) : super(key: key);
@@ -92,164 +92,63 @@ class SignUp extends HookWidget {
       }
     }
 
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: MediaQuery.of(context).size.height -
-                  MediaQuery.of(context).padding.top,
+    return AuthPageScaffold(
+      title: 'lbl_AuthSignUpTitle'.tr,
+      subtitle: 'lbl_AuthSubtitle'.tr,
+      child: AutofillGroup(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const ContinueWithGoogleButton(),
+            const SizedBox(height: 20),
+            const AuthOrDivider(),
+            const SizedBox(height: 20),
+            AuthTextField(
+              controller: fullName,
+              label: 'lbl_FullName'.tr,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.name],
             ),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Theme.of(context).colorScheme.blue,
-                    Theme.of(context).colorScheme.dark,
-                    Theme.of(context).colorScheme.dark,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-              child: GestureDetector(
-                onTap: () => FocusScope.of(context).unfocus(),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 40),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 40),
-
-                      // Logo
-                      Container(
-                        width: double.infinity,
-                        height: 180,
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(50),
-                          child: Image.asset('assets/logo_text_darkbg.png'),
-                        ),
-                      ),
-
-                      const SizedBox(height: 40),
-
-                      const ContinueWithGoogleButton(),
-
-                      const SizedBox(height: 32),
-
-                      // Divider
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Divider(
-                              color: Theme.of(context).colorScheme.gray,
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Text(
-                              'OR',
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.gray,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                          Expanded(
-                            child: Divider(
-                              color: Theme.of(context).colorScheme.gray,
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      const SizedBox(height: 32),
-
-                      // Form Fields
-                      InputField(
-                        controller: fullName,
-                        label: 'Full name',
-                        obscure: false,
-                      ),
-                      InputField(
-                        controller: email,
-                        label: 'lbl_Email'.tr,
-                        obscure: false,
-                      ),
-                      InputField(
-                        controller: password,
-                        label: 'lbl_Password'.tr,
-                        obscure: true,
-                      ),
-                      InputField(
-                        controller: confirmPassword,
-                        label: 'lbl_ConfirmPassword'.tr,
-                        obscure: true,
-                      ),
-
-                      const SizedBox(height: 32),
-
-                      // Sign Up Button - Update with loading state
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: isLoading.value
-                              ? null
-                              : signUp, // ✅ Disable when loading
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Theme.of(context).colorScheme.blue,
-                            elevation: 5,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: isLoading.value // ✅ Show loading indicator
-                              ? SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(
-                                    color: Theme.of(context).colorScheme.light,
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Text(
-                                  'btn_SignUp'.tr,
-                                  style: TextStyle(
-                                    color: Theme.of(context).colorScheme.light,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 24),
-
-                      // Sign In Link
-                      GestureDetector(
-                        onTap: () => Get.toNamed('/sign-in'),
-                        child: Text(
-                          'lbl_GoToSignIn'.tr,
-                          style: Theme.of(context)
-                              .textTheme
-                              .displaySmall
-                              ?.copyWith(
-                                color: Theme.of(context).colorScheme.light,
-                                decoration: TextDecoration.underline,
-                              ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 40),
-                    ],
-                  ),
-                ),
-              ),
+            const SizedBox(height: 12),
+            AuthTextField(
+              controller: email,
+              label: 'lbl_Email'.tr,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.email],
+              autocorrect: false,
             ),
-          ),
+            const SizedBox(height: 12),
+            AuthTextField(
+              controller: password,
+              label: 'lbl_Password'.tr,
+              obscure: true,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.newPassword],
+              autocorrect: false,
+            ),
+            const SizedBox(height: 12),
+            AuthTextField(
+              controller: confirmPassword,
+              label: 'lbl_ConfirmPassword'.tr,
+              obscure: true,
+              textInputAction: TextInputAction.done,
+              autofillHints: const [AutofillHints.newPassword],
+              autocorrect: false,
+            ),
+            const SizedBox(height: 20),
+            AuthPrimaryButton(
+              label: 'btn_SignUp'.tr,
+              onPressed: signUp,
+              isLoading: isLoading.value,
+            ),
+            const SizedBox(height: 16),
+            AuthFooterLink(
+              prompt: 'lbl_AuthHasAccount'.tr,
+              action: 'lbl_AuthSignInAction'.tr,
+              onTap: () => Get.toNamed('/sign-in'),
+            ),
+          ],
         ),
       ),
     );

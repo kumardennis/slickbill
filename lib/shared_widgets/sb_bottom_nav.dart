@@ -48,12 +48,6 @@ class SbBottomNav extends StatelessWidget {
                   selected: currentIndex == 1,
                   onTap: () => onTap(1),
                 ),
-                _NavItem(
-                  icon: Icons.upload_file_rounded,
-                  label: 'Upload',
-                  selected: currentIndex == 2,
-                  onTap: () => onTap(2),
-                ),
               ],
             ),
           ),

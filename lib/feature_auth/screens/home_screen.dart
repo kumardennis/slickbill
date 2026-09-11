@@ -9,6 +9,8 @@ import 'package:get/get.dart';
 import 'package:slickbill/feature_auth/getx_controllers/current_bank_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/models/user_model.dart';
+import 'package:slickbill/feature_auth/services/metamask_wallet_service.dart';
+import 'package:slickbill/feature_auth/services/web_wallet_return.dart';
 import 'package:slickbill/core/services/invoice_toast_coordinator.dart';
 import 'package:slickbill/services/sb_feedback.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
@@ -30,12 +32,13 @@ import 'package:url_launcher/url_launcher.dart' as launcher;
 import '../../feature_dashboard/screens/all_bills.dart';
 import '../../feature_navigation/getx_controllers/navigation_controller.dart';
 import '../../feature_send/screens/send_invoice.dart';
-import '../../feature_self_create/screens/open_create_self_invoice.dart';
 import '../../feature_trashboard/screens/all_trash_bills.dart';
 
 class HomeScreen extends HookWidget {
   final supabase = Supabase.instance.client;
-  UserController userController = Get.put(UserController());
+  UserController userController = Get.isRegistered<UserController>()
+      ? Get.find<UserController>()
+      : Get.put(UserController());
   ReceivedInvoicesClass receivedInvoicesClass = ReceivedInvoicesClass();
 
   IntentController intentController = Get.put(IntentController());
@@ -47,8 +50,7 @@ class HomeScreen extends HookWidget {
 
   final List<Widget> _pages = [
     AllBills(), // 0 - Bills list
-    const SendNfcInvoice(), // 2 - QR/NFC Exchange (CENTER - Main action)
-    const OpenAndCreateSelfInvoice(), // 1 - Upload invoice
+    const SendNfcInvoice(), // 1 - Request / QR / NFC
   ];
 
   @override
@@ -70,6 +72,25 @@ class HomeScreen extends HookWidget {
         ),
       );
     }
+
+    useEffect(() {
+      var cancelled = false;
+
+      Future<void> bootstrapWebSession() async {
+        if (userController.user.value.id <= 0) {
+          await userController.loadUserData();
+        }
+        if (cancelled) return;
+        await MetamaskWalletService.consumeWebCallbackIfPresent().then(
+          completeWebWalletReturn,
+        );
+        if (cancelled) return;
+        await userController.ensureSignedInOrRedirect();
+      }
+
+      unawaited(bootstrapWebSession());
+      return () => cancelled = true;
+    }, const []);
 
     useEffect(() {
       final privateUserId =
@@ -234,10 +255,7 @@ class HomeScreen extends HookWidget {
         if (!checkingForIntent.hasListeners) return;
 
         if (value != null) {
-          print('Intent detected with PDF data');
-          filePath.value = value;
-          intentController.loadIntent(true);
-          navigationController.changeIndex(2);
+          print('Intent detected with PDF data (upload tab skipped this release)');
         }
       } catch (e) {
         print('Error checking for intent: $e');
@@ -292,7 +310,11 @@ class HomeScreen extends HookWidget {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SbPageBackground(
-        child: Obx(() => _pages[navigationController.currentIndex.value]),
+        child: Obx(() {
+          final index = navigationController.currentIndex.value
+              .clamp(0, _pages.length - 1);
+          return _pages[index];
+        }),
       ),
       bottomNavigationBar: Obx(
         () => SbBottomNav(

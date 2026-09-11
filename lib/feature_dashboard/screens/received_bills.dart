@@ -178,7 +178,7 @@ class ReceivedBills extends HookWidget {
       AppLockController.beginExternalAuthSession();
       try {
         // Open embedded wallet pay page; auto-close when txHash is available
-        const baseUrl = 'https://slickbills-wallet-client.vercel.app';
+        const baseUrl = 'https://wallet.slickbills.com';
         final result = await Get.to(() => CdpWebView(
               url:
                   '$baseUrl/wallet/pay?to=${invoice.senders!.privateUsers!.users!.cdpWalletId}&amount=${invoice.amount}&description=${Uri.encodeComponent(invoice.description)}&receiver=${invoice.senders!.privateUsers!.firstName}',
@@ -230,7 +230,10 @@ class ReceivedBills extends HookWidget {
       }
     }
 
-    Future<void> createMoneriumTransaction(InvoiceModel invoice) async {
+    Future<void> createMoneriumTransaction(
+      InvoiceModel invoice, {
+      void Function(String phase)? onPhase,
+    }) async {
       final user = userController.user.value;
       final moneriumUserId = PaymentSetupController.resolveMoneriumUserId(user);
       final email = user.email.trim();
@@ -273,6 +276,7 @@ class ReceivedBills extends HookWidget {
 
       AppLockController.beginExternalAuthSession();
       unawaited(SbFeedback.medium());
+      onPhase?.call('checkingBalance');
       try {
         try {
           await MoneriumService.ensureConnected(
@@ -301,6 +305,26 @@ class ReceivedBills extends HookWidget {
           );
           return;
         }
+
+        final balanceCheck = await MoneriumService.checkSufficientEur(
+          userId: moneriumUserId,
+          walletAddress: walletAddress,
+          amount: invoice.amount,
+        );
+        if (!balanceCheck.sufficient) {
+          Get.snackbar(
+            balanceCheck.available == null
+                ? 'Balance check'
+                : 'Not enough balance',
+            balanceCheck.message ?? 'Not enough euro balance to pay this bill.',
+            backgroundColor: Theme.of(context).colorScheme.red,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 4),
+          );
+          return;
+        }
+
+        onPhase?.call('updatingStatus');
 
         final recipientName =
             '${invoice.senders?.privateUsers?.firstName ?? ''} ${invoice.senders?.privateUsers?.lastName ?? ''}'
@@ -461,7 +485,17 @@ class ReceivedBills extends HookWidget {
       InvoiceModel invoice, {
       bool silent = false,
     }) async {
-      final userId = userController.user.value.privateUserId.toString();
+      final privateUserId = userController.user.value.validPrivateUserId;
+      if (privateUserId == null) {
+        if (!silent) {
+          Get.snackbar(
+            'Profile not ready',
+            'Your account is still loading. Please try again.',
+          );
+        }
+        return false;
+      }
+      final userId = privateUserId.toString();
       final currentStatus = invoice.status.trim().toUpperCase();
       final alreadyPaid = currentStatus == 'PAID';
       final invoiceOrderId = invoice.moneriumOrderId?.trim() ?? '';
@@ -672,7 +706,8 @@ class ReceivedBills extends HookWidget {
       filter.value.month.year,
       filter.value.month.month,
       filter.value.status,
-      filter.value.allTime
+      filter.value.allTime,
+      userController.user.value.privateUserId,
     ]);
 
     useEffect(() {
@@ -680,6 +715,14 @@ class ReceivedBills extends HookWidget {
           ever<int>(invoiceController.receivedListRefreshRequest, (_) {
         fetchRef.value();
       });
+
+      final receiverPrivateUserId =
+          userController.user.value.validPrivateUserId?.toString();
+      if (receiverPrivateUserId == null) {
+        return () {
+          refreshWorker.dispose();
+        };
+      }
 
       final changes = supabase
           .channel('invoice-updates-received-bills')
@@ -690,7 +733,7 @@ class ReceivedBills extends HookWidget {
             filter: PostgresChangeFilter(
               type: PostgresChangeFilterType.eq,
               column: 'receiverPrivateUserId',
-              value: userController.user.value.privateUserId.toString(),
+              value: receiverPrivateUserId,
             ),
             callback: (payload) => fetchRef.value(),
           )

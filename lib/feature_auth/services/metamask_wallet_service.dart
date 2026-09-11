@@ -3,7 +3,10 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
+import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/services/native_web3auth_service.dart';
+import 'package:slickbill/shared_widgets/sb_post_message_impl.dart';
+import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class WalletClientCancelledException implements Exception {
@@ -84,6 +87,26 @@ class WalletClientPaymentPreview {
   }
 }
 
+class WebWalletCallback {
+  const WebWalletCallback({
+    required this.kind,
+    required this.completedPendingSign,
+    this.address,
+    this.signature,
+  });
+
+  final String kind;
+  final bool completedPendingSign;
+  final String? address;
+  final String? signature;
+
+  bool get shouldFinishIbanLink =>
+      !completedPendingSign &&
+      (signature?.isNotEmpty ?? false) &&
+      kind != 'pay' &&
+      kind != 'withdraw';
+}
+
 class MetamaskWalletService {
   // Toggle via --dart-define=WEB3AUTH_MODE=redirect|native (default is redirect)
   static bool useNativeFlow =
@@ -95,8 +118,7 @@ class MetamaskWalletService {
     useNativeFlow = enabled;
   }
 
-  static const String _walletClientBaseUrl =
-      'https://slickbills-wallet-client.vercel.app';
+  static const String _walletClientBaseUrl = 'https://wallet.slickbills.com';
   static const String _metamaskAuthPath = '/wallet/metamask-auth';
   static const String _callbackHost = 'home-screen';
   static const String moneriumOwnershipMessage =
@@ -107,8 +129,9 @@ class MetamaskWalletService {
   static _WalletClientLifecycleObserver? _lifecycleObserver;
   static Timer? _resumeCancelTimer;
   static bool _leftForWalletClient = false;
+  static StreamSubscription<Map<String, dynamic>>? _webCallbackSub;
 
-  static String _callbackUriForPlatform() {
+  static String _callbackUriForPlatform({Map<String, String>? extra}) {
     if (kIsWeb) {
       final requestId = DateTime.now().microsecondsSinceEpoch.toString();
       final origin = Uri.base.origin.isNotEmpty
@@ -119,6 +142,7 @@ class MetamaskWalletService {
         queryParameters: {
           'metamask': '1',
           'request_id': requestId,
+          ...?extra,
         },
       ).toString();
     }
@@ -134,6 +158,7 @@ class MetamaskWalletService {
       queryParameters: {
         'metamask': '1',
         'request_id': requestId,
+        ...?extra,
       },
     ).toString();
   }
@@ -162,6 +187,9 @@ class MetamaskWalletService {
   }
 
   static void _onAppLifecycle(AppLifecycleState state) {
+    // On web the wallet client is a separate tab. Hiding this tab is not cancel.
+    if (kIsWeb) return;
+
     switch (state) {
       case AppLifecycleState.inactive:
       case AppLifecycleState.hidden:
@@ -232,11 +260,26 @@ class MetamaskWalletService {
   }
 
   /// Chrome Custom Tab (Android) / Safari View (iOS). Full Chrome only if that fails.
-  static Future<bool> _openWalletClientTab(Uri uri) async {
+  static Future<bool> _openWalletClientTab(
+    Uri uri, {
+    bool replaceCurrentTab = false,
+  }) async {
     _ensureLifecycleWatch();
 
     if (kIsWeb) {
-      return launchUrl(uri, mode: LaunchMode.platformDefault);
+      final opened = slickBillsOpenWalletClientTab(
+        uri,
+        replaceCurrentTab: replaceCurrentTab,
+      );
+      if (opened) {
+        _log(
+          replaceCurrentTab
+              ? 'navigating this tab to wallet-client'
+              : 'opened wallet-client popup',
+        );
+        return true;
+      }
+      return false;
     }
 
     try {
@@ -250,6 +293,91 @@ class MetamaskWalletService {
     }
 
     return launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  static void _listenForWebWalletCallback() {
+    if (!kIsWeb) return;
+    _webCallbackSub?.cancel();
+    _webCallbackSub = slickBillsPostMessages().listen((msg) {
+      final type = msg['type']?.toString();
+      if (type != 'SB_METAMASK_AUTH' && type != 'SB_AUTH') return;
+      if (type == 'SB_AUTH' && msg['provider']?.toString() != 'metamask') {
+        return;
+      }
+
+      final success = msg['success'] != false &&
+          msg['success']?.toString() != '0' &&
+          msg['success']?.toString().toLowerCase() != 'false';
+      final address = msg['address']?.toString().trim() ?? '';
+      final signature = msg['signature']?.toString().trim() ?? '';
+      final flow = msg['flow']?.toString().trim() ?? '';
+      final error = msg['error']?.toString().trim() ?? '';
+
+      onAuthCallbackUri(
+        Uri.parse('https://app.slickbills.com/home-screen').replace(
+          queryParameters: {
+            'metamask': '1',
+            'success': success ? '1' : '0',
+            if (address.isNotEmpty) 'address': address,
+            if (signature.isNotEmpty) 'signature': signature,
+            if (flow.isNotEmpty) 'flow': flow,
+            if (error.isNotEmpty) 'error': error,
+          },
+        ),
+      );
+    });
+  }
+
+  static void _stopWebWalletCallbackListener() {
+    _webCallbackSub?.cancel();
+    _webCallbackSub = null;
+  }
+
+  /// If the wallet tab had to redirect this tab (no opener), apply the result.
+  static Future<WebWalletCallback?> consumeWebCallbackIfPresent() async {
+    if (!kIsWeb) return null;
+
+    final uri = Uri.base;
+    final isMetaMask = uri.queryParameters['metamask'] == '1';
+    if (!isMetaMask) return null;
+
+    final signature = uri.queryParameters['signature']?.trim() ?? '';
+    final address = uri.queryParameters['address']?.trim() ?? '';
+    final kind = (uri.queryParameters['kind']?.trim().toLowerCase().isNotEmpty ??
+            false)
+        ? uri.queryParameters['kind']!.trim().toLowerCase()
+        : (signature.isNotEmpty ? 'link' : 'connect');
+    final hadPendingSign = _pendingSignCompleter != null &&
+        !_pendingSignCompleter!.isCompleted;
+
+    onAuthCallbackUri(uri);
+    slickBillsBroadcastWalletMessage({
+      'type': 'SB_METAMASK_AUTH',
+      'provider': 'metamask',
+      'success': uri.queryParameters['success'] != '0',
+      if (address.isNotEmpty) 'address': address,
+      if (signature.isNotEmpty) 'signature': signature,
+      if (kind.isNotEmpty) 'kind': kind,
+      'flow': signature.isNotEmpty ? 'sign' : 'connect',
+    });
+    slickBillsClearWalletCallbackQuery();
+
+    if (address.isNotEmpty && Get.isRegistered<UserController>()) {
+      final userController = Get.find<UserController>();
+      if (userController.user.value.id <= 0) {
+        await userController.loadUserData();
+      }
+      if (userController.user.value.id > 0) {
+        await userController.updateMetamaskWalletAddress(address);
+      }
+    }
+
+    return WebWalletCallback(
+      kind: kind,
+      completedPendingSign: hadPendingSign,
+      address: address.isEmpty ? null : address,
+      signature: signature.isEmpty ? null : signature,
+    );
   }
 
   static void onAuthCallbackUri(Uri uri) {
@@ -341,6 +469,8 @@ class MetamaskWalletService {
     final completer = Completer<String?>();
     _pendingAuthCompleter = completer;
 
+    _listenForWebWalletCallback();
+
     final authUri =
         Uri.parse('$_walletClientBaseUrl$_metamaskAuthPath').replace(
       queryParameters: {
@@ -353,10 +483,14 @@ class MetamaskWalletService {
     _log('opening wallet connect in custom tab: $authUri');
 
     AppLockController.beginExternalAuthSession();
-    final opened = await _openWalletClientTab(authUri);
+    final opened = await _openWalletClientTab(
+      authUri,
+      replaceCurrentTab: kIsWeb,
+    );
 
     if (!opened) {
       AppLockController.endExternalAuthSession();
+      _stopWebWalletCallbackListener();
       _pendingAuthCompleter = null;
       throw Exception('Unable to open wallet connect');
     }
@@ -371,6 +505,7 @@ class MetamaskWalletService {
       return address;
     } finally {
       AppLockController.endExternalAuthSession();
+      _stopWebWalletCallbackListener();
       if (identical(_pendingAuthCompleter, completer)) {
         _pendingAuthCompleter = null;
         _leftForWalletClient = false;
@@ -395,6 +530,9 @@ class MetamaskWalletService {
     final completer = Completer<String>();
     _pendingSignCompleter = completer;
 
+    _listenForWebWalletCallback();
+
+    final kind = preview?.kind ?? 'link';
     final signUri =
         Uri.parse('$_walletClientBaseUrl$_metamaskAuthPath').replace(
       queryParameters: {
@@ -402,7 +540,13 @@ class MetamaskWalletService {
         'mode': 'sign',
         'address': address,
         'sign_message': message,
-        'callback_uri': _callbackUriForPlatform(),
+        'kind': kind,
+        'callback_uri': _callbackUriForPlatform(
+          extra: {
+            'flow': 'sign',
+            'kind': kind,
+          },
+        ),
         ...?preview?.toQueryParameters(),
       },
     );
@@ -414,6 +558,7 @@ class MetamaskWalletService {
 
     if (!opened) {
       AppLockController.endExternalAuthSession();
+      _stopWebWalletCallbackListener();
       _pendingSignCompleter = null;
       throw Exception('Unable to open payment signing');
     }
@@ -427,6 +572,7 @@ class MetamaskWalletService {
       return signature;
     } finally {
       AppLockController.endExternalAuthSession();
+      _stopWebWalletCallbackListener();
       if (identical(_pendingSignCompleter, completer)) {
         _pendingSignCompleter = null;
         _leftForWalletClient = false;

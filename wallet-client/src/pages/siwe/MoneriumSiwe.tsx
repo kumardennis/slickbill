@@ -2,6 +2,7 @@ import { WEB3AUTH_NETWORK } from "@web3auth/base";
 import { Web3Auth } from "@web3auth/modal";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { sb } from "../../theme";
+import { web3AuthSocialLoginMethods } from "../../web3authSocialLogin";
 
 const EXCHANGE_SERVER_URL = "https://express-ten-xi.vercel.app";
 const SIWE_PARAMS_SESSION_KEY = "monerium_siwe_params_v1";
@@ -161,9 +162,7 @@ export function MoneriumSiwe() {
             auth: {
               label: "Web3Auth",
               showOnModal: true,
-              loginMethods: {
-                google: { name: "Google", showOnModal: true },
-              },
+              loginMethods: web3AuthSocialLoginMethods(),
             },
             metamask: { label: "MetaMask", showOnModal: true },
             "wallet-connect-v2": { label: "WalletConnect", showOnModal: true },

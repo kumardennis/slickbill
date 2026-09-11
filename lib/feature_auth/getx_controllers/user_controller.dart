@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:slickbill/core/services/push_notification_service.dart';
 import 'package:slickbill/feature_auth/repos/user_repo.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
-import 'package:slickbill/feature_auth/screens/sign_in.dart';
 import 'package:slickbill/feature_auth/services/google_auth_service.dart';
 import 'package:slickbill/feature_auth/utils/supabase_auth_manger.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -31,8 +31,41 @@ class UserController extends GetxController {
 
   final GoogleAuthService _googleAuthService = GoogleAuthService();
   int _remoteProfileEpoch = 0;
+  StreamSubscription<AuthState>? _authSub;
+  Future<bool>? _refreshInFlight;
+
+  static const _refreshSkewSeconds = 90;
+
+  /// Prefer the live Supabase session JWT over the cached user copy.
+  String get accessToken {
+    final live = supabase.auth.currentSession?.accessToken.trim() ?? '';
+    if (live.isNotEmpty) return live;
+    return user.value.accessToken;
+  }
 
   int beginRemoteUserLoad() => ++_remoteProfileEpoch;
+
+  @override
+  void onInit() {
+    super.onInit();
+    _authSub = supabase.auth.onAuthStateChange.listen(_onAuthStateChange);
+  }
+
+  @override
+  void onClose() {
+    _authSub?.cancel();
+    super.onClose();
+  }
+
+  void _onAuthStateChange(AuthState data) {
+    final session = data.session;
+    if (session == null) return;
+    if (data.event == AuthChangeEvent.tokenRefreshed ||
+        data.event == AuthChangeEvent.signedIn ||
+        data.event == AuthChangeEvent.userUpdated) {
+      _syncAccessToken(session);
+    }
+  }
 
   loadUser(ClientUserModel updatedUser, {int? epoch}) {
     if (epoch != null && epoch != _remoteProfileEpoch) {
@@ -60,42 +93,85 @@ class UserController extends GetxController {
     );
   }
 
-  bool _isTokenExpired(Session session) {
+  bool _needsRefresh(Session session) {
+    final expiresAt = session.expiresAt;
+    if (expiresAt == null) return true;
     final now = DateTime.now().millisecondsSinceEpoch / 1000;
-    return session.expiresAt != null && session.expiresAt! <= now;
+    return expiresAt <= now + _refreshSkewSeconds;
   }
 
-  Future<bool> refreshSessionIfNeeded() async {
+  bool _isFatalAuthError(Object error) {
+    if (error is AuthException) {
+      final code = (error.code ?? '').toLowerCase();
+      final message = error.message.toLowerCase();
+      if (code.contains('refresh_token')) return true;
+      if (message.contains('invalid refresh token')) return true;
+      if (message.contains('refresh token not found')) return true;
+      if (message.contains('session not found')) return true;
+    }
+    final text = error.toString().toLowerCase();
+    return text.contains('invalid refresh token') ||
+        text.contains('refresh_token_not_found');
+  }
+
+  void _syncAccessToken(Session session) {
+    if (user.value.id <= 0) return;
+    if (user.value.accessToken == session.accessToken) return;
+    user.value = user.value.copyWith(accessToken: session.accessToken);
+    unawaited(saveUserData());
+  }
+
+  /// Refresh the JWT if it is expired or about to expire.
+  /// Does not log the user out on a transient network failure.
+  Future<bool> ensureFreshSession({bool force = false}) async {
+    if (_refreshInFlight != null) return _refreshInFlight!;
+    final future = _ensureFreshSession(force: force);
+    _refreshInFlight = future;
     try {
-      final session = supabase.auth.currentSession;
+      return await future;
+    } finally {
+      if (identical(_refreshInFlight, future)) {
+        _refreshInFlight = null;
+      }
+    }
+  }
+
+  Future<bool> _ensureFreshSession({required bool force}) async {
+    try {
+      var session = supabase.auth.currentSession;
       if (session == null) return false;
 
-      if (_isTokenExpired(session)) {
-        print('Token expired, attempting refresh...');
-        final response = await supabase.auth.refreshSession();
-
-        if (response.session != null) {
-          // Update the access token in user model
-          user.value = user.value.copyWith(
-            accessToken: response.session!.accessToken,
-            cdpWalletId: user.value.cdpWalletId,
-          );
-          await saveUserData();
-          print('Session refreshed successfully');
-          return true;
-        } else {
-          print('Failed to refresh session');
-          await clearUserData();
-          return false;
-        }
+      if (!force && !_needsRefresh(session)) {
+        _syncAccessToken(session);
+        return true;
       }
+
+      print('Refreshing Supabase session...');
+      final response = await supabase.auth.refreshSession();
+      session = response.session ?? supabase.auth.currentSession;
+      if (session == null) {
+        print('Session refresh returned no session');
+        return false;
+      }
+      _syncAccessToken(session);
+      print('Session refreshed successfully');
       return true;
     } catch (e) {
       print('Error refreshing session: $e');
-      await clearUserData();
+      if (_isFatalAuthError(e)) {
+        await forceLogout();
+        return false;
+      }
+      final session = supabase.auth.currentSession;
+      if (session != null) {
+        _syncAccessToken(session);
+        return true;
+      }
       return false;
     }
   }
+
+  Future<bool> refreshSessionIfNeeded() => ensureFreshSession();
 
   Future<void> saveUserData() async {
     try {
@@ -110,9 +186,8 @@ class UserController extends GetxController {
 
   Future<bool> loadUserData() async {
     try {
-      final session = supabase.auth.currentSession;
-      if (session == null || _isTokenExpired(session)) {
-        await clearUserData();
+      final refreshed = await ensureFreshSession();
+      if (!refreshed || supabase.auth.currentSession == null) {
         return false;
       }
 
@@ -121,6 +196,22 @@ class UserController extends GetxController {
       print('Error loading user data: $e');
       return false;
     }
+  }
+
+  /// Loads the session into [user], or sends the guest to sign-in.
+  Future<bool> ensureSignedInOrRedirect() async {
+    if (user.value.id > 0) return true;
+
+    await loadUserData();
+    if (user.value.id > 0) return true;
+
+    final route = Get.currentRoute;
+    if (route == '/sign-in' || route.startsWith('/sign-in')) {
+      return false;
+    }
+
+    Get.offAllNamed('/sign-in');
+    return false;
   }
 
   Future<bool> updateCdpWalletAddress(
@@ -350,10 +441,14 @@ class UserController extends GetxController {
 
       beginRemoteUserLoad();
       final trimmedPublicName = publicName?.trim();
+      final safePublicName =
+          (trimmedPublicName != null && trimmedPublicName.contains('@'))
+              ? null
+              : trimmedPublicName;
       final response = await _userRepo.updateBusinessProfile(
         privateUserId: privateUserId,
         isBusiness: isBusiness,
-        publicName: trimmedPublicName,
+        publicName: safePublicName,
       );
 
       if (response == null) {
@@ -395,17 +490,42 @@ class UserController extends GetxController {
       print('User data cleared');
     } catch (e) {
       print('Error clearing user data: $e');
+      user.value = ClientUserModel(
+        id: 0,
+        username: '',
+        email: '',
+        authUserId: '',
+        accessToken: '',
+        isPrivate: true,
+        firstName: '',
+        lastName: '',
+      );
+    }
+  }
+
+  Future<void> _awaitSafely(Future<void> future, {String label = 'task'}) async {
+    try {
+      await future.timeout(const Duration(seconds: 4));
+    } catch (e) {
+      print('Sign-out $label skipped: $e');
     }
   }
 
   Future<void> forceLogout() async {
-    try {
-      await PushNotificationService.logoutUser();
-      await supabase.auth.signOut();
-      await clearUserData();
-      Get.offAll(() => SignIn());
-    } catch (e) {
-      print('Error during force logout: $e');
+    await _awaitSafely(
+      PushNotificationService.logoutUser(),
+      label: 'push logout',
+    );
+    await _awaitSafely(
+      supabase.auth.signOut(
+        scope: kIsWeb ? SignOutScope.local : SignOutScope.global,
+      ),
+      label: 'supabase signOut',
+    );
+    await clearUserData();
+    while (Get.isDialogOpen ?? false) {
+      Get.back();
     }
+    Get.offAllNamed('/sign-in');
   }
 }

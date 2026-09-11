@@ -88,7 +88,11 @@ class GoogleAuthService {
 
   Future<void> signOut() async {
     try {
-      await GoogleSignIn.instance.signOut();
+      if (!_initialized) {
+        print('Skipping Google sign-out; GIS was never initialized');
+        return;
+      }
+      await GoogleSignIn.instance.signOut().timeout(const Duration(seconds: 3));
       print('Signed out from Google');
     } catch (e) {
       print('Error signing out from Google: $e');

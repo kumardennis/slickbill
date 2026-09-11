@@ -74,6 +74,21 @@ ThemeData buildSlickBillsTheme() {
         borderRadius: BorderRadius.circular(SbRadii.md),
       ),
     ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: SbColors.surfaceLowest,
+      surfaceTintColor: Colors.transparent,
+      titleTextStyle: interStyle(size: 18, weight: FontWeight.w700),
+      contentTextStyle: interStyle(
+        size: 14,
+        weight: FontWeight.w400,
+        height: 1.43,
+        color: SbColors.onSurfaceVariant,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(SbRadii.lg),
+        side: const BorderSide(color: SbColors.outlineVariant),
+      ),
+    ),
     dividerColor: SbColors.surfaceContainer,
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(

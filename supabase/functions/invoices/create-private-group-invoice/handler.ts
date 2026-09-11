@@ -7,7 +7,8 @@ import {
   errorResponseData,
 } from "../../_shared/confirmedRequiredParams.ts";
 import { corsHeaders } from "../../_shared/cors.ts";
-import { createSupabase } from "../../_shared/supabaseClient.ts";
+import { requireOwnPrivateUser } from "../../_shared/requireOwnPrivateUser.ts";
+import { createSupabaseService } from "../../_shared/supabaseClient.ts";
 import { sendFcmPush } from "../../_shared/fcm.ts";
 
 type ReceiverUser = {
@@ -16,8 +17,6 @@ type ReceiverUser = {
 };
 
 export const handler = async (req: Request) => {
-  const supabase = createSupabase(req);
-
   try {
     const {
       privateUserId,
@@ -46,6 +45,10 @@ export const handler = async (req: Request) => {
         headers: { "Content-Type": "application/json" },
       });
     }
+
+    const authz = await requireOwnPrivateUser(req, privateUserId);
+    if (!authz.ok) return authz.response;
+    const supabase = authz.service;
     const { data: groupData, error: groupError } = await supabase
       .from("private_groups")
       .insert({
@@ -149,7 +152,7 @@ export const handler = async (req: Request) => {
           });
         }
 
-        const { data: receiverAppUser } = await supabase
+        const { data: receiverAppUser } = await createSupabaseService()
           .from("users")
           .select("fcm_token")
           .eq("id", receiverUser.receiverUserId)

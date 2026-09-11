@@ -164,14 +164,20 @@ class PushNotificationService {
 
       _cancelTokenFetchRetry();
 
-      await _persistPushToken(null);
       try {
-        await FirebaseMessaging.instance.deleteToken();
+        await _persistPushToken(null).timeout(const Duration(seconds: 3));
+      } catch (e) {
+        print('⚠️ Push token clear on logout skipped: $e');
+      }
+      try {
+        await FirebaseMessaging.instance
+            .deleteToken()
+            .timeout(const Duration(seconds: 3));
       } catch (e) {
         if (_isApnsTokenNotSetError(e)) {
           print('⚠️ APNS token not ready during logout, skipping token delete');
         } else {
-          rethrow;
+          print('⚠️ FCM token delete on logout skipped: $e');
         }
       }
 
@@ -190,32 +196,25 @@ class PushNotificationService {
       if (id > 0) appUserId = id;
     }
 
-    if (appUserId != null) {
-      // Clear this token from any other user on the same device first.
-      if (token != null) {
-        await client
-            .from('users')
-            .update({'fcm_token': null})
-            .eq('fcm_token', token)
-            .neq('id', appUserId);
-      }
-      await client
-          .from('users')
-          .update({'fcm_token': token}).eq('id', appUserId);
-      print('✅ Updated users.fcm_token for user id: $appUserId');
-      return;
-    }
-
-    final authUserId = client.auth.currentUser?.id;
-    if (authUserId == null) {
+    if (client.auth.currentUser == null) {
       print('⚠️ No auth user found for token persistence');
       return;
     }
 
-    await client
-        .from('users')
-        .update({'fcm_token': token}).eq('authUserId', authUserId);
-    print('✅ Updated users.fcm_token for auth user id');
+    if (token != null && token.isNotEmpty) {
+      await client.rpc(
+        'claim_fcm_token',
+        params: {'p_token': token},
+      );
+    } else if (appUserId != null) {
+      await client.from('users').update({'fcm_token': null}).eq('id', appUserId);
+    } else if (client.auth.currentUser?.id != null) {
+      await client
+          .from('users')
+          .update({'fcm_token': null}).eq('authUserId', client.auth.currentUser!.id);
+    }
+    print('✅ Updated users.fcm_token');
+    return;
   }
 
   static bool _isIosFamily() =>

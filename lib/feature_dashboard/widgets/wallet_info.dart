@@ -64,6 +64,7 @@ class WalletInfo extends HookWidget {
     }) async {
       final signature = await MetamaskWalletService.signAddressOwnershipMessage(
         address: walletAddress,
+        preview: const WalletClientPaymentPreview(kind: 'link'),
       );
 
       final linkResponse = await MoneriumService.linkWallet(
@@ -1124,7 +1125,7 @@ class WalletInfo extends HookWidget {
       metamaskWalletAddress.value =
           userController.user.value.metamaskWalletAddress;
       return null;
-    }, []);
+    }, [userController.user.value.privateUserId]);
 
     final user = userController.user.value;
     final alreadySetUp = PaymentSetupController.userHasMoneriumIban(user) ||

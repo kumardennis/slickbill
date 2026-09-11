@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'package:get/get.dart';
+import 'package:slickbill/feature_auth/services/web_tab.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class FacebookAuthService {
@@ -7,33 +9,45 @@ class FacebookAuthService {
   Future<AuthResponse?> signInWithFacebook() async {
     try {
       if (kIsWeb) {
-        // ✅ Web: Use OAuth redirect
-        await supabase.auth.signInWithOAuth(
-          OAuthProvider.facebook,
-          redirectTo: 'https://app.slickbills.com/sign-in?from=facebook_oauth',
-          authScreenLaunchMode: LaunchMode.platformDefault,
+        final invoiceToken = Get.parameters['invoice_token'] ??
+            Uri.base.queryParameters['invoice_token'];
+        slickBillsMarkWebOAuthPending(invoiceToken: invoiceToken);
+
+        final res = await supabase.auth.getOAuthSignInUrl(
+          provider: OAuthProvider.facebook,
+          redirectTo: _webRedirectTo(),
+          scopes: 'email,public_profile',
         );
-        return null; // Will redirect and come back
-      } else {
-        // ✅ Mobile: Launch in external browser with deep link
-        await supabase.auth.signInWithOAuth(
-          OAuthProvider.facebook,
-          redirectTo: 'slickbills://home-screen',
-          authScreenLaunchMode: LaunchMode.externalApplication,
-        );
-
-        final session = supabase.auth.currentSession;
-        final user = session?.user;
-
-        if (session != null && user != null) {
-          return AuthResponse(session: session, user: user);
-        }
-
+        // url_launcher uses window.open(..., noopener) which becomes a new tab.
+        slickBillsAssignCurrentTab(res.url);
         return null;
       }
+
+      await supabase.auth.signInWithOAuth(
+        OAuthProvider.facebook,
+        redirectTo: 'slickbills://home-screen',
+        authScreenLaunchMode: LaunchMode.externalApplication,
+      );
+
+      final session = supabase.auth.currentSession;
+      final user = session?.user;
+
+      if (session != null && user != null) {
+        return AuthResponse(session: session, user: user);
+      }
+
+      return null;
     } catch (e) {
       print('❌ Facebook authentication error: ${e.toString()}');
       rethrow;
     }
+  }
+
+  String _webRedirectTo() {
+    final origin = Uri.base.origin;
+    if (origin.contains('localhost') || origin.contains('127.0.0.1')) {
+      return '$origin/sign-in';
+    }
+    return 'https://app.slickbills.com/sign-in';
   }
 }

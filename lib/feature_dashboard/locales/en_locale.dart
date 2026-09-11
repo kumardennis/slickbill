@@ -48,6 +48,7 @@ Map<String, String> dashboardLocales_EN = {
   'lbl_PaidInMonth': 'Paid in @month',
   'inf_StatusUpdated': 'Status updated!',
   'btn_Pay': 'Pay this SlickBill',
+  'btn_CheckingBalance': 'Checking balance…',
   'btn_Unpay': 'Unpay this SlickBill',
   'btn_MarkObsolete': 'Mark as trash',
   'btn_MarkNotObsolete': 'Mark as not trash',

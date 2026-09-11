@@ -6,7 +6,7 @@ import {
   errorResponseData,
 } from "../../_shared/confirmedRequiredParams.ts";
 import { corsHeaders } from "../../_shared/cors.ts";
-import { createSupabase } from "../../_shared/supabaseClient.ts";
+import { createSupabase, createSupabaseService } from "../../_shared/supabaseClient.ts";
 
 const MIN_QUERY_LENGTH = 2;
 const MAX_RESULTS = 10;
@@ -22,7 +22,23 @@ function escapeIlike(value: string): string {
 }
 
 export const handler = async (req: Request) => {
-  const supabase = createSupabase(req);
+  const authClient = createSupabase(req);
+  const { data: authData, error: authError } = await authClient.auth.getUser();
+  if (authError || !authData.user) {
+    return new Response(
+      JSON.stringify({
+        isRequestSuccessfull: false,
+        data: null,
+        error: "Not authenticated",
+      }),
+      {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      },
+    );
+  }
+
+  const supabase = createSupabaseService();
 
   try {
     const body = await req.json();

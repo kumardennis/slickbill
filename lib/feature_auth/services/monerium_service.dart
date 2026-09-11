@@ -6,9 +6,22 @@ import 'package:http/http.dart' as http;
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/services/app_callback_in_app_browser.dart';
 import 'package:slickbill/feature_auth/services/metamask_wallet_service.dart';
+import 'package:slickbill/shared_widgets/sb_post_message_impl.dart';
 import 'package:slickbill/services/coinbase/coinbase_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
+
+class MoneriumEurBalanceCheck {
+  const MoneriumEurBalanceCheck({
+    required this.sufficient,
+    this.available,
+    this.message,
+  });
+
+  final bool sufficient;
+  final double? available;
+  final String? message;
+}
 
 class MoneriumService {
   static Completer<Map<String, dynamic>>? _pendingOAuthCompleter;
@@ -24,8 +37,7 @@ class MoneriumService {
       'monerium_invoice_order_$invoiceId';
   static const String _configuredWalletChain =
       String.fromEnvironment('MONERIUM_WALLET_CHAIN', defaultValue: '');
-  static const String _walletClientBaseUrl =
-      'https://slickbills-wallet-client.vercel.app';
+  static const String _walletClientBaseUrl = 'https://wallet.slickbills.com';
   static const String _walletSiwePath = '/wallet/siwe';
 
   static String get _serverBaseUrl => CoinbaseService.baseUrl;
@@ -721,6 +733,108 @@ class MoneriumService {
     );
   }
 
+  static String _chainFromIbanRows(List<dynamic> ibans) {
+    for (final row in ibans) {
+      if (row is Map) {
+        final chain = row['chain']?.toString().trim();
+        if (chain != null && chain.isNotEmpty) return chain;
+      }
+    }
+    if (_configuredWalletChain.trim().isNotEmpty) {
+      return _configuredWalletChain.trim();
+    }
+    return 'polygon';
+  }
+
+  static double? extractEurAvailable(dynamic data) {
+    Map<String, dynamic>? map;
+    if (data is Map<String, dynamic>) {
+      map = data;
+    } else if (data is Map) {
+      map = Map<String, dynamic>.from(data);
+    }
+    if (map == null) return null;
+
+    final balances = map['balances'];
+    if (balances is! List) return null;
+
+    for (final row in balances) {
+      if (row is! Map) continue;
+      final mapped = Map<String, dynamic>.from(row);
+      final currency =
+          (mapped['currency'] ?? mapped['ticker'] ?? mapped['symbol'])
+              ?.toString()
+              .toUpperCase();
+      if (currency != 'EUR' && currency != 'EURE') continue;
+      return double.tryParse(
+        (mapped['amount'] ??
+                    mapped['balance'] ??
+                    mapped['available'] ??
+                    mapped['value'])
+                ?.toString()
+                .replaceAll(',', '.') ??
+            '',
+      );
+    }
+    return null;
+  }
+
+  /// Live Monerium EUR check. Does not persist the amount.
+  static Future<MoneriumEurBalanceCheck> checkSufficientEur({
+    required String userId,
+    required String walletAddress,
+    required double amount,
+  }) async {
+    if (amount <= 0) {
+      return const MoneriumEurBalanceCheck(
+        sufficient: false,
+        message: 'Enter an amount greater than zero.',
+      );
+    }
+
+    try {
+      final ibansResponse = await getIbans(userId: userId);
+      final ibans = extractIbansFromResponse(ibansResponse);
+      if (ibans.isEmpty) {
+        return const MoneriumEurBalanceCheck(
+          sufficient: false,
+          message: 'No Monerium IBAN is ready yet. Finish setup in Profile.',
+        );
+      }
+
+      final balanceResponse = await getBalances(
+        userId: userId,
+        address: walletAddress,
+        chain: _chainFromIbanRows(ibans),
+      );
+      final available = extractEurAvailable(balanceResponse['data']);
+      if (available == null) {
+        return const MoneriumEurBalanceCheck(
+          sufficient: false,
+          message: "Couldn't read your euro balance. Try again in a moment.",
+        );
+      }
+      if (available + 0.0001 < amount) {
+        return MoneriumEurBalanceCheck(
+          sufficient: false,
+          available: available,
+          message:
+              'You need €${amount.toStringAsFixed(2)} but your Monerium balance is €${available.toStringAsFixed(2)}.',
+        );
+      }
+      return MoneriumEurBalanceCheck(
+        sufficient: true,
+        available: available,
+      );
+    } catch (error) {
+      _log('checkSufficientEur() failed: $error');
+      return const MoneriumEurBalanceCheck(
+        sufficient: false,
+        message: "Couldn't check your euro balance. Try again.",
+      );
+    }
+  }
+
   static Future<Map<String, dynamic>> getLinkedAddresses({
     required String userId,
     String? address,
@@ -1189,28 +1303,40 @@ class MoneriumService {
             ? order['message'].toString().trim()
             : MetamaskWalletService.moneriumOwnershipMessage;
 
-    final signature = await MetamaskWalletService.signAddressOwnershipMessage(
-      address: walletAddress,
-      message: resolvedMessage,
-      preview: WalletClientPaymentPreview.fromOrder(order, kind: 'pay'),
-    );
-
-    final signedOrder = <String, dynamic>{
-      ...order,
-      'message': resolvedMessage,
-      'signature': signature,
-    };
-
-    if (signedOrder['address'] == null ||
-        signedOrder['address'].toString().trim().isEmpty) {
-      signedOrder['address'] = walletAddress;
+    if (kIsWeb) {
+      slickBillsStorePendingWebPayment({
+        'kind': 'pay',
+        'userId': userId,
+        'walletAddress': walletAddress,
+        'message': resolvedMessage,
+        'order': order,
+        if (invoiceId != null && invoiceId.trim().isNotEmpty)
+          'invoiceId': invoiceId.trim(),
+      });
     }
 
-    return createSendMoneyOrder(
-      userId: userId,
-      order: signedOrder,
-      invoiceId: invoiceId,
-    );
+    try {
+      final signature = await MetamaskWalletService.signAddressOwnershipMessage(
+        address: walletAddress,
+        message: resolvedMessage,
+        preview: WalletClientPaymentPreview.fromOrder(order, kind: 'pay'),
+      );
+
+      return await _submitSignedWebOrLocalOrder(
+        kind: 'pay',
+        userId: userId,
+        walletAddress: walletAddress,
+        order: order,
+        message: resolvedMessage,
+        signature: signature,
+        invoiceId: invoiceId,
+      );
+    } catch (error) {
+      if (kIsWeb && MetamaskWalletService.isCancelled(error)) {
+        slickBillsTakePendingWebPayment();
+      }
+      rethrow;
+    }
   }
 
   static Future<Map<String, dynamic>> createWithdrawOrder({
@@ -1242,27 +1368,119 @@ class MoneriumService {
             ? order['message'].toString().trim()
             : MetamaskWalletService.moneriumOwnershipMessage;
 
-    final signature = await MetamaskWalletService.signAddressOwnershipMessage(
-      address: walletAddress,
-      message: resolvedMessage,
-      preview: WalletClientPaymentPreview.fromOrder(order, kind: 'withdraw'),
-    );
+    if (kIsWeb) {
+      slickBillsStorePendingWebPayment({
+        'kind': 'withdraw',
+        'userId': userId,
+        'walletAddress': walletAddress,
+        'message': resolvedMessage,
+        'order': order,
+      });
+    }
+
+    try {
+      final signature = await MetamaskWalletService.signAddressOwnershipMessage(
+        address: walletAddress,
+        message: resolvedMessage,
+        preview:
+            WalletClientPaymentPreview.fromOrder(order, kind: 'withdraw'),
+      );
+
+      return await _submitSignedWebOrLocalOrder(
+        kind: 'withdraw',
+        userId: userId,
+        walletAddress: walletAddress,
+        order: order,
+        message: resolvedMessage,
+        signature: signature,
+      );
+    } catch (error) {
+      if (kIsWeb && MetamaskWalletService.isCancelled(error)) {
+        slickBillsTakePendingWebPayment();
+      }
+      rethrow;
+    }
+  }
+
+  static Future<Map<String, dynamic>> _submitSignedWebOrLocalOrder({
+    required String kind,
+    required String userId,
+    required String walletAddress,
+    required Map<String, dynamic> order,
+    required String message,
+    required String signature,
+    String? invoiceId,
+    bool claimPending = true,
+  }) async {
+    if (kIsWeb && claimPending) {
+      final pending = slickBillsTakePendingWebPayment();
+      if (pending == null) {
+        return {'ok': true, 'alreadySubmitted': true};
+      }
+    }
 
     final signedOrder = <String, dynamic>{
       ...order,
-      'message': resolvedMessage,
+      'message': message,
       'signature': signature,
     };
-
     if (signedOrder['address'] == null ||
         signedOrder['address'].toString().trim().isEmpty) {
       signedOrder['address'] = walletAddress;
     }
 
-    return createWithdrawOrder(
+    if (kind == 'withdraw') {
+      return createWithdrawOrder(userId: userId, order: signedOrder);
+    }
+
+    return createSendMoneyOrder(
       userId: userId,
       order: signedOrder,
+      invoiceId: invoiceId,
     );
+  }
+
+  /// Completes a pay/withdraw that was signed in another tab after redirect.
+  static Future<Map<String, dynamic>?> submitPendingWebPayment({
+    required String signature,
+    String? address,
+  }) async {
+    if (!kIsWeb) return null;
+    final pending = slickBillsTakePendingWebPayment();
+    if (pending == null) return null;
+
+    final kind = pending['kind']?.toString() ?? 'pay';
+    final userId = pending['userId']?.toString() ?? '';
+    final walletAddress =
+        (address != null && address.trim().isNotEmpty)
+            ? address.trim()
+            : pending['walletAddress']?.toString() ?? '';
+    final message = pending['message']?.toString() ??
+        MetamaskWalletService.moneriumOwnershipMessage;
+    final invoiceId = pending['invoiceId']?.toString();
+    final rawOrder = pending['order'];
+    final order = rawOrder is Map
+        ? Map<String, dynamic>.from(rawOrder)
+        : <String, dynamic>{};
+
+    if (userId.isEmpty || walletAddress.isEmpty || order.isEmpty) {
+      return null;
+    }
+
+    final result = await _submitSignedWebOrLocalOrder(
+      kind: kind,
+      userId: userId,
+      walletAddress: walletAddress,
+      order: order,
+      message: message,
+      signature: signature,
+      invoiceId: invoiceId,
+      claimPending: false,
+    );
+    if (invoiceId != null && invoiceId.trim().isNotEmpty) {
+      return {...result, 'invoiceId': invoiceId.trim()};
+    }
+    return result;
   }
 
   static String? get lastOAuthStatus => _lastOAuthStatus;

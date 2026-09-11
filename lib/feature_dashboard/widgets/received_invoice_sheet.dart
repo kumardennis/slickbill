@@ -80,7 +80,7 @@ class ReceivedInvoiceSheet extends HookWidget {
   Widget build(BuildContext context) {
     FormatNumber formatNumber = FormatNumber();
 
-    var paymentStarted = useState<bool>(false);
+    var paymentPhase = useState<String?>(null);
     var recheckStarted = useState<bool>(false);
     var currentInvoice = useState<InvoiceModel>(invoice);
     var initialStatusChecked = useState<bool>(false);
@@ -1000,10 +1000,12 @@ class ReceivedInvoiceSheet extends HookWidget {
                             style: ElevatedButton.styleFrom(
                                 backgroundColor:
                                     Theme.of(context).colorScheme.green),
-                            onPressed: paymentStarted.value
+                            onPressed: paymentPhase.value != null
                                 ? null
                                 : () async {
-                              if (!isMounted() || paymentStarted.value) return;
+                              if (!isMounted() || paymentPhase.value != null) {
+                                return;
+                              }
 
                               final confirmed =
                                   await AppLockController.confirmSensitiveAction(
@@ -1015,10 +1017,16 @@ class ReceivedInvoiceSheet extends HookWidget {
                               if (!confirmed || !isMounted()) return;
 
                               AppLockController.beginExternalAuthSession();
-                              paymentStarted.value = true;
+                              paymentPhase.value = 'checkingBalance';
                               try {
                                 await createMoneriumTransaction(
-                                    displayedInvoice);
+                                  displayedInvoice,
+                                  onPhase: (phase) {
+                                    if (isMounted()) {
+                                      paymentPhase.value = phase;
+                                    }
+                                  },
+                                );
                                 if (!isMounted()) return;
 
                                 if (refreshInvoice != null) {
@@ -1033,7 +1041,7 @@ class ReceivedInvoiceSheet extends HookWidget {
                               } finally {
                                 AppLockController.endExternalAuthSession();
                                 if (isMounted()) {
-                                  paymentStarted.value = false;
+                                  paymentPhase.value = null;
                                 }
                               }
                             },
@@ -1043,9 +1051,11 @@ class ReceivedInvoiceSheet extends HookWidget {
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Text(
-                                    paymentStarted.value
-                                        ? 'inf_StatusUpdating'.tr
-                                        : 'btn_Pay'.tr,
+                                    paymentPhase.value == 'checkingBalance'
+                                        ? 'btn_CheckingBalance'.tr
+                                        : paymentPhase.value != null
+                                            ? 'inf_StatusUpdating'.tr
+                                            : 'btn_Pay'.tr,
                                     style: Theme.of(context)
                                         .textTheme
                                         .bodyLarge

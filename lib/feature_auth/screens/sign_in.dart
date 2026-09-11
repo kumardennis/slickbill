@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 
 import 'package:flutter/material.dart';
@@ -10,8 +9,11 @@ import 'package:slickbill/color_scheme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
+import 'package:slickbill/feature_auth/services/web_tab.dart';
 import 'package:slickbill/feature_auth/utils/supabase_auth_manger.dart';
+import 'package:slickbill/feature_auth/widgets/auth_page_scaffold.dart';
 import 'package:slickbill/feature_auth/widgets/continue_with_google_button.dart';
+import 'package:slickbill/theme/sb_colors.dart';
 
 class SignIn extends HookWidget {
   final String? invoice_token;
@@ -129,54 +131,119 @@ class SignIn extends HookWidget {
 
     // Handle OAuth / email-confirmation callback on page load
     useEffect(() {
-      if (kIsWeb) {
-        Future.delayed(const Duration(milliseconds: 1000), () async {
-          final currentUri = Uri.base;
-          final hasOAuthCode = currentUri.queryParameters.containsKey('code');
-          final isEmailConfirmation =
-              _isEmailConfirmationCallback(currentUri);
-
-          print('🔍 Has OAuth code: $hasOAuthCode');
-          print('🔍 Is email confirmation: $isEmailConfirmation');
-          print('🔍 Current URL: ${currentUri.toString()}');
-
-          if (isEmailConfirmation) {
-            // Confirmations should only verify email; ask user to sign in manually.
-            try {
-              await Supabase.instance.client.auth.signOut();
-            } catch (_) {}
-            Get.snackbar(
-              'Email verified',
-              'Your email is confirmed. Please sign in to continue.',
-              backgroundColor: Colors.green.withOpacity(0.15),
-              colorText: Colors.green.shade800,
-              duration: const Duration(seconds: 4),
-            );
-            return;
-          }
-
-          if (hasOAuthCode) {
-            print('⏳ OAuth callback detected, processing...');
-
-            // Wait a bit for Supabase to process the OAuth callback
-            await Future.delayed(const Duration(milliseconds: 500));
-
-            final session = Supabase.instance.client.auth.currentSession;
-
-            if (session != null) {
-              final user = session.user;
-              if (user != null) {
-                print('✅ Processing OAuth sign-in for user: ${user.id}');
-                await _processOAuthSignIn(
-                    user, session.accessToken, getInvoiceToken());
-              }
-            } else {
-              print('❌ No session found after OAuth');
-            }
-          }
-        });
+      if (!kIsWeb) {
+        return null;
       }
-      return null;
+
+      var cancelled = false;
+      var completing = false;
+
+      Future<void> completeOAuthIfPossible() async {
+        if (cancelled || completing) return;
+        final session = Supabase.instance.client.auth.currentSession;
+        if (session == null) return;
+
+        completing = true;
+        try {
+          final invoiceToken = getInvoiceToken() ??
+              slickBillsPeekWebOAuthInvoiceToken();
+          await _processOAuthSignIn(
+            session.user,
+            session.accessToken,
+            invoiceToken,
+          );
+          slickBillsClearWebOAuthPending();
+        } finally {
+          completing = false;
+        }
+      }
+
+      Future<void> handleWebCallback() async {
+        final currentUri = Uri.base;
+        final fragmentParams = Uri.splitQueryString(currentUri.fragment);
+        final hasOAuthCode = currentUri.queryParameters.containsKey('code') ||
+            fragmentParams.containsKey('code');
+        final oauthError = currentUri.queryParameters['error'] ??
+            fragmentParams['error'];
+        final isEmailConfirmation = _isEmailConfirmationCallback(currentUri);
+
+        print('🔍 Has OAuth code: $hasOAuthCode');
+        print('🔍 Is email confirmation: $isEmailConfirmation');
+        print('🔍 Current URL: ${currentUri.toString()}');
+
+        if (isEmailConfirmation) {
+          try {
+            await Supabase.instance.client.auth.signOut();
+          } catch (_) {}
+          if (cancelled) return;
+          Get.snackbar(
+            'Email verified',
+            'Your email is confirmed. Please sign in to continue.',
+            backgroundColor: Colors.green.withOpacity(0.15),
+            colorText: Colors.green.shade800,
+            duration: const Duration(seconds: 4),
+          );
+          return;
+        }
+
+        if (oauthError != null && oauthError.isNotEmpty) {
+          final description = currentUri.queryParameters['error_description'] ??
+              fragmentParams['error_description'] ??
+              'Facebook sign-in was cancelled or failed.';
+          Get.snackbar(
+            'Sign in failed',
+            description,
+            backgroundColor: Theme.of(context).colorScheme.red,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 5),
+          );
+          slickBillsClearWebOAuthPending();
+          return;
+        }
+
+        if (hasOAuthCode) {
+          isLoadingOAuth.value = true;
+          try {
+            await Supabase.instance.client.auth.getSessionFromUrl(currentUri);
+          } catch (error) {
+            print('❌ OAuth code exchange: $error');
+          }
+        }
+
+        await completeOAuthIfPossible();
+
+        if (!cancelled &&
+            Supabase.instance.client.auth.currentSession == null &&
+            (hasOAuthCode || slickBillsHasWebOAuthPending())) {
+          await Future.delayed(const Duration(milliseconds: 800));
+          await completeOAuthIfPossible();
+          if (Supabase.instance.client.auth.currentSession == null) {
+            isLoadingOAuth.value = false;
+            Get.snackbar(
+              'Sign in failed',
+              'Facebook sign-in did not complete. Please try again.',
+              backgroundColor: Theme.of(context).colorScheme.red,
+              colorText: Colors.white,
+            );
+          }
+        }
+      }
+
+      final sub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+        if (data.event != AuthChangeEvent.signedIn) return;
+        if (!slickBillsHasWebOAuthPending() &&
+            !Uri.base.queryParameters.containsKey('code')) {
+          return;
+        }
+        unawaited(completeOAuthIfPossible());
+      });
+
+      unawaited(handleWebCallback());
+
+      return () {
+        cancelled = true;
+        sub.cancel();
+      };
     }, []);
 
     Future<void> resendVerification() async {
@@ -281,6 +348,9 @@ class SignIn extends HookWidget {
 
     void facebookSignIn() async {
       try {
+        if (kIsWeb) {
+          isLoadingOAuth.value = true;
+        }
         final success = await _supabase.signInWithFacebook();
         if (success) {
           AppLockController.markInteractiveLogin();
@@ -295,323 +365,111 @@ class SignIn extends HookWidget {
           }
         }
       } catch (e) {
+        isLoadingOAuth.value = false;
         Get.snackbar('Error', 'Facebook Sign-In failed: $e');
       }
     }
 
-    return Scaffold(
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              minHeight: MediaQuery.of(context).size.height -
-                  MediaQuery.of(context).padding.top,
-            ),
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Theme.of(context).colorScheme.blue,
-                    Theme.of(context).colorScheme.dark,
-                    Theme.of(context).colorScheme.dark,
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+    return AuthPageScaffold(
+      title: 'lbl_AuthSignInTitle'.tr,
+      subtitle: 'lbl_AuthSubtitle'.tr,
+      isLoading: isLoadingOAuth.value,
+      child: AutofillGroup(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const ContinueWithGoogleButton(),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton(
+                onPressed: facebookSignIn,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1877F2),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(SbRadii.md),
+                  ),
                 ),
-              ),
-              child: isLoadingOAuth.value
-                  ? const Center(child: CircularProgressIndicator())
-                  : GestureDetector(
-                      onTap: () => FocusScope.of(context).unfocus(),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 40),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            const SizedBox(height: 40),
-
-                            // Logo
-                            Container(
-                              width: double.infinity,
-                              height: 180,
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(50),
-                                child:
-                                    Image.asset('assets/logo_text_darkbg.png'),
-                              ),
-                            ),
-
-                            const SizedBox(height: 40),
-
-                            const ContinueWithGoogleButton(),
-
-                            const SizedBox(height: 16),
-
-                            SizedBox(
-                              width: double.infinity,
-                              height: 56,
-                              child: ElevatedButton(
-                                onPressed: facebookSignIn,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Color(0xFF1877F2),
-                                  foregroundColor: Colors.white,
-                                  elevation: 2,
-                                  shadowColor: Colors.black26,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Image.asset(
-                                      'assets/fb-logo.png',
-                                      height: 24,
-                                      width: 24,
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Text(
-                                      'Continue with Facebook',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w600,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                            const SizedBox(height: 32),
-
-                            // Divider
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Divider(
-                                    color: Theme.of(context).colorScheme.gray,
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16),
-                                  child: Text(
-                                    'OR',
-                                    style: TextStyle(
-                                      color: Theme.of(context).colorScheme.gray,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ),
-                                Expanded(
-                                  child: Divider(
-                                    color: Theme.of(context).colorScheme.gray,
-                                  ),
-                                ),
-                              ],
-                            ),
-
-                            const SizedBox(height: 32),
-
-                            // Email Input
-                            SizedBox(
-                              width: double.infinity,
-                              child: TextFormField(
-                                controller: emailController,
-                                autofocus: false,
-                                obscureText: false,
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.light,
-                                ),
-                                decoration: InputDecoration(
-                                  labelText: 'lbl_Username'.tr,
-                                  labelStyle: TextStyle(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .light
-                                        .withOpacity(0.7),
-                                  ),
-                                  hintStyle: TextStyle(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .light
-                                        .withOpacity(0.5),
-                                  ),
-                                  enabledBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .light
-                                          .withOpacity(0.3),
-                                      width: 1,
-                                    ),
-                                  ),
-                                  focusedBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color:
-                                          Theme.of(context).colorScheme.light,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  suffixIcon: emailController.text.isNotEmpty
-                                      ? InkWell(
-                                          onTap: () => emailController.clear(),
-                                          child: Icon(
-                                            Icons.clear,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .light,
-                                            size: 22,
-                                          ),
-                                        )
-                                      : null,
-                                ),
-                              ),
-                            ),
-
-                            const SizedBox(height: 24),
-
-                            // Password Input
-                            SizedBox(
-                              width: double.infinity,
-                              child: TextFormField(
-                                controller: passwordController,
-                                autofocus: false,
-                                obscureText: true,
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.light,
-                                ),
-                                decoration: InputDecoration(
-                                  labelText: 'lbl_Password'.tr,
-                                  labelStyle: TextStyle(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .light
-                                        .withOpacity(0.7),
-                                  ),
-                                  hintStyle: TextStyle(
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .light
-                                        .withOpacity(0.5),
-                                  ),
-                                  enabledBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .light
-                                          .withOpacity(0.3),
-                                      width: 1,
-                                    ),
-                                  ),
-                                  focusedBorder: UnderlineInputBorder(
-                                    borderSide: BorderSide(
-                                      color:
-                                          Theme.of(context).colorScheme.light,
-                                      width: 2,
-                                    ),
-                                  ),
-                                  suffixIcon: passwordController.text.isNotEmpty
-                                      ? InkWell(
-                                          onTap: () =>
-                                              passwordController.clear(),
-                                          child: Icon(
-                                            Icons.clear,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .light,
-                                            size: 22,
-                                          ),
-                                        )
-                                      : null,
-                                ),
-                              ),
-                            ),
-
-                            const SizedBox(height: 32),
-
-                            // Sign In Button
-                            SizedBox(
-                              width: double.infinity,
-                              height: 50,
-                              child: ElevatedButton(
-                                onPressed: signIn,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor:
-                                      Theme.of(context).colorScheme.blue,
-                                  elevation: 5,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: Text(
-                                  'btn_SignIn'.tr,
-                                  style: TextStyle(
-                                    color: Theme.of(context).colorScheme.light,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ),
-
-                            if (showResendVerification.value) ...[
-                              const SizedBox(height: 16),
-                              TextButton(
-                                onPressed: isResendingVerification.value
-                                    ? null
-                                    : resendVerification,
-                                child: isResendingVerification.value
-                                    ? SizedBox(
-                                        height: 18,
-                                        width: 18,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .light,
-                                        ),
-                                      )
-                                    : Text(
-                                        'Resend verification email',
-                                        style: TextStyle(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .light,
-                                          decoration: TextDecoration.underline,
-                                        ),
-                                      ),
-                              ),
-                            ],
-
-                            const SizedBox(height: 24),
-
-                            // Sign Up Link
-                            GestureDetector(
-                              onTap: () => Get.toNamed('/sign-up'),
-                              child: Text(
-                                'lbl_GoToSignUp'.tr,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .displaySmall
-                                    ?.copyWith(
-                                      color:
-                                          Theme.of(context).colorScheme.light,
-                                      decoration: TextDecoration.underline,
-                                    ),
-                              ),
-                            ),
-
-                            const SizedBox(height: 40),
-                          ],
-                        ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.asset(
+                      'assets/fb-logo.png',
+                      height: 20,
+                      width: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    const Text(
+                      'Continue with Facebook',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
                       ),
                     ),
+                  ],
+                ),
+              ),
             ),
-          ),
+            const SizedBox(height: 20),
+            const AuthOrDivider(),
+            const SizedBox(height: 20),
+            AuthTextField(
+              controller: emailController,
+              label: 'lbl_Email'.tr,
+              keyboardType: TextInputType.emailAddress,
+              textInputAction: TextInputAction.next,
+              autofillHints: const [AutofillHints.email, AutofillHints.username],
+              autocorrect: false,
+            ),
+            const SizedBox(height: 12),
+            AuthTextField(
+              controller: passwordController,
+              label: 'lbl_Password'.tr,
+              obscure: true,
+              textInputAction: TextInputAction.done,
+              autofillHints: const [AutofillHints.password],
+              autocorrect: false,
+            ),
+            const SizedBox(height: 20),
+            AuthPrimaryButton(
+              label: 'btn_SignIn'.tr,
+              onPressed: signIn,
+            ),
+            if (showResendVerification.value) ...[
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: isResendingVerification.value
+                    ? null
+                    : resendVerification,
+                child: isResendingVerification.value
+                    ? const SizedBox(
+                        height: 18,
+                        width: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: SbColors.deepNavy,
+                        ),
+                      )
+                    : Text(
+                        'Resend verification email',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: SbColors.deepNavy,
+                              fontWeight: FontWeight.w600,
+                            ),
+                      ),
+              ),
+            ],
+            const SizedBox(height: 16),
+            AuthFooterLink(
+              prompt: 'lbl_AuthNoAccount'.tr,
+              action: 'lbl_AuthSignUpAction'.tr,
+              onTap: () => Get.toNamed('/sign-up'),
+            ),
+          ],
         ),
       ),
     );

@@ -8,7 +8,7 @@ import {
   errorResponseData,
 } from "../../_shared/confirmedRequiredParams.ts";
 import { corsHeaders } from "../../_shared/cors.ts";
-import { createSupabase } from "../../_shared/supabaseClient.ts";
+import { createSupabase, createSupabaseService } from "../../_shared/supabaseClient.ts";
 
 interface CreateUserStudentResponseModel {
   isRequestSuccessfull: boolean;
@@ -23,7 +23,8 @@ interface CreateUserStudentResponseModel {
 }
 
 export const handler = async (req: Request) => {
-  const supabase = createSupabase(req);
+  const supabaseAuth = createSupabase(req);
+  const supabase = createSupabaseService();
 
   try {
     const {
@@ -80,7 +81,7 @@ export const handler = async (req: Request) => {
         ? emailRedirectTo.trim()
         : "https://app.slickbills.com/sign-in?verified=1";
 
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await supabaseAuth.auth.signUp({
       email,
       password,
       options: {

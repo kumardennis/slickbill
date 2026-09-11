@@ -8,11 +8,9 @@ import {
   errorResponseData,
 } from "../../_shared/confirmedRequiredParams.ts";
 import { corsHeaders } from "../../_shared/cors.ts";
-import { createSupabase } from "../../_shared/supabaseClient.ts";
+import { requireOwnPrivateUser } from "../../_shared/requireOwnPrivateUser.ts";
 
 export const handler = async (req: Request) => {
-  const supabase = createSupabase(req);
-
   try {
     const {
       privateUserId,
@@ -44,6 +42,10 @@ export const handler = async (req: Request) => {
         headers: { "Content-Type": "application/json" },
       });
     }
+
+    const authz = await requireOwnPrivateUser(req, privateUserId);
+    if (!authz.ok) return authz.response;
+    const supabase = authz.service;
 
     const { data: receiverData, error: receiverError } = await supabase
       .from("receivers")

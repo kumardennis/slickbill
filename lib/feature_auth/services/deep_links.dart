@@ -129,7 +129,24 @@ bool processIncomingDeepLinkUri(Uri uri) {
   if (uri.scheme == 'https' &&
       (uri.host == 'app.slickbills.com' ||
           uri.host == 'slickbills.com' ||
-          uri.host == 'www.slickbills.com')) {
+          uri.host == 'www.slickbills.com' ||
+          uri.host == 'localhost' ||
+          uri.host == '127.0.0.1')) {
+    final isMoneriumFlow = uri.queryParameters['monerium'] == '1' ||
+        uri.queryParameters['provider'] == 'monerium';
+    if (isMoneriumFlow) {
+      MoneriumService.onAuthCallbackUri(uri);
+      return true;
+    }
+
+    final isHomeScreen = uri.pathSegments.isNotEmpty &&
+        uri.pathSegments.first == 'home-screen';
+    final isMetaMaskFlow = uri.queryParameters['metamask'] == '1' ||
+        (isHomeScreen && uri.queryParameters.containsKey('address'));
+    if (isMetaMaskFlow) {
+      MetamaskWalletService.onAuthCallbackUri(uri);
+      return true;
+    }
     if (uri.pathSegments.length >= 2 && uri.pathSegments.first == 'm') {
       final checkoutToken = uri.pathSegments[1].trim();
       if (checkoutToken.isNotEmpty) {

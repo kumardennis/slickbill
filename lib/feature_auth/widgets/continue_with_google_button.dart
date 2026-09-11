@@ -65,7 +65,7 @@ class ContinueWithGoogleButton extends HookWidget {
       final buttonWidth = width.clamp(240.0, 400.0);
       return SizedBox(
         width: double.infinity,
-        height: 56,
+        height: 52,
         child: !isReady.value || isBusy.value
             ? const Center(child: CircularProgressIndicator())
             : Center(
@@ -76,7 +76,7 @@ class ContinueWithGoogleButton extends HookWidget {
 
     return SizedBox(
       width: double.infinity,
-      height: 56,
+      height: 52,
       child: ElevatedButton(
         onPressed: isBusy.value
             ? null
@@ -91,8 +91,8 @@ class ContinueWithGoogleButton extends HookWidget {
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.white,
           foregroundColor: Colors.black,
-          elevation: 2,
-          shadowColor: Colors.black26,
+          elevation: 0,
+          side: const BorderSide(color: Color(0xFFC2C7CE)),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),

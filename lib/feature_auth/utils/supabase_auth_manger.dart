@@ -55,8 +55,6 @@ class SupabaseAuthManger {
     final tokenToUse = accessToken;
     final epoch = userController.beginRemoteUserLoad();
 
-    print('TOKEN IN USE: $tokenToUse');
-
     final userRecordResponse = await supabseClient
         .from('users')
         .select('*')
@@ -87,8 +85,9 @@ class SupabaseAuthManger {
         .select('*')
         .eq('userId', userProfileClassed.id);
 
-    if (privateUserResponse.length == 0 && businessUserResponse.length == 0) {
-      Get.snackbar('Oops..', 'An error occured');
+    if (privateUserResponse.isEmpty && businessUserResponse.isEmpty) {
+      Get.snackbar('Oops..', 'Could not load your profile. Please try again.');
+      return false;
     }
 
     final ibansData = privateUserResponse.length > 0
@@ -99,8 +98,6 @@ class SupabaseAuthManger {
 
     final privateRow =
         privateUserResponse.isNotEmpty ? privateUserResponse[0] : null;
-    final businessRow =
-        businessUserResponse.isNotEmpty ? businessUserResponse[0] : null;
     final privatePublicName = privateRow?['publicName'] as String?;
 
     final clientUserClassed = ClientUserModel(
@@ -111,8 +108,7 @@ class SupabaseAuthManger {
       accessToken: tokenToUse,
       isPrivate: privateUserResponse.length > 0,
       isBusiness: ClientUserModel.isBusinessFromDb(privateRow?['isBusiness']),
-      privateUserId:
-          privateUserResponse.length > 0 ? privateUserResponse[0]['id'] : null,
+      privateUserId: ClientUserModel.intOrNull(privateRow?['id']),
       businessUserId: businessUserResponse.length > 0
           ? businessUserResponse[0]['id']
           : null,
@@ -138,7 +134,7 @@ class SupabaseAuthManger {
       publicName: (privatePublicName != null &&
               privatePublicName.trim().isNotEmpty)
           ? privatePublicName
-          : businessRow?['publicName'],
+          : null,
       strigaUserId: userRecordResponse[0]['strigaUserId'],
       strigaWalletId: userRecordResponse[0]['strigaWalletId'],
       cdpWalletId: userRecordResponse[0]['cdpWalletId'],
@@ -151,23 +147,19 @@ class SupabaseAuthManger {
 
   Future<void> signOut(String email, String password) async {
     final prefs = await SharedPreferences.getInstance();
-
+    await prefs.remove('password');
+    await prefs.remove('email');
     await supabseClient.auth.signOut();
-
-    prefs.remove('password');
   }
 
   Future<void> signIn(
     String email,
     String password,
   ) async {
-    final prefs = await SharedPreferences.getInstance();
-
-    prefs.setString('email', email);
-    prefs.setString('password', password);
-
     try {
-      print('TEEST');
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('password');
+      await prefs.remove('email');
       final AuthResponse response = await supabseClient.auth
           .signInWithPassword(password: password, email: email);
 
@@ -175,9 +167,6 @@ class SupabaseAuthManger {
 
       final session = response.session;
       final user = response.user;
-
-      print('TEEST ');
-      print(session?.accessToken);
 
       if (session == null || user == null) {
         throw Exception('No session or user returned from Supabase');
@@ -191,9 +180,6 @@ class SupabaseAuthManger {
       }
 
       await loadFreshUser(user.id, session.accessToken);
-
-      prefs.setString('email', email);
-      prefs.setString('password', password);
 
       Get.toNamed('/home-screen');
 

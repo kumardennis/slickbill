@@ -56,22 +56,11 @@
   
   <!-- Text: SlickBills -->
   <g transform="translate(130, 60)">
-    <!-- "Slick" in white -->
     <text x="0" y="0" font-family="Arial, sans-serif" font-size="42" font-weight="700" fill="#ffffff">
       Slick
     </text>
-    
-    <!-- "Bills" in bright blue -->
     <text x="95" y="0" font-family="Arial, sans-serif" font-size="42" font-weight="500" fill="#2E8BFF">
       Bills
     </text>
   </g>
-  
-  <!-- Tagline - lighter gray for dark background -->
-  <text x="132" y="85" font-family="Arial, sans-serif" font-size="13" font-weight="400" fill="#b0b0b0" letter-spacing="0.5">
-    Pay Your Way. Now or Later.
-  </text>
-  
-  <!-- Small accent dot - brighter -->
-  <circle cx="360" cy="48" r="3" fill="#00F0FF"/>
 </svg>

@@ -25,35 +25,18 @@ class InputField extends HookWidget {
         obscureText: obscure,
         controller: controller,
         onChanged: (value) {},
+        cursorColor: Theme.of(context).colorScheme.deepNavy,
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: TextStyle(color: Theme.of(context).colorScheme.gray),
+          labelStyle: TextStyle(
+            color: Theme.of(context).colorScheme.darkGray,
+          ),
           hintStyle: TextStyle(color: Theme.of(context).colorScheme.gray),
-          enabledBorder: const UnderlineInputBorder(
-            borderSide: BorderSide(
-              color: Color(0xFFE0F2F1),
-              width: 1,
-            ),
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(4.0),
-              topRight: Radius.circular(4.0),
-            ),
-          ),
-          focusedBorder: UnderlineInputBorder(
-            borderSide: BorderSide(
-              color: Theme.of(context).colorScheme.blue,
-              width: 1,
-            ),
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(4.0),
-              topRight: Radius.circular(4.0),
-            ),
-          ),
         ),
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: isTextDark != null && isTextDark!
-                  ? Theme.of(context).colorScheme.dark
-                  : Theme.of(context).colorScheme.light,
+              color: isTextDark == false
+                  ? Theme.of(context).colorScheme.light
+                  : Theme.of(context).colorScheme.dark,
             ),
         textAlign: TextAlign.start,
       ),

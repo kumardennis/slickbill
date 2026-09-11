@@ -17,6 +17,21 @@ class BusinessProfileCard extends HookWidget {
       text: userController.user.value.publicName ?? '',
     );
     final isSaving = useState(false);
+    final fieldFocused = useState(false);
+
+    useEffect(() {
+      void syncFromUser() {
+        if (isSaving.value || fieldFocused.value) return;
+        final dbName = userController.user.value.publicName ?? '';
+        if (publicNameController.text != dbName) {
+          publicNameController.text = dbName;
+        }
+      }
+
+      syncFromUser();
+      final sub = userController.user.listen((_) => syncFromUser());
+      return sub.cancel;
+    }, const []);
 
     Future<void> save({
       required bool isBusiness,
@@ -80,8 +95,20 @@ class BusinessProfileCard extends HookWidget {
               onChanged: isSaving.value
                   ? null
                   : (value) async {
+                      if (!value) {
+                        await save(isBusiness: false);
+                        return;
+                      }
+
+                      final existing = (user.publicName ?? '').trim();
+                      if (existing.isNotEmpty && !existing.contains('@')) {
+                        publicNameController.text = existing;
+                        await save(isBusiness: true);
+                        return;
+                      }
+
                       var name = publicNameController.text.trim();
-                      if (value && name.isEmpty) {
+                      if (name.isEmpty || name.contains('@')) {
                         name = [
                           user.firstName,
                           user.lastName,
@@ -90,11 +117,15 @@ class BusinessProfileCard extends HookWidget {
                             .map((part) => part.trim())
                             .where((part) => part.isNotEmpty)
                             .join(' ');
-                        publicNameController.text = name;
+                        if (name.isNotEmpty) {
+                          publicNameController.text = name;
+                        }
                       }
                       await save(
-                        isBusiness: value,
-                        publicName: name.isEmpty ? user.publicName : name,
+                        isBusiness: true,
+                        publicName: (name.isEmpty || name.contains('@'))
+                            ? null
+                            : name,
                       );
                     },
             ),
@@ -104,6 +135,9 @@ class BusinessProfileCard extends HookWidget {
                 controller: publicNameController,
                 textCapitalization: TextCapitalization.words,
                 enabled: !isSaving.value,
+                onTap: () => fieldFocused.value = true,
+                onTapOutside: (_) => fieldFocused.value = false,
+                onEditingComplete: () => fieldFocused.value = false,
                 cursorColor: Theme.of(context).colorScheme.blue,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Theme.of(context).colorScheme.dark,
@@ -130,10 +164,12 @@ class BusinessProfileCard extends HookWidget {
                     ),
                   ),
                 ),
-                onSubmitted: (value) => save(
-                  isBusiness: true,
-                  publicName: value,
-                ),
+                onSubmitted: (value) {
+                  fieldFocused.value = false;
+                  final name = value.trim();
+                  if (name.contains('@')) return;
+                  save(isBusiness: true, publicName: name);
+                },
               ),
               const SizedBox(height: 8),
               Align(
@@ -141,10 +177,11 @@ class BusinessProfileCard extends HookWidget {
                 child: TextButton(
                   onPressed: isSaving.value
                       ? null
-                      : () => save(
-                            isBusiness: true,
-                            publicName: publicNameController.text,
-                          ),
+                      : () {
+                          final name = publicNameController.text.trim();
+                          if (name.contains('@')) return;
+                          save(isBusiness: true, publicName: name);
+                        },
                   child: Text('btn_Save'.tr),
                 ),
               ),

@@ -127,7 +127,7 @@ class ReceivedInvoice extends HookWidget {
       AppLockController.beginExternalAuthSession();
       try {
         // Open embedded wallet pay page; auto-close when txHash is available
-        const baseUrl = 'https://slickbills-wallet-client.vercel.app';
+        const baseUrl = 'https://wallet.slickbills.com';
         final result = await Get.to(() => CdpWebView(
               url:
                   '$baseUrl/wallet/pay?to=${invoice.senders!.privateUsers!.users!.cdpWalletId}&amount=${invoice.amount}&description=${Uri.encodeComponent(invoice.description)}&receiver=${invoice.senders!.privateUsers!.firstName}',
@@ -179,7 +179,10 @@ class ReceivedInvoice extends HookWidget {
       }
     }
 
-    Future<void> createMoneriumTransaction(InvoiceModel invoice) async {
+    Future<void> createMoneriumTransaction(
+      InvoiceModel invoice, {
+      void Function(String phase)? onPhase,
+    }) async {
       final user = userController.user.value;
       final moneriumUserId = PaymentSetupController.resolveMoneriumUserId(user);
       final email = user.email.trim();
@@ -221,6 +224,7 @@ class ReceivedInvoice extends HookWidget {
 
       AppLockController.beginExternalAuthSession();
       unawaited(SbFeedback.medium());
+      onPhase?.call('checkingBalance');
       try {
         try {
           await MoneriumService.ensureConnected(
@@ -249,6 +253,26 @@ class ReceivedInvoice extends HookWidget {
           );
           return;
         }
+
+        final balanceCheck = await MoneriumService.checkSufficientEur(
+          userId: moneriumUserId,
+          walletAddress: walletAddress,
+          amount: invoice.amount,
+        );
+        if (!balanceCheck.sufficient) {
+          Get.snackbar(
+            balanceCheck.available == null
+                ? 'Balance check'
+                : 'Not enough balance',
+            balanceCheck.message ?? 'Not enough euro balance to pay this bill.',
+            backgroundColor: Theme.of(context).colorScheme.red,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 4),
+          );
+          return;
+        }
+
+        onPhase?.call('updatingStatus');
 
       final recipientName =
           '${invoice.senders?.privateUsers?.firstName ?? ''} ${invoice.senders?.privateUsers?.lastName ?? ''}'

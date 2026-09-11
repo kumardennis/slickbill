@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/src/widgets/framework.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
-import 'package:slickbill/core/services/push_notification_service.dart';
 import 'package:slickbill/feature_auth/getx_controllers/current_bank_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
-import 'package:slickbill/feature_auth/screens/sign_in.dart';
 import 'package:slickbill/feature_dashboard/screens/add_ibans.dart';
 import 'package:slickbill/feature_dashboard/widgets/current_bank_selector.dart';
 import 'package:slickbill/feature_dashboard/widgets/monerium_balance_card.dart';
@@ -17,74 +14,71 @@ import 'package:slickbill/feature_dashboard/widgets/business_profile_card.dart';
 import 'package:slickbill/feature_loyalty/widgets/customer_my_merchants_entry.dart';
 import 'package:slickbill/feature_loyalty/widgets/rewards_summary_card.dart';
 import 'package:slickbill/shared_widgets/custom_appbar.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:slickbill/theme/sb_colors.dart';
 
 class Profile extends HookWidget {
   const Profile({super.key});
 
   @override
   Widget build(BuildContext context) {
-    UserController userController = Get.put(UserController());
+    UserController userController = Get.isRegistered<UserController>()
+        ? Get.find<UserController>()
+        : Get.put(UserController());
     Get.put(CurrentBankController());
 
+    useEffect(() {
+      userController.ensureSignedInOrRedirect();
+      return null;
+    }, const []);
+
     Future<void> handleSignOut() async {
-      try {
-        final confirmed = await Get.dialog<bool>(
-          AlertDialog(
-            backgroundColor: Theme.of(context).colorScheme.dark,
-            title: const Text('Sign Out'),
-            content: const Text('Are you sure you want to sign out?'),
-            actions: [
-              TextButton(
-                onPressed: () => Get.back(result: false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Get.back(result: true),
-                style: TextButton.styleFrom(
-                  foregroundColor: Theme.of(context).colorScheme.red,
-                ),
-                child: const Text('Sign Out'),
-              ),
-            ],
+      final confirmed = await Get.dialog<bool>(
+        AlertDialog(
+          backgroundColor: SbColors.surfaceLowest,
+          surfaceTintColor: Colors.transparent,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(SbRadii.lg),
+            side: const BorderSide(color: SbColors.outlineVariant),
           ),
-        );
+          title: Text(
+            'Sign Out',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  color: SbColors.onSurface,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          content: Text(
+            'Are you sure you want to sign out?',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: SbColors.onSurfaceVariant,
+                ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Get.back(result: false),
+              style: TextButton.styleFrom(
+                foregroundColor: SbColors.onSurfaceVariant,
+              ),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Get.back(result: true),
+              style: TextButton.styleFrom(
+                foregroundColor: SbColors.error,
+              ),
+              child: const Text('Sign Out'),
+            ),
+          ],
+        ),
+      );
 
-        if (confirmed == true) {
-          Get.dialog(
-            const Center(child: CircularProgressIndicator()),
-            barrierDismissible: false,
-          );
-          await PushNotificationService.logoutUser();
-          await Supabase.instance.client.auth.signOut();
+      if (confirmed != true) return;
 
-          await userController.clearUserData();
-
-          Get.back();
-
-          Get.offAll(() => const SignIn());
-
-          Get.snackbar(
-            'Signed Out',
-            'You have been successfully signed out',
-            backgroundColor: Colors.green.withOpacity(0.1),
-            colorText: Colors.green,
-            duration: const Duration(seconds: 2),
-          );
-        }
-      } catch (e) {
-        if (Get.isDialogOpen ?? false) {
-          Get.back();
-        }
-
-        Get.snackbar(
-          'Error',
-          'Failed to sign out: ${e.toString()}',
-          backgroundColor: Theme.of(context).colorScheme.red,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 3),
-        );
-      }
+      Get.dialog(
+        const Center(child: CircularProgressIndicator()),
+        barrierDismissible: false,
+      );
+      await userController.forceLogout();
     }
 
     // Bank section
@@ -104,7 +98,7 @@ class Profile extends HookWidget {
               child: Column(
                 children: [
                   MoneriumBalanceCard(user: user),
-                  const RewardsSummaryCard(),
+                  if (!user.isBusiness) const RewardsSummaryCard(),
                   UserInfo(),
                   const CustomerMyMerchantsEntry(),
                   const BusinessProfileCard(),

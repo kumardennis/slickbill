@@ -9,6 +9,27 @@ import '../models/invoice_model.dart';
 class ReceivedInvoicesClass {
   final UserController userController = Get.find();
 
+  int? get _privateUserId => userController.user.value.validPrivateUserId;
+
+  String _errorText(dynamic error) {
+    if (error is Map) {
+      final code = error['code']?.toString();
+      final message = error['message']?.toString() ?? '';
+      if (code == '22P02' ||
+          message.contains('invalid input syntax for type bigint')) {
+        return 'Your profile is still loading. Please try again.';
+      }
+      if (message.isNotEmpty) return message;
+    }
+    if (error is String && error.trim().isNotEmpty) {
+      if (error.contains('22P02') || error.contains('bigint')) {
+        return 'Your profile is still loading. Please try again.';
+      }
+      return error.trim();
+    }
+    return 'Something went wrong. Please try again.';
+  }
+
   Future<List<InvoiceModel>?> getPrivateReceivedInvoices({
     int? id,
     bool silent = false,
@@ -18,9 +39,14 @@ class ReceivedInvoicesClass {
   }) async {
     print("=====BILS=====");
     print(userController.user.value.privateUserId);
+    final privateUserId = _privateUserId;
+    if (privateUserId == null) {
+      return const [];
+    }
+    await userController.ensureFreshSession();
     try {
       final body = <String, dynamic>{
-        "privateUserId": userController.user.value.privateUserId,
+        "privateUserId": privateUserId,
         if (id != null) "invoiceId": id,
         if (openOnly) "openOnly": true,
         if (query != null) ...query.toRequestBody(),
@@ -35,7 +61,7 @@ class ReceivedInvoicesClass {
 
       final response = await Supabase.instance.client.functions
           .invoke('invoices/get-private-user-received-invoices', headers: {
-        'Authorization': 'Bearer ${userController.user.value.accessToken}'
+        'Authorization': 'Bearer ${userController.accessToken}'
       }, body: body);
 
       final data = await response.data;
@@ -61,7 +87,7 @@ class ReceivedInvoicesClass {
         return invoices;
       } else {
         if (!silent) {
-          Get.snackbar('Oops..', data['error'].toString());
+          Get.snackbar('Oops..', _errorText(data['error']));
         }
         return null;
       }
@@ -87,17 +113,19 @@ class ReceivedInvoicesClass {
   }
 
   Future<double?> getPaidInPeriod(InvoiceListQuery period) async {
-    final invoices = await getPrivateReceivedInvoices(
-      query: InvoiceListQuery(
-        month: period.month,
-        status: InvoiceStatusFilter.paid,
-        allTime: period.allTime,
-        monthBasis: period.monthBasis,
-      ),
-      silent: true,
-    );
-    if (invoices == null) return null;
-    return invoices.fold<double>(0.0, (sum, invoice) => sum + invoice.amount);
+    if (period.allTime) {
+      final invoices = await getPrivateReceivedInvoices(
+        query: InvoiceListQuery(
+          month: period.month,
+          status: InvoiceStatusFilter.paid,
+          allTime: true,
+        ),
+        silent: true,
+      );
+      if (invoices == null) return null;
+      return invoices.fold<double>(0.0, (sum, invoice) => sum + invoice.amount);
+    }
+    return getPaidInMonth(period.monthStart);
   }
 
   Future<double?> getPaidInMonth(DateTime month) async {
@@ -110,12 +138,16 @@ class ReceivedInvoicesClass {
   }
 
   Future<double?> getPendingInvoicesSum() async {
+    final privateUserId = _privateUserId;
+    if (privateUserId == null) {
+      return 0;
+    }
     try {
       final response = await Supabase.instance.client.functions
           .invoke('invoices/get-private-user-received-invoices', headers: {
-        'Authorization': 'Bearer ${userController.user.value.accessToken}'
+        'Authorization': 'Bearer ${userController.accessToken}'
       }, body: {
-        "privateUserId": userController.user.value.privateUserId,
+        "privateUserId": privateUserId,
         "status": "UNPAID"
       });
 
@@ -135,7 +167,7 @@ class ReceivedInvoicesClass {
         }
         return sum;
       } else {
-        Get.snackbar('Oops..', data['error'].toString());
+        Get.snackbar('Oops..', _errorText(data['error']));
         return null;
       }
     } catch (err) {
@@ -156,11 +188,16 @@ class ReceivedInvoicesClass {
         DateFormat('yyyy-MM-dd').format(lastDateOfMonth)
       ];
 
+      final privateUserId = _privateUserId;
+      if (privateUserId == null) {
+        return 0;
+      }
+
       final response = await Supabase.instance.client.functions
           .invoke('invoices/get-private-user-received-invoices', headers: {
         'Authorization': 'Bearer ${accessToken}'
       }, body: {
-        "privateUserId": userController.user.value.privateUserId,
+        "privateUserId": privateUserId,
         "paidOnDateRange": dateRange
       });
 
@@ -180,7 +217,7 @@ class ReceivedInvoicesClass {
         }
         return sum;
       } else {
-        Get.snackbar('Oops..', data['error'].toString());
+        Get.snackbar('Oops..', _errorText(data['error']));
         return null;
       }
     } catch (err) {
@@ -213,7 +250,7 @@ class ReceivedInvoicesClass {
       final response = await Supabase.instance.client.functions.invoke(
           'invoices/update-invoice-status',
           headers: {
-            'Authorization': 'Bearer ${userController.user.value.accessToken}'
+            'Authorization': 'Bearer ${userController.accessToken}'
           },
           body: body);
 
@@ -224,7 +261,7 @@ class ReceivedInvoicesClass {
         return;
       } else {
         if (!silent) {
-          Get.snackbar('Oops..', data['error'].toString());
+          Get.snackbar('Oops..', _errorText(data['error']));
         } else {
           print(data['error']);
         }
@@ -238,7 +275,7 @@ class ReceivedInvoicesClass {
     try {
       final response = await Supabase.instance.client.functions
           .invoke('invoices/update-invoice-obsolete', headers: {
-        'Authorization': 'Bearer ${userController.user.value.accessToken}'
+        'Authorization': 'Bearer ${userController.accessToken}'
       }, body: {
         "invoiceId": invoiceId,
         "isObsolete": isObsolete
@@ -249,7 +286,7 @@ class ReceivedInvoicesClass {
       if (data['isRequestSuccessfull'] == true) {
         Get.snackbar('Success', 'inf_StatusUpdated'.tr);
       } else {
-        Get.snackbar('Oops..', data['error'].toString());
+        Get.snackbar('Oops..', _errorText(data['error']));
       }
     } catch (err) {
       print(err);

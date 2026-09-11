@@ -9,15 +9,47 @@ import '../models/invoice_model.dart';
 class SentInvoicesClass {
   final UserController userController = Get.find();
 
+  int? get _privateUserId => userController.user.value.validPrivateUserId;
+
+  String _errorText(dynamic error,
+      {String fallback = 'Something went wrong. Please try again.'}) {
+    if (error == null) return fallback;
+    if (error is String) {
+      final trimmed = error.trim();
+      if (trimmed.isEmpty || trimmed == '{}') return fallback;
+      if (trimmed.contains('22P02') || trimmed.contains('bigint')) {
+        return 'Your profile is still loading. Please try again.';
+      }
+      return trimmed;
+    }
+    if (error is Map) {
+      final code = error['code']?.toString();
+      final message = error['message'] ?? error['error'] ?? error['details'];
+      if (code == '22P02' ||
+          message.toString().contains('invalid input syntax for type bigint')) {
+        return 'Your profile is still loading. Please try again.';
+      }
+      if (message != null) return _errorText(message, fallback: fallback);
+    }
+    final text = error.toString().trim();
+    if (text.isEmpty || text == '{}') return fallback;
+    return text;
+  }
+
   Future<List<InvoiceModel>?> getPrivateSentInvoices({
     InvoiceListQuery? query,
     bool openOnly = false,
     DateTime? paidInMonth,
     bool silent = false,
   }) async {
+    final privateUserId = _privateUserId;
+    if (privateUserId == null) {
+      return const [];
+    }
+    await userController.ensureFreshSession();
     try {
       final body = <String, dynamic>{
-        "privateUserId": userController.user.value.privateUserId,
+        "privateUserId": privateUserId,
         if (openOnly) "openOnly": true,
         if (query != null) ...query.toRequestBody(),
         if (paidInMonth != null) ...{
@@ -31,7 +63,7 @@ class SentInvoicesClass {
 
       final response = await Supabase.instance.client.functions
           .invoke('invoices/get-private-user-sent-invoices', headers: {
-        'Authorization': 'Bearer ${userController.user.value.accessToken}'
+        'Authorization': 'Bearer ${userController.accessToken}'
       }, body: body);
 
       final data = await response.data;
@@ -57,7 +89,7 @@ class SentInvoicesClass {
         return invoices;
       } else {
         if (!silent) {
-          Get.snackbar('Oops..', data['error'].toString());
+          Get.snackbar('Oops..', _errorText(data['error']));
         }
         return null;
       }
@@ -108,12 +140,16 @@ class SentInvoicesClass {
   }
 
   Future<double?> getPendingInvoicesSum() async {
+    final privateUserId = _privateUserId;
+    if (privateUserId == null) {
+      return 0;
+    }
     try {
       final response = await Supabase.instance.client.functions
           .invoke('invoices/get-private-user-sent-invoices', headers: {
-        'Authorization': 'Bearer ${userController.user.value.accessToken}'
+        'Authorization': 'Bearer ${userController.accessToken}'
       }, body: {
-        "privateUserId": userController.user.value.privateUserId,
+        "privateUserId": privateUserId,
         "status": "UNPAID"
       });
 
@@ -133,7 +169,7 @@ class SentInvoicesClass {
         }
         return sum;
       } else {
-        Get.snackbar('Oops..', data['error'].toString());
+        Get.snackbar('Oops..', _errorText(data['error']));
         return null;
       }
     } catch (err) {
@@ -154,11 +190,16 @@ class SentInvoicesClass {
         DateFormat('yyyy-MM-dd').format(lastDateOfMonth)
       ];
 
+      final privateUserId = _privateUserId;
+      if (privateUserId == null) {
+        return 0;
+      }
+
       final response = await Supabase.instance.client.functions
           .invoke('invoices/get-private-user-sent-invoices', headers: {
         'Authorization': 'Bearer ${accessToken}'
       }, body: {
-        "privateUserId": userController.user.value.privateUserId,
+        "privateUserId": privateUserId,
         "paidOnDateRange": dateRange
       });
 
@@ -178,7 +219,7 @@ class SentInvoicesClass {
         }
         return sum;
       } else {
-        Get.snackbar('Oops..', data['error'].toString());
+        Get.snackbar('Oops..', _errorText(data['error']));
         return null;
       }
     } catch (err) {
@@ -191,7 +232,7 @@ class SentInvoicesClass {
     try {
       final response = await Supabase.instance.client.functions
           .invoke('invoices/update-invoice-obsolete', headers: {
-        'Authorization': 'Bearer ${userController.user.value.accessToken}'
+        'Authorization': 'Bearer ${userController.accessToken}'
       }, body: {
         "invoiceId": invoiceId,
         "isObsolete": isObsolete
@@ -202,7 +243,7 @@ class SentInvoicesClass {
       if (data['isRequestSuccessfull'] == true) {
         Get.snackbar('Success', 'inf_StatusUpdated'.tr);
       } else {
-        Get.snackbar('Oops..', data['error'].toString());
+        Get.snackbar('Oops..', _errorText(data['error']));
       }
     } catch (err) {
       print(err);
@@ -236,7 +277,7 @@ class SentInvoicesClass {
       final response = await Supabase.instance.client.functions.invoke(
         'notifications/send-notification',
         headers: {
-          'Authorization': 'Bearer ${userController.user.value.accessToken}'
+          'Authorization': 'Bearer ${userController.accessToken}'
         },
         body: {
           'userId': receiverUserId,
@@ -249,7 +290,13 @@ class SentInvoicesClass {
 
       final data = response.data;
       if (data is! Map || data['isRequestSuccessfull'] != true) {
-        Get.snackbar('Oops..', _errorText(data is Map ? data['error'] : data));
+        Get.snackbar(
+          'Oops..',
+          _errorText(
+            data is Map ? data['error'] : data,
+            fallback: 'Could not send reminder',
+          ),
+        );
         return null;
       }
 
@@ -265,24 +312,11 @@ class SentInvoicesClass {
       return remindedAt;
     } catch (err) {
       print(err);
-      Get.snackbar('Oops..', _errorText(err));
+      Get.snackbar(
+        'Oops..',
+        _errorText(err, fallback: 'Could not send reminder'),
+      );
       return null;
     }
-  }
-
-  String _errorText(dynamic error) {
-    if (error == null) return 'Could not send reminder';
-    if (error is String) {
-      final trimmed = error.trim();
-      if (trimmed.isEmpty || trimmed == '{}') return 'Could not send reminder';
-      return trimmed;
-    }
-    if (error is Map) {
-      final message = error['message'] ?? error['error'] ?? error['details'];
-      if (message != null) return _errorText(message);
-    }
-    final text = error.toString().trim();
-    if (text.isEmpty || text == '{}') return 'Could not send reminder';
-    return text;
   }
 }

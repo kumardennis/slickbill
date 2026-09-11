@@ -283,6 +283,27 @@ class AddWithdrawMoneyScreen extends HookWidget {
         );
         await paymentSetupController.markMoneriumConnected();
 
+        final liveBalance = await MoneriumService.checkSufficientEur(
+          userId: userId,
+          walletAddress: walletAddress,
+          amount: amount,
+        );
+        if (!liveBalance.sufficient) {
+          Get.snackbar(
+            liveBalance.available == null
+                ? 'Balance check'
+                : 'Not enough balance',
+            liveBalance.message ??
+                'You can withdraw up to €${available.toStringAsFixed(2)}.',
+            backgroundColor: Theme.of(context).colorScheme.red,
+            colorText: Colors.white,
+          );
+          return;
+        }
+        if (liveBalance.available != null) {
+          eurBalance.value = liveBalance.available;
+        }
+
         final normalizedIban = normalizeIban(destination.iban);
         final countryCode = RegExp(r'^[A-Z]{2}').hasMatch(normalizedIban)
             ? normalizedIban.substring(0, 2)

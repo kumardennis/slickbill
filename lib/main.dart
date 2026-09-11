@@ -42,14 +42,13 @@ Future<void> main() async {
 
   if (kDebugMode) {
     try {
-      await dotenv.load();
+      await dotenv.load(fileName: '.env');
       print('✅ dotenv loaded');
     } catch (e, st) {
       print('⚠️ dotenv load failed: $e');
       print(st);
     }
   }
-  await dotenv.load();
 
   final firebaseOptions = DefaultFirebaseOptions.currentPlatformOrNull;
   if (firebaseOptions != null) {
@@ -71,6 +70,7 @@ Future<void> main() async {
     anonKey: EnvConfig.supabaseAnonKey,
     authOptions: const FlutterAuthClientOptions(
       authFlowType: AuthFlowType.pkce,
+      autoRefreshToken: true,
     ),
   );
 
@@ -202,7 +202,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _syncPushTokenIfNeeded();
+      unawaited(_refreshSessionOnResume());
     }
+  }
+
+  Future<void> _refreshSessionOnResume() async {
+    if (!Get.isRegistered<UserController>()) return;
+    final userController = Get.find<UserController>();
+    if (userController.user.value.id <= 0) return;
+    await userController.ensureFreshSession();
   }
 
   @override

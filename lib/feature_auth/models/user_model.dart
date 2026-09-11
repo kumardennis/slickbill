@@ -166,11 +166,23 @@ class ClientUserModel {
         cdpWalletId = null,
         metamaskWalletAddress = null;
 
+  static int? intOrNull(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty || trimmed.toLowerCase() == 'null') return null;
+      return int.tryParse(trimmed);
+    }
+    return null;
+  }
+
   factory ClientUserModel.fromJson(Map<String, dynamic> json) {
     return ClientUserModel(
-      id: json['id'] as int,
-      privateUserId: json['privateUserId'] as int?,
-      businessUserId: json['businessUserId'] as int?,
+      id: intOrNull(json['id']) ?? 0,
+      privateUserId: intOrNull(json['privateUserId']),
+      businessUserId: intOrNull(json['businessUserId']),
       username: json['username'] as String,
       email: json['email'] as String,
       authUserId: json['authUserId'] as String,
@@ -279,6 +291,13 @@ class ClientUserModel {
         value == 'true' ||
         value == 't' ||
         value == '1';
+  }
+
+  /// True when this session has a usable `private_users.id` for RPCs / filters.
+  int? get validPrivateUserId {
+    final id = privateUserId;
+    if (id == null || id <= 0) return null;
+    return id;
   }
 
   /// Name shown on requests: public business name, else first + last.
