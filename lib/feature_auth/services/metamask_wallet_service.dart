@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/services/native_web3auth_service.dart';
@@ -118,7 +119,7 @@ class MetamaskWalletService {
     useNativeFlow = enabled;
   }
 
-  static const String _walletClientBaseUrl = 'https://wallet.slickbills.com';
+  static String get _walletClientBaseUrl => AppEnv.walletClientUrl;
   static const String _metamaskAuthPath = '/wallet/metamask-auth';
   static const String _callbackHost = 'home-screen';
   static const String moneriumOwnershipMessage =
@@ -136,7 +137,7 @@ class MetamaskWalletService {
       final requestId = DateTime.now().microsecondsSinceEpoch.toString();
       final origin = Uri.base.origin.isNotEmpty
           ? Uri.base.origin
-          : 'https://app.slickbills.com';
+          : AppEnv.appBaseUrl;
 
       return Uri.parse('$origin/home-screen').replace(
         queryParameters: {
@@ -314,7 +315,7 @@ class MetamaskWalletService {
       final error = msg['error']?.toString().trim() ?? '';
 
       onAuthCallbackUri(
-        Uri.parse('https://app.slickbills.com/home-screen').replace(
+        Uri.parse('${AppEnv.appBaseUrl}/home-screen').replace(
           queryParameters: {
             'metamask': '1',
             'success': success ? '1' : '0',

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
+import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/feature_auth/services/web_tab.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -48,6 +49,6 @@ class FacebookAuthService {
     if (origin.contains('localhost') || origin.contains('127.0.0.1')) {
       return '$origin/sign-in';
     }
-    return 'https://app.slickbills.com/sign-in';
+    return '${AppEnv.appBaseUrl}/sign-in';
   }
 }

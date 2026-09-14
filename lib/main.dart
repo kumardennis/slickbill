@@ -11,6 +11,7 @@ import 'package:get/get.dart';
 import 'package:slickbill/theme/sb_theme.dart';
 import 'package:loader_overlay/loader_overlay.dart';
 import 'package:slickbill/_NFCHandler.dart';
+import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/config/env_config.dart';
 import 'package:slickbill/core/services/push_notification_service.dart';
 import 'package:slickbill/feature_auth/screens/home_screen.dart';
@@ -64,9 +65,10 @@ Future<void> main() async {
   print('🔍 Initializing Supabase...');
   print('🔍 Is Debug Mode: $kDebugMode');
   print('🔍 Supabase Key present: ${EnvConfig.supabaseAnonKey.isNotEmpty}');
+  AppEnv.logSelection();
 
   await Supabase.initialize(
-    url: 'https://fwujdruuvspdoqflttrl.supabase.co',
+    url: AppEnv.supabaseUrl,
     anonKey: EnvConfig.supabaseAnonKey,
     authOptions: const FlutterAuthClientOptions(
       authFlowType: AuthFlowType.pkce,
@@ -128,9 +130,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     // Handle /m/<checkoutToken>/join/<joinCode>
     if (path.startsWith('/m/')) {
       final segments = path.split('/').where((s) => s.isNotEmpty).toList();
-      if (segments.length >= 4 &&
-          segments[0] == 'm' &&
-          segments[2] == 'join') {
+      if (segments.length >= 4 && segments[0] == 'm' && segments[2] == 'join') {
         Get.parameters['token'] = segments[1];
         Get.parameters['joinCode'] = segments[3];
         return '/m/:token/join/:joinCode';

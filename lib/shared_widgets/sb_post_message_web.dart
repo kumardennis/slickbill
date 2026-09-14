@@ -4,11 +4,15 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:html' as html;
 
-const _allowedOrigins = <String>{
-  'https://wallet.slickbills.com',
-  'https://slickbills-wallet-client.vercel.app',
-  'http://localhost:53532',
-};
+import 'package:slickbill/config/app_env.dart';
+
+Set<String> get _allowedOrigins => {
+      'https://wallet.slickbills.com',
+      'https://slickbills-wallet-client.vercel.app',
+      'https://slickbills-wallet-client-prod.vercel.app',
+      'http://localhost:53532',
+      AppEnv.walletClientOrigin,
+    };
 
 const _broadcastChannelName = 'slickbills-wallet';
 const _storageCallbackKey = 'sb_wallet_callback';

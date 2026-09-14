@@ -200,7 +200,7 @@ class ClientUserModel {
       fullName: json['fullName'] as String?,
       publicName: json['publicName'] as String?,
       isPrivate: json['isPrivate'] as bool? ?? true,
-      isBusiness: isBusinessFromDb(json['isBusiness']),
+      isBusiness: isBusinessFromRow(json) ?? isBusinessFromDb(json['isBusiness']),
       strigaUserId: json['strigaUserId'] as String?,
       strigaWalletId: json['strigaWalletId'] as String?,
       cdpWalletId: json['cdpWalletId'] as String?,
@@ -286,11 +286,20 @@ class ClientUserModel {
 
   /// Postgres/PostgREST may return bool, 0/1, or "t"/"true".
   static bool isBusinessFromDb(dynamic value) {
-    return value == true ||
-        value == 1 ||
-        value == 'true' ||
-        value == 't' ||
-        value == '1';
+    if (value == true || value == false) return value == true;
+    if (value is num) return value != 0;
+    final text = value?.toString().trim().toLowerCase() ?? '';
+    return text == 'true' || text == 't' || text == '1' || text == 'yes';
+  }
+
+  static bool? isBusinessFromRow(Map? row) {
+    if (row == null) return null;
+    for (final key in row.keys) {
+      if (key.toString().toLowerCase() == 'isbusiness') {
+        return isBusinessFromDb(row[key]);
+      }
+    }
+    return null;
   }
 
   /// True when this session has a usable `private_users.id` for RPCs / filters.

@@ -1,15 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:slickbill/config/app_env.dart';
 
 class CoinbaseService {
-  // ✅ Change this to your local server URL during development
-  // For production, use your deployed Vercel URL
-  static String get baseUrl {
-    return 'https://express-ten-xi.vercel.app';
-  }
-
-  // For production:
-  // static const String baseUrl = 'https://your-app.vercel.app';
+  static String get baseUrl => AppEnv.expressServerUrl;
 
   /// Create or get a CDP account
   static Future<Map<String, dynamic>> createOrGetAccount({

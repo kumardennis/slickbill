@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:app_links/app_links.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:get/get.dart';
+import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/feature_auth/services/metamask_wallet_service.dart';
 import 'package:slickbill/feature_auth/services/monerium_service.dart';
 import 'package:slickbill/shared_utils/scanned_qr_router.dart';
@@ -120,14 +121,15 @@ bool processIncomingDeepLinkUri(Uri uri) {
     if (checkoutToken != null) {
       print('   Checkout token: $checkoutToken');
       unawaited(
-        navigateScannedQrPayload('https://app.slickbills.com/m/$checkoutToken'),
+        navigateScannedQrPayload(AppEnv.merchantCheckInUrl(checkoutToken)),
       );
     }
     return true;
   }
 
   if (uri.scheme == 'https' &&
-      (uri.host == 'app.slickbills.com' ||
+      (uri.host == AppEnv.appHost ||
+          uri.host == 'app.slickbills.com' ||
           uri.host == 'slickbills.com' ||
           uri.host == 'www.slickbills.com' ||
           uri.host == 'localhost' ||
@@ -153,7 +155,7 @@ bool processIncomingDeepLinkUri(Uri uri) {
         print('🏪 Merchant check-in web link: $checkoutToken');
         unawaited(
           navigateScannedQrPayload(
-            'https://app.slickbills.com/m/$checkoutToken',
+            AppEnv.merchantCheckInUrl(checkoutToken),
           ),
         );
         return true;

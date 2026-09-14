@@ -31,6 +31,7 @@ class UserController extends GetxController {
 
   final GoogleAuthService _googleAuthService = GoogleAuthService();
   int _remoteProfileEpoch = 0;
+  int _appliedProfileEpoch = 0;
   StreamSubscription<AuthState>? _authSub;
   Future<bool>? _refreshInFlight;
 
@@ -68,10 +69,16 @@ class UserController extends GetxController {
   }
 
   loadUser(ClientUserModel updatedUser, {int? epoch}) {
-    if (epoch != null && epoch != _remoteProfileEpoch) {
+    // Only skip a completed fetch if a newer one already landed.
+    // Comparing to the *started* epoch dropped the DB row and left
+    // the default isBusiness: false in memory.
+    if (epoch != null && epoch < _appliedProfileEpoch) {
       print(
-          'Ignoring stale user profile load epoch=$epoch current=$_remoteProfileEpoch');
+          'Ignoring stale user profile load epoch=$epoch applied=$_appliedProfileEpoch');
       return;
+    }
+    if (epoch != null) {
+      _appliedProfileEpoch = epoch;
     }
 
     user.value = updatedUser;
@@ -439,7 +446,6 @@ class UserController extends GetxController {
         return false;
       }
 
-      beginRemoteUserLoad();
       final trimmedPublicName = publicName?.trim();
       final safePublicName =
           (trimmedPublicName != null && trimmedPublicName.contains('@'))
@@ -455,14 +461,23 @@ class UserController extends GetxController {
         return false;
       }
 
-      await reloadFromDatabase();
+      final persisted =
+          ClientUserModel.isBusinessFromRow(response) ?? isBusiness;
       user.value = user.value.copyWith(
-        isBusiness: ClientUserModel.isBusinessFromDb(response['isBusiness']),
-        publicName: response['publicName'] as String? ?? user.value.publicName,
+        isBusiness: persisted,
+        publicName: safePublicName ?? user.value.publicName,
       );
-      beginRemoteUserLoad();
       await saveUserData();
-      return true;
+
+      final reloaded = await reloadFromDatabase();
+      // A later profile fetch with a missing/unparsed flag must not undo
+      // a successful write.
+      if (persisted && !user.value.isBusiness) {
+        print('Restoring isBusiness=true after profile reload dropped it');
+        user.value = user.value.copyWith(isBusiness: true);
+        await saveUserData();
+      }
+      return reloaded;
     } catch (e) {
       print('Error updating business profile: $e');
       return false;

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_list_query.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
 import 'package:slickbill/feature_dashboard/utils/invoice_csv_local_save_io.dart'
@@ -120,7 +121,7 @@ class InvoiceCsvExporter {
             _date(invoice.paidOnDate),
             '${invoice.viewCount}',
             '${invoice.claimCount}',
-            token.isEmpty ? '' : 'https://app.slickbills.com/bill/$token',
+            token.isEmpty ? '' : AppEnv.billUrl(token),
           ];
         }),
       ],

@@ -8,6 +8,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:nfc_manager/nfc_manager.dart';
+import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/constants.dart';
 import 'package:slickbill/feature_auth/getx_controllers/current_bank_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
@@ -386,7 +387,7 @@ class SendNfcInvoice extends HookWidget {
         if (publicInvoice != null) {
           publicInvoiceToken.value = publicInvoice.publicToken;
           qrData.value =
-              'https://app.slickbills.com/bill/${publicInvoice.publicToken}';
+              AppEnv.billUrl(publicInvoice.publicToken);
 
           Get.snackbar(
             'Public Invoice Created!',
@@ -522,7 +523,7 @@ class SendNfcInvoice extends HookWidget {
   }) {
     final hasQr = publicInvoiceToken.value != null;
     final publicLink = hasQr
-        ? 'https://app.slickbills.com/bill/${publicInvoiceToken.value}'
+        ? AppEnv.billUrl(publicInvoiceToken.value)
         : '';
     final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 80;
 

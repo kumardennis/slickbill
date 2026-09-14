@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:get/get.dart';
+import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_loyalty/repos/merchant_insights_repo.dart';
 import 'package:slickbill/feature_loyalty/screens/merchant_check_in_landing_screen.dart';
@@ -13,7 +14,8 @@ String? parseCheckoutToken(String rawValue) {
   final trimmed = rawValue.trim();
   if (trimmed.isEmpty) return null;
 
-  if (trimmed.startsWith('https://app.slickbills.com/m/')) {
+  if (trimmed.startsWith('${AppEnv.appBaseUrl}/m/') ||
+      trimmed.startsWith('https://app.slickbills.com/m/')) {
     final token = trimmed.split('/m/').last.split('?').first.trim();
     return token.isEmpty ? null : token;
   }
@@ -88,7 +90,8 @@ String? parseBillToken(String rawValue) {
   final trimmed = rawValue.trim();
   if (trimmed.isEmpty) return null;
 
-  if (trimmed.startsWith('https://app.slickbills.com/bill/')) {
+  if (trimmed.startsWith('${AppEnv.appBaseUrl}/bill/') ||
+      trimmed.startsWith('https://app.slickbills.com/bill/')) {
     final token = trimmed.split('/bill/').last.split('?').first.trim();
     return token.isEmpty ? null : token;
   }

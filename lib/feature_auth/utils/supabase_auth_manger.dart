@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:get/get.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/services/facebook_auth_service.dart';
 import 'package:slickbill/feature_auth/services/google_auth_service.dart';
@@ -19,7 +20,9 @@ JsonEncoder encoder = const JsonEncoder.withIndent('  ');
 
 class SupabaseAuthManger {
   final supabseClient = Supabase.instance.client;
-  final userController = Get.put(UserController());
+  UserController get userController => Get.isRegistered<UserController>()
+      ? Get.find<UserController>()
+      : Get.put(UserController(), permanent: true);
   final GoogleAuthService _googleAuthService = GoogleAuthService();
   final FacebookAuthService _facebookAuthService = FacebookAuthService();
 
@@ -76,9 +79,12 @@ class SupabaseAuthManger {
 
     final privateUserResponse = await supabseClient
         .from('private_users')
-        .select('*')
+        .select(
+          'id, firstName, lastName, iban, ibans, bankAccountName, publicName, isBusiness, userId',
+        )
         .eq('userId', userProfileClassed.id)
-        .order('id');
+        .order('id')
+        .limit(1);
 
     final businessUserResponse = await supabseClient
         .from('business_users')
@@ -99,6 +105,13 @@ class SupabaseAuthManger {
     final privateRow =
         privateUserResponse.isNotEmpty ? privateUserResponse[0] : null;
     final privatePublicName = privateRow?['publicName'] as String?;
+    final parsedIsBusiness = ClientUserModel.isBusinessFromRow(privateRow);
+    // Missing/unreadable column must not reset a business account to private.
+    final isBusiness =
+        parsedIsBusiness ?? userController.user.value.isBusiness;
+
+    print(
+        'loadFreshUser: privateUserId=${privateRow?['id']} isBusiness=$isBusiness parsed=$parsedIsBusiness raw=${privateRow?['isBusiness']}');
 
     final clientUserClassed = ClientUserModel(
       id: userRecordResponse[0]['id'],
@@ -107,7 +120,7 @@ class SupabaseAuthManger {
       authUserId: userRecordResponse[0]['authUserId'],
       accessToken: tokenToUse,
       isPrivate: privateUserResponse.length > 0,
-      isBusiness: ClientUserModel.isBusinessFromDb(privateRow?['isBusiness']),
+      isBusiness: isBusiness,
       privateUserId: ClientUserModel.intOrNull(privateRow?['id']),
       businessUserId: businessUserResponse.length > 0
           ? businessUserResponse[0]['id']
@@ -206,7 +219,7 @@ class SupabaseAuthManger {
     if (kIsWeb && Uri.base.host.contains('localhost')) {
       return '${Uri.base.origin}/sign-in?verified=1';
     }
-    return 'https://app.slickbills.com/sign-in?verified=1';
+    return '${AppEnv.appBaseUrl}/sign-in?verified=1';
   }
 
   Future<bool> signInWithGoogle() async {

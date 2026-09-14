@@ -3,6 +3,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:slickbill/color_scheme.dart';
+import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_list_query.dart';
@@ -72,7 +73,7 @@ class PublicInvoices extends HookWidget {
     }
 
     void copyLink(String token) {
-      final url = 'https://app.slickbills.com/bill/$token';
+      final url = AppEnv.billUrl(token);
       Clipboard.setData(ClipboardData(text: url));
       Get.snackbar(
         'Copied!',
@@ -135,7 +136,7 @@ class PublicInvoices extends HookWidget {
 
     void showQRCode(
         BuildContext context, String token, String description, double amount) {
-      final publicLink = 'https://app.slickbills.com/bill/$token';
+      final publicLink = AppEnv.billUrl(token);
 
       Get.dialog(
         Dialog(

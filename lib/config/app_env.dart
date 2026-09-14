@@ -97,7 +97,11 @@ class AppEnv {
       _fromDotenv('WALLET_CLIENT_URL'),
     ]);
     if (override.isNotEmpty) return _stripSlash(override);
-    return stagingWalletClientUrl;
+    if (isDev) return stagingWalletClientUrl;
+    throw StateError(
+      'WALLET_CLIENT_URL is required when APP_ENV=production. '
+      'Until DNS cutover use https://slickbills-wallet-client-prod.vercel.app',
+    );
   }
 
   static String get appBaseUrl {

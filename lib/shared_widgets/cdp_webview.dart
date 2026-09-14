@@ -8,6 +8,7 @@ import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:slickbill/color_scheme.dart';
+import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/shared_widgets/sb_post_message_impl.dart';
 
 enum CdpAutoCloseMode {
@@ -123,8 +124,7 @@ class _CdpWebViewState extends State<CdpWebView> {
     }
   }
 
-  static const String exchangeServerBaseUrl =
-      'https://express-ten-xi.vercel.app';
+  static String get exchangeServerBaseUrl => AppEnv.expressServerUrl;
 
   static Future<String> _createExchangeCode(String jwt) async {
     final res = await http.post(
@@ -440,7 +440,8 @@ class _CdpWebViewState extends State<CdpWebView> {
 
                     // ✅ Block ANY navigation into the parent Flutter app domain
                     // Handles both https://app.slickbills.com/ and https://app.slickbills.com/minified:os
-                    if (url.startsWith('https://app.slickbills.com')) {
+                    if (url.startsWith(AppEnv.appBaseUrl) ||
+                        url.startsWith('https://app.slickbills.com')) {
                       // ignore: avoid_print
                       print('🚫 Blocked navigation into parent app: $url');
                       return NavigationActionPolicy.CANCEL;

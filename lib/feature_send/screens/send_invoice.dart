@@ -11,6 +11,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:slickbill/color_scheme.dart';
+import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/constants.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
@@ -259,7 +260,7 @@ class SendInvoice extends HookWidget {
 
         if (publicInvoice != null) {
           final shareableUrl =
-              'https://app.slickbills.com/bill/${publicInvoice.publicToken}';
+              AppEnv.billUrl(publicInvoice.publicToken);
 
           // Copy to clipboard
           await Clipboard.setData(ClipboardData(text: shareableUrl));

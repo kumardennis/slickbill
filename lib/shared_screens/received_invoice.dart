@@ -5,6 +5,7 @@ import 'package:flutter/src/widgets/framework.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
+import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
@@ -127,7 +128,7 @@ class ReceivedInvoice extends HookWidget {
       AppLockController.beginExternalAuthSession();
       try {
         // Open embedded wallet pay page; auto-close when txHash is available
-        const baseUrl = 'https://wallet.slickbills.com';
+        final baseUrl = AppEnv.walletClientUrl;
         final result = await Get.to(() => CdpWebView(
               url:
                   '$baseUrl/wallet/pay?to=${invoice.senders!.privateUsers!.users!.cdpWalletId}&amount=${invoice.amount}&description=${Uri.encodeComponent(invoice.description)}&receiver=${invoice.senders!.privateUsers!.firstName}',

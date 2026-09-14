@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/services/app_callback_in_app_browser.dart';
 import 'package:slickbill/feature_auth/services/metamask_wallet_service.dart';
@@ -37,7 +38,7 @@ class MoneriumService {
       'monerium_invoice_order_$invoiceId';
   static const String _configuredWalletChain =
       String.fromEnvironment('MONERIUM_WALLET_CHAIN', defaultValue: '');
-  static const String _walletClientBaseUrl = 'https://wallet.slickbills.com';
+  static String get _walletClientBaseUrl => AppEnv.walletClientUrl;
   static const String _walletSiwePath = '/wallet/siwe';
 
   static String get _serverBaseUrl => CoinbaseService.baseUrl;
@@ -339,7 +340,7 @@ class MoneriumService {
     if (kIsWeb) {
       final origin = Uri.base.origin.isNotEmpty
           ? Uri.base.origin
-          : 'https://app.slickbills.com';
+          : AppEnv.appBaseUrl;
       return Uri.parse('$origin/home-screen').replace(
         queryParameters: {'monerium': '1'},
       ).toString();
