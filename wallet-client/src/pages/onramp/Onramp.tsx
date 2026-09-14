@@ -1,9 +1,7 @@
 import { useCurrentUser } from "@coinbase/cdp-hooks";
 import { toast } from "react-toastify";
 import { getParentOrigin } from "../../utils";
-
-const SERVER_URL = "https://express-ten-xi.vercel.app";
-// const LOCAL_SERVER_URL = "http://localhost:3000";
+import { expressServerUrl } from "../../config";
 
 export const Onramp = () => {
   const { currentUser } = useCurrentUser();
@@ -16,7 +14,7 @@ export const Onramp = () => {
     }
 
     try {
-      const res = await fetch(`${SERVER_URL}/cdp/get-onramp-session-url`, {
+      const res = await fetch(`${expressServerUrl}/cdp/get-onramp-session-url`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ address: smartAccountAddress }),

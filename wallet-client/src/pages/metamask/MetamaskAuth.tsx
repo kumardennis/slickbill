@@ -1,9 +1,9 @@
-import { WEB3AUTH_NETWORK } from "@web3auth/base";
 import { Web3Auth } from "@web3auth/modal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import logo from "../../assets/logo_icon.png";
 import { sb } from "../../theme";
 import { web3AuthSocialLoginMethods } from "../../web3authSocialLogin";
+import { resolveWeb3AuthNetwork } from "../../config";
 
 type InitState = "idle" | "initializing" | "ready" | "error";
 type AuthState = "idle" | "authenticating" | "authenticated" | "error";
@@ -698,18 +698,6 @@ export function MetamaskAuth() {
         const clientId = import.meta.env.VITE_WEB3AUTH_CLIENT_ID as
           | string
           | undefined;
-        const rawNetwork = (
-          import.meta.env.VITE_WEB3AUTH_NETWORK as string | undefined
-        )
-          ?.trim()
-          .toLowerCase();
-
-        const resolvedNetwork =
-          rawNetwork === "sapphire_devnet" || rawNetwork === "devnet"
-            ? WEB3AUTH_NETWORK.SAPPHIRE_DEVNET
-            : rawNetwork === "sapphire_testnet" || rawNetwork === "testnet"
-              ? WEB3AUTH_NETWORK.TESTNET
-              : WEB3AUTH_NETWORK.SAPPHIRE_DEVNET;
 
         if (!clientId || clientId.trim().length === 0) {
           throw new Error("Missing VITE_WEB3AUTH_CLIENT_ID");
@@ -717,7 +705,7 @@ export function MetamaskAuth() {
 
         const web3Auth = new Web3Auth({
           clientId,
-          web3AuthNetwork: resolvedNetwork,
+          web3AuthNetwork: resolveWeb3AuthNetwork(),
           uiConfig: {
             uxMode: "redirect",
             appName: "SlickBills",

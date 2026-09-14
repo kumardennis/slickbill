@@ -1,10 +1,9 @@
-import { WEB3AUTH_NETWORK } from "@web3auth/base";
 import { Web3Auth } from "@web3auth/modal";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { sb } from "../../theme";
 import { web3AuthSocialLoginMethods } from "../../web3authSocialLogin";
+import { expressServerUrl, resolveWeb3AuthNetwork } from "../../config";
 
-const EXCHANGE_SERVER_URL = "https://express-ten-xi.vercel.app";
 const SIWE_PARAMS_SESSION_KEY = "monerium_siwe_params_v1";
 const SIWE_PARAMS_LOCAL_KEY = "monerium_siwe_params_v1_local";
 
@@ -137,24 +136,12 @@ export function MoneriumSiwe() {
       const clientId = import.meta.env.VITE_WEB3AUTH_CLIENT_ID as
         | string
         | undefined;
-      const rawNetwork = (
-        import.meta.env.VITE_WEB3AUTH_NETWORK as string | undefined
-      )
-        ?.trim()
-        .toLowerCase();
-
-      const resolvedNetwork =
-        rawNetwork === "sapphire_devnet" || rawNetwork === "devnet"
-          ? WEB3AUTH_NETWORK.SAPPHIRE_DEVNET
-          : rawNetwork === "sapphire_testnet" || rawNetwork === "testnet"
-            ? WEB3AUTH_NETWORK.TESTNET
-            : WEB3AUTH_NETWORK.SAPPHIRE_DEVNET;
 
       if (!clientId) throw new Error("Missing VITE_WEB3AUTH_CLIENT_ID");
 
       const web3Auth = new Web3Auth({
         clientId,
-        web3AuthNetwork: resolvedNetwork,
+        web3AuthNetwork: resolveWeb3AuthNetwork(),
         uiConfig: { uxMode: "redirect" },
         modalConfig: {
           hideWalletDiscovery: false,
@@ -176,7 +163,7 @@ export function MoneriumSiwe() {
       // ── 2. Get SIWE message from backend ─────────────────────────────
       setStatusText("Preparing sign-in message…");
       const startRes = await fetch(
-        `${EXCHANGE_SERVER_URL}/monerium/siwe/start`,
+        `${expressServerUrl}/monerium/siwe/start`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -239,7 +226,7 @@ export function MoneriumSiwe() {
       setStatusText("Completing sign-in…");
 
       const completeRes = await fetch(
-        `${EXCHANGE_SERVER_URL}/monerium/siwe/complete`,
+        `${expressServerUrl}/monerium/siwe/complete`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

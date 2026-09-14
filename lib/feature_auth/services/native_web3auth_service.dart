@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
+import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/config/env_config.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:web3auth_flutter/enums.dart';
@@ -38,12 +39,15 @@ class NativeWeb3AuthService {
     }
 
     final redirectUrl = _redirectUrlForPlatform();
-    _log('initialize() with redirectUrl=$redirectUrl');
+    final network = AppEnv.web3AuthNetwork == 'sapphire_mainnet'
+        ? Network.sapphire_mainnet
+        : Network.sapphire_devnet;
+    _log('initialize() with redirectUrl=$redirectUrl network=$network');
 
     await Web3AuthFlutter.init(
       Web3AuthOptions(
         clientId: clientId,
-        network: Network.sapphire_devnet,
+        network: network,
         redirectUrl: redirectUrl,
       ),
     );

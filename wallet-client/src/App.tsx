@@ -18,6 +18,7 @@ import { LinkEmail } from "./pages/link-email/LinkEmail.tsx";
 import { MetamaskAuth } from "./pages/metamask/MetamaskAuth.tsx";
 import { MoneriumSiwe } from "./pages/siwe/MoneriumSiwe.tsx";
 import { sb } from "./theme";
+import { expressServerUrl } from "./config";
 
 declare global {
   interface Window {
@@ -30,8 +31,6 @@ declare global {
     isFlutterApp?: boolean;
   }
 }
-
-const EXCHANGE_SERVER_URL = "https://express-ten-xi.vercel.app";
 
 function App() {
   const [readyToInit, setReadyToInit] = useState(false);
@@ -48,7 +47,7 @@ function App() {
 
     try {
       const res = await fetch(
-        `${EXCHANGE_SERVER_URL}/cdp/exchange-code/consume`,
+        `${expressServerUrl}/cdp/exchange-code/consume`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
