@@ -65,11 +65,23 @@ console.log(
   process.env.CDP_WALLET_SECRET ? "✅ Set" : "❌ Missing",
 );
 
-const cdp = new CdpClient({
-  apiKeyId: process.env.CDP_API_KEY_ID || "",
-  apiKeySecret: process.env.CDP_API_KEY_SECRET || "",
-  walletSecret: process.env.CDP_WALLET_SECRET || "",
-});
+let cdpClient: CdpClient | null = null;
+function getCdp(): CdpClient {
+  const apiKeyId = process.env.CDP_API_KEY_ID?.trim() ?? "";
+  const apiKeySecret = process.env.CDP_API_KEY_SECRET?.trim() ?? "";
+  const walletSecret = process.env.CDP_WALLET_SECRET?.trim() ?? "";
+  if (!apiKeyId || !apiKeySecret || !walletSecret) {
+    throw new Error("CDP is not configured");
+  }
+  if (!cdpClient) {
+    cdpClient = new CdpClient({
+      apiKeyId,
+      apiKeySecret,
+      walletSecret,
+    });
+  }
+  return cdpClient;
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -1099,11 +1111,11 @@ app.post("/cdp/get-account", async (req: any, res: any) => {
 
     console.log(`➡️ Getting CDP account: ${accountName} (${currency})`);
 
-    const account = await cdp.evm.getAccount({
+    const account = await getCdp().evm.getAccount({
       name: accountName,
     });
 
-    const smartAccount = await cdp.evm.getOrCreateSmartAccount({
+    const smartAccount = await getCdp().evm.getOrCreateSmartAccount({
       owner: account,
       name: accountName,
     });
@@ -1126,11 +1138,11 @@ app.post("/cdp/create-or-get-account", async (req: any, res: any) => {
 
     console.log(`➡️ Creating CDP account: ${accountName} (${currency})`);
 
-    const account = await cdp.evm.getOrCreateAccount({
+    const account = await getCdp().evm.getOrCreateAccount({
       name: accountName,
     });
 
-    const smartAccount = await cdp.evm.getOrCreateSmartAccount({
+    const smartAccount = await getCdp().evm.getOrCreateSmartAccount({
       owner: account,
       name: accountName,
     });
@@ -1153,18 +1165,18 @@ app.post("/cdp/request-testnet-faucet", async (req: any, res: any) => {
 
     console.log(`➡️ CDP account: ${accountName}`);
 
-    const account = await cdp.evm.getAccount({
+    const account = await getCdp().evm.getAccount({
       name: accountName,
     });
 
-    const smartAccount = await cdp.evm.getOrCreateSmartAccount({
+    const smartAccount = await getCdp().evm.getOrCreateSmartAccount({
       owner: account,
       name: accountName,
     });
 
     console.log("📥 Got account:", smartAccount);
 
-    const faucetResp = await cdp.evm.requestFaucet({
+    const faucetResp = await getCdp().evm.requestFaucet({
       address: smartAccount.address,
       network: "base-sepolia",
       token: "eurc",
@@ -1188,11 +1200,11 @@ app.post("/cdp/get-balances", async (req: any, res: any) => {
 
     console.log(`➡️ CDP account: ${accountName}`);
 
-    const account = await cdp.evm.getAccount({
+    const account = await getCdp().evm.getAccount({
       name: accountName,
     });
 
-    const smartAccount = await cdp.evm.getOrCreateSmartAccount({
+    const smartAccount = await getCdp().evm.getOrCreateSmartAccount({
       owner: account,
       name: accountName,
     });
@@ -1253,20 +1265,20 @@ app.post("/cdp/send-payment", async (req: any, res: any) => {
       `➡️ CDP account: ${fromAccountName} -> ${toAccountName} ${typeof amountEurc} ${amountEurc} EURC`,
     );
 
-    const sender = await cdp.evm.getAccount({
+    const sender = await getCdp().evm.getAccount({
       name: fromAccountName,
     });
 
-    const smartAccount = await cdp.evm.getOrCreateSmartAccount({
+    const smartAccount = await getCdp().evm.getOrCreateSmartAccount({
       owner: sender,
       name: fromAccountName,
     });
 
-    const receiver = await cdp.evm.getAccount({
+    const receiver = await getCdp().evm.getAccount({
       name: toAccountName,
     });
 
-    const receiverSmartAccount = await cdp.evm.getOrCreateSmartAccount({
+    const receiverSmartAccount = await getCdp().evm.getOrCreateSmartAccount({
       owner: receiver,
       name: toAccountName,
     });
@@ -1330,11 +1342,11 @@ app.post("/cdp/create-onramp-session", async (req: any, res: any) => {
       );
     }
 
-    const sender = await cdp.evm.getAccount({
+    const sender = await getCdp().evm.getAccount({
       name: accountName,
     });
 
-    const smartAccount = await cdp.evm.getOrCreateSmartAccount({
+    const smartAccount = await getCdp().evm.getOrCreateSmartAccount({
       owner: sender,
       name: accountName,
     });
