@@ -4,6 +4,10 @@ import logo from "../../assets/logo_icon.png";
 import { sb } from "../../theme";
 import { web3AuthSocialLoginMethods } from "../../web3authSocialLogin";
 import { resolveWeb3AuthNetwork } from "../../config";
+import {
+  eip1193Provider,
+  isWeb3AuthConnected,
+} from "../../web3authProvider";
 
 type InitState = "idle" | "initializing" | "ready" | "error";
 type AuthState = "idle" | "authenticating" | "authenticated" | "error";
@@ -553,24 +557,14 @@ export function MetamaskAuth() {
     setErrorMessage(null);
 
     try {
-      const connected = Boolean(
-        (web3Auth as unknown as { connected?: boolean }).connected,
-      );
-      const existingProvider = (
-        web3Auth as unknown as { provider?: unknown }
-      ).provider;
-
-      // Google/Facebook redirect returns already connected. Reuse that
-      // provider. Logging out and calling connect() again on Mainnet opens
-      // WalletConnect "Search wallet" (often MetaMask only), not social login.
-      let provider: unknown =
-        connected && existingProvider ? existingProvider : null;
+      let provider = eip1193Provider(web3Auth);
       if (!provider) {
-        provider = await (
+        const result = await (
           web3Auth as unknown as {
             connect: () => Promise<unknown>;
           }
         ).connect();
+        provider = eip1193Provider(web3Auth, result);
       }
 
       if (!provider) {
@@ -688,8 +682,8 @@ export function MetamaskAuth() {
             appName: "SlickBills",
           },
           modalConfig: {
-            // Don't auto-surface explorer wallets (Rabby often sits at the top
-            // as "recent" and then waits forever inside a mobile custom tab).
+            // Mainnet opens MetaMask Connect Kit ("Search through 1 wallets")
+            // if the metamask connector is enabled. This flow is Google/Facebook.
             hideWalletDiscovery: true,
             connectors: {
               auth: {
@@ -699,11 +693,11 @@ export function MetamaskAuth() {
               },
               metamask: {
                 label: "MetaMask",
-                showOnModal: true,
+                showOnModal: false,
               },
               "wallet-connect-v2": {
                 label: "WalletConnect",
-                showOnModal: true,
+                showOnModal: false,
               },
             },
           },
@@ -712,18 +706,15 @@ export function MetamaskAuth() {
         await web3Auth.init();
         if (cancelled) return;
 
-        const connected = Boolean(
-          (web3Auth as unknown as { connected?: boolean }).connected,
-        );
-
         web3AuthRef.current = web3Auth;
         setInitState("ready");
 
-        const existingProvider = (
-          web3Auth as unknown as { provider?: unknown }
-        ).provider;
-
-        if (connected && existingProvider && completeWithProviderRef.current) {
+        const existingProvider = eip1193Provider(web3Auth);
+        if (
+          (isWeb3AuthConnected(web3Auth) || existingProvider) &&
+          existingProvider &&
+          completeWithProviderRef.current
+        ) {
           await completeWithProviderRef.current(existingProvider);
           return;
         }

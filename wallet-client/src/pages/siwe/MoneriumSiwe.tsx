@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { sb } from "../../theme";
 import { web3AuthSocialLoginMethods } from "../../web3authSocialLogin";
 import { expressServerUrl, resolveWeb3AuthNetwork } from "../../config";
+import { eip1193Provider } from "../../web3authProvider";
 
 const SIWE_PARAMS_SESSION_KEY = "monerium_siwe_params_v1";
 const SIWE_PARAMS_LOCAL_KEY = "monerium_siwe_params_v1_local";
@@ -144,15 +145,15 @@ export function MoneriumSiwe() {
         web3AuthNetwork: resolveWeb3AuthNetwork(),
         uiConfig: { uxMode: "redirect" },
         modalConfig: {
-          hideWalletDiscovery: false,
+          hideWalletDiscovery: true,
           connectors: {
             auth: {
               label: "Web3Auth",
               showOnModal: true,
               loginMethods: web3AuthSocialLoginMethods(),
             },
-            metamask: { label: "MetaMask", showOnModal: true },
-            "wallet-connect-v2": { label: "WalletConnect", showOnModal: true },
+            metamask: { label: "MetaMask", showOnModal: false },
+            "wallet-connect-v2": { label: "WalletConnect", showOnModal: false },
           },
         },
       });
@@ -190,9 +191,10 @@ export function MoneriumSiwe() {
       setStep("signing");
       setStatusText("Please sign the message in your wallet…");
 
-      const provider = await (
+      const result = await (
         web3Auth as unknown as { connect: () => Promise<unknown> }
       ).connect();
+      const provider = eip1193Provider(web3Auth, result);
 
       if (!provider) throw new Error("Web3Auth modal closed before signing.");
 
