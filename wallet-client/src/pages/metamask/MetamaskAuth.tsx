@@ -553,32 +553,6 @@ export function MetamaskAuth() {
     setErrorMessage(null);
 
     try {
-      if (flowMode.current === "sign") {
-        const connected = Boolean(
-          (web3Auth as unknown as { connected?: boolean }).connected,
-        );
-        // Always show the picker. A cached WalletConnect session (often Rabby)
-        // would otherwise resume silently with no modal.
-        if (connected) {
-          try {
-            await web3Auth.logout({ cleanup: true });
-          } catch {
-            // Stale sessions can throw; still show the modal.
-          }
-        }
-
-        const provider = await (
-          web3Auth as unknown as {
-            connect: () => Promise<unknown>;
-          }
-        ).connect();
-        if (!provider) {
-          throw new Error("Web3Auth modal closed before a wallet connected.");
-        }
-        await completeWithProvider(provider);
-        return;
-      }
-
       const connected = Boolean(
         (web3Auth as unknown as { connected?: boolean }).connected,
       );
@@ -586,6 +560,9 @@ export function MetamaskAuth() {
         web3Auth as unknown as { provider?: unknown }
       ).provider;
 
+      // Google/Facebook redirect returns already connected. Reuse that
+      // provider. Logging out and calling connect() again on Mainnet opens
+      // WalletConnect "Search wallet" (often MetaMask only), not social login.
       let provider: unknown =
         connected && existingProvider ? existingProvider : null;
       if (!provider) {
@@ -742,16 +719,13 @@ export function MetamaskAuth() {
         web3AuthRef.current = web3Auth;
         setInitState("ready");
 
-        // Always start fresh so Confirm/Connect shows the wallet picker.
-        if (connected) {
-          console.log(
-            "[MetaMaskWeb3Auth] existing session found — logging out to force fresh login",
-          );
-          try {
-            await web3Auth.logout({ cleanup: true });
-          } catch {
-            // logout may throw if session is already stale; safe to ignore
-          }
+        const existingProvider = (
+          web3Auth as unknown as { provider?: unknown }
+        ).provider;
+
+        if (connected && existingProvider && completeWithProviderRef.current) {
+          await completeWithProviderRef.current(existingProvider);
+          return;
         }
 
         setAuthState("idle");
