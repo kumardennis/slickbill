@@ -11,6 +11,9 @@
 # deps
 node_modules/
 
+# tsc emit next to src (source of truth is index.ts)
+src/index.js
+
 # env
 .env
 .env.production
