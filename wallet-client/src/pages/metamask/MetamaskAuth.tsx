@@ -1,16 +1,11 @@
 import type { Web3Auth } from "@web3auth/modal";
+import { useWeb3Auth, useWeb3AuthConnect } from "@web3auth/modal/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import logo from "../../assets/logo_icon.png";
 import { sb } from "../../theme";
 import {
-  completePendingSocialReturn,
-  createSlickBillsWeb3Auth,
-  listenForSdkAuthErrors,
-  logAuthReturn,
-  logCurrentUrl,
   recoverConnectedWallet,
   waitForSocialWallet,
-  waitUntilSdkReady,
 } from "../../web3authClient";
 import { inspectWeb3AuthSession } from "../../web3authProvider";
 
@@ -182,18 +177,33 @@ function DetailRow({
 }
 
 export function MetamaskAuth() {
+  const {
+    web3Auth,
+    isInitialized,
+    isInitializing,
+    isConnected,
+    connection,
+    status,
+    initError,
+  } = useWeb3Auth();
+  const {
+    connect,
+    loading: connectLoading,
+    error: connectError,
+  } = useWeb3AuthConnect();
   const [initState, setInitState] = useState<InitState>("idle");
   const [authState, setAuthState] = useState<AuthState>("idle");
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isConnecting, setIsConnecting] = useState(false);
   const [debugLogs, setDebugLogs] = useState<string[]>(() =>
     readPersistedDebugLog(),
   );
   const [isSignFlow] = useState(() => readFlowMode() === "sign");
   const [paymentPreview] = useState<PaymentPreview>(() => readPaymentPreview());
   const web3AuthRef = useRef<Web3Auth | null>(null);
-  const initStartedRef = useRef(false);
+  const sessionReadyRef = useRef(false);
+  const recoverStartedRef = useRef(false);
+  const initLoggedRef = useRef(false);
   const connectInFlightRef = useRef(false);
   const completionInFlightRef = useRef(false);
   const callbackSentRef = useRef(false);
@@ -509,18 +519,17 @@ export function MetamaskAuth() {
   completeWithProviderRef.current = completeWithProvider;
 
   const connectAndGetAddress = useCallback(async () => {
-    const web3Auth = web3AuthRef.current;
-    if (!web3Auth || isConnecting || connectInFlightRef.current) return;
+    const auth = web3AuthRef.current;
+    if (!auth || connectInFlightRef.current) return;
 
     connectInFlightRef.current = true;
-    setIsConnecting(true);
     setAuthState("authenticating");
     setErrorMessage(null);
 
     try {
       appendLog("connect: start");
       const recovered = await recoverConnectedWallet(
-        web3Auth,
+        auth,
         expectedAddressRef.current,
         appendLog,
       );
@@ -531,13 +540,13 @@ export function MetamaskAuth() {
       }
 
       appendLog("connect: opening modal");
-      const result = await web3Auth.connect();
+      const result = await connect();
       appendLog(
         `connect: modal result connector=${
           (result as { connectorName?: string } | null)?.connectorName ?? "none"
         }`,
       );
-      (await inspectWeb3AuthSession(web3Auth, result)).forEach(appendLog);
+      (await inspectWeb3AuthSession(auth, result)).forEach(appendLog);
       await completeWithProvider(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -555,150 +564,145 @@ export function MetamaskAuth() {
       console.error("[MetaMaskWeb3Auth] login failed", err);
     } finally {
       connectInFlightRef.current = false;
-      setIsConnecting(false);
     }
-  }, [appendLog, completeWithProvider, isConnecting]);
+  }, [appendLog, completeWithProvider, connect]);
 
   useEffect(() => {
-    if (initStartedRef.current) {
+    web3AuthRef.current = web3Auth;
+  }, [web3Auth]);
+
+  useEffect(() => {
+    if (sessionReadyRef.current) {
       return;
     }
-    initStartedRef.current = true;
+    sessionReadyRef.current = true;
 
-    let cancelled = false;
+    const params = new URLSearchParams(window.location.search);
+    const callbackFromQuery = params.get("callback_uri")?.trim();
+    const modeFromQuery = params.get("mode")?.trim().toLowerCase();
+    const signMessageFromQuery = params.get("sign_message")?.trim();
+    const addressFromQuery = params.get("address")?.trim();
+    const callbackFromSession = window.sessionStorage
+      .getItem(sessionStorageKeys.callbackUri)
+      ?.trim();
+    const modeFromSession = window.sessionStorage
+      .getItem(sessionStorageKeys.flowMode)
+      ?.trim()
+      .toLowerCase();
+    const signMessageFromSession = window.sessionStorage
+      .getItem(sessionStorageKeys.signMessage)
+      ?.trim();
+    const addressFromSession = window.sessionStorage
+      .getItem(sessionStorageKeys.expectedAddress)
+      ?.trim();
 
-    const initAndConnect = async () => {
-      setInitState("initializing");
-      setErrorMessage(null);
+    flowMode.current =
+      modeFromQuery === "sign" || modeFromSession === "sign"
+        ? "sign"
+        : "connect";
+    signMessageRef.current =
+      signMessageFromQuery || signMessageFromSession || null;
+    expectedAddressRef.current =
+      addressFromQuery || addressFromSession || null;
 
-      try {
-        const params = new URLSearchParams(window.location.search);
-        const callbackFromQuery = params.get("callback_uri")?.trim();
-        const modeFromQuery = params.get("mode")?.trim().toLowerCase();
-        const signMessageFromQuery = params.get("sign_message")?.trim();
-        const addressFromQuery = params.get("address")?.trim();
-        const callbackFromSession = window.sessionStorage
-          .getItem(sessionStorageKeys.callbackUri)
-          ?.trim();
-        const modeFromSession = window.sessionStorage
-          .getItem(sessionStorageKeys.flowMode)
-          ?.trim()
-          .toLowerCase();
-        const signMessageFromSession = window.sessionStorage
-          .getItem(sessionStorageKeys.signMessage)
-          ?.trim();
-        const addressFromSession = window.sessionStorage
-          .getItem(sessionStorageKeys.expectedAddress)
-          ?.trim();
+    callbackUri.current =
+      callbackFromQuery && callbackFromQuery.length > 0
+        ? callbackFromQuery
+        : callbackFromSession && callbackFromSession.length > 0
+          ? callbackFromSession
+          : null;
 
-        flowMode.current =
-          modeFromQuery === "sign" || modeFromSession === "sign"
-            ? "sign"
-            : "connect";
-        signMessageRef.current =
-          signMessageFromQuery || signMessageFromSession || null;
-        expectedAddressRef.current =
-          addressFromQuery || addressFromSession || null;
-
-        callbackUri.current =
-          callbackFromQuery && callbackFromQuery.length > 0
-            ? callbackFromQuery
-            : callbackFromSession && callbackFromSession.length > 0
-              ? callbackFromSession
-              : null;
-
-        if (callbackUri.current) {
-          window.sessionStorage.setItem(
-            sessionStorageKeys.callbackUri,
-            callbackUri.current,
-          );
-        }
-        window.sessionStorage.setItem(
-          sessionStorageKeys.flowMode,
-          flowMode.current,
-        );
-        if (signMessageRef.current) {
-          window.sessionStorage.setItem(
-            sessionStorageKeys.signMessage,
-            signMessageRef.current,
-          );
-        }
-        if (expectedAddressRef.current) {
-          window.sessionStorage.setItem(
-            sessionStorageKeys.expectedAddress,
-            expectedAddressRef.current,
-          );
-        }
-        persistPaymentPreview(readPaymentPreview());
-
-        const clientId = import.meta.env.VITE_WEB3AUTH_CLIENT_ID as
-          | string
-          | undefined;
-
-        if (!clientId || clientId.trim().length === 0) {
-          throw new Error("Missing VITE_WEB3AUTH_CLIENT_ID");
-        }
-
-        const web3Auth = createSlickBillsWeb3Auth(clientId);
-        appendLog(`init: client ${clientId.slice(0, 8)}…`);
-        logCurrentUrl(appendLog);
-        logAuthReturn(appendLog, "return before init");
-        listenForSdkAuthErrors(web3Auth, appendLog);
-
-        await web3Auth.init();
-        if (cancelled) return;
-        logAuthReturn(appendLog, "return after init");
-        await waitUntilSdkReady(web3Auth, appendLog);
-        if (cancelled) return;
-        await completePendingSocialReturn(web3Auth, appendLog);
-        if (cancelled) return;
-
-        web3AuthRef.current = web3Auth;
-        setInitState("ready");
-        appendLog(`init: sdk status=${web3Auth.status}`);
-        (await inspectWeb3AuthSession(web3Auth)).forEach(appendLog);
-
-        const wasConnected = Boolean(web3Auth.connected);
-        if (wasConnected) {
-          setAuthState("authenticating");
-          appendLog("init: session already connected, recovering");
-        }
-
-        const recovered = await recoverConnectedWallet(
-          web3Auth,
-          expectedAddressRef.current,
-          appendLog,
-        );
-        if (recovered && completeWithProviderRef.current) {
-          appendLog(`init: recovered ${recovered.address}`);
-          await completeWithProviderRef.current(recovered.provider);
-          return;
-        }
-
-        if (wasConnected) {
-          setErrorMessage(
-            "Signed in, but no wallet address came back. Logs are below.",
-          );
-          appendLog("init: connected but no address");
-        }
-
-        setAuthState("idle");
-      } catch (err) {
-        if (cancelled) return;
-        const message = err instanceof Error ? err.message : String(err);
-        setErrorMessage(message);
-        setInitState("error");
-        setAuthState("error");
-        console.error("[MetaMaskWeb3Auth] initialization failed", err);
-      }
-    };
-
-    void initAndConnect();
-
-    return () => {
-      cancelled = true;
-    };
+    if (callbackUri.current) {
+      window.sessionStorage.setItem(
+        sessionStorageKeys.callbackUri,
+        callbackUri.current,
+      );
+    }
+    window.sessionStorage.setItem(sessionStorageKeys.flowMode, flowMode.current);
+    if (signMessageRef.current) {
+      window.sessionStorage.setItem(
+        sessionStorageKeys.signMessage,
+        signMessageRef.current,
+      );
+    }
+    if (expectedAddressRef.current) {
+      window.sessionStorage.setItem(
+        sessionStorageKeys.expectedAddress,
+        expectedAddressRef.current,
+      );
+    }
+    persistPaymentPreview(readPaymentPreview());
   }, []);
+
+  useEffect(() => {
+    if (isInitializing) {
+      setInitState("initializing");
+      return;
+    }
+    if (initError) {
+      const message =
+        initError instanceof Error ? initError.message : String(initError);
+      setInitState("error");
+      setAuthState("error");
+      setErrorMessage(message);
+      appendLog(`init error: ${message}`);
+      return;
+    }
+    if (!isInitialized || !web3Auth) {
+      return;
+    }
+
+    setInitState("ready");
+    if (initLoggedRef.current) {
+      return;
+    }
+    initLoggedRef.current = true;
+    appendLog(
+      `init: ready status=${status ?? "?"} connected=${String(isConnected)}`,
+    );
+    void inspectWeb3AuthSession(web3Auth, connection).then((lines) => {
+      lines.forEach(appendLog);
+    });
+  }, [
+    appendLog,
+    connection,
+    initError,
+    isConnected,
+    isInitialized,
+    isInitializing,
+    status,
+    web3Auth,
+  ]);
+
+  useEffect(() => {
+    if (!isInitialized || !isConnected || !web3Auth || recoverStartedRef.current) {
+      return;
+    }
+    recoverStartedRef.current = true;
+    setAuthState("authenticating");
+    appendLog("init: session already connected, recovering");
+    void recoverConnectedWallet(
+      web3Auth,
+      expectedAddressRef.current,
+      appendLog,
+    ).then(async (recovered) => {
+      if (recovered && completeWithProviderRef.current) {
+        appendLog(`init: recovered ${recovered.address}`);
+        await completeWithProviderRef.current(recovered.provider);
+        return;
+      }
+      setErrorMessage(
+        "Signed in, but no wallet address came back. Logs are below.",
+      );
+      appendLog("init: connected but no address");
+      setAuthState("idle");
+    });
+  }, [appendLog, isConnected, isInitialized, web3Auth]);
+
+  useEffect(() => {
+    if (!connectError) return;
+    appendLog(`connect hook error: ${connectError.message}`);
+  }, [appendLog, connectError]);
 
   useEffect(() => {
     window.getMetaMaskInitStateOutOfWeb = () => initState;
@@ -740,7 +744,8 @@ export function MetamaskAuth() {
   const busy =
     initState === "initializing" ||
     authState === "authenticating" ||
-    authState === "authenticated";
+    authState === "authenticated" ||
+    connectLoading;
 
   return (
     <div
@@ -917,25 +922,25 @@ export function MetamaskAuth() {
             onClick={() => {
               void connectAndGetAddress();
             }}
-            disabled={isConnecting}
+            disabled={connectLoading}
             style={{
               marginTop: 18,
               width: "100%",
               borderRadius: 12,
               border: "none",
-              background: isConnecting ? sb.outlineVariant : sb.deepNavy,
+              background: connectLoading ? sb.outlineVariant : sb.deepNavy,
               color: sb.onPrimary,
               padding: "14px 16px",
               fontSize: 15,
               fontWeight: 700,
               letterSpacing: 0.2,
-              cursor: isConnecting ? "not-allowed" : "pointer",
-              boxShadow: isConnecting
+              cursor: connectLoading ? "not-allowed" : "pointer",
+              boxShadow: connectLoading
                 ? "none"
                 : "0 10px 20px rgba(11, 37, 69, 0.2)",
             }}
           >
-            {isConnecting ? "Opening confirmation…" : copy.cta}
+            {connectLoading ? "Opening confirmation…" : copy.cta}
           </button>
         ) : null}
 

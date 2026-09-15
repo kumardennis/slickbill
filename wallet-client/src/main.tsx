@@ -2,9 +2,10 @@ import { createRoot } from "react-dom/client";
 import "./index.css";
 import App from "./App.tsx";
 import React from "react";
+import { Web3AuthProvider } from "@web3auth/modal/react";
 import { MetamaskAuth } from "./pages/metamask/MetamaskAuth.tsx";
 import processShim from "process";
-import { snapshotAuthReturnHash } from "./web3authClient";
+import { web3AuthContextConfig } from "./web3authContext";
 
 const processRef = processShim as {
   nextTick?: (cb: () => void) => void;
@@ -16,16 +17,15 @@ if (typeof processRef.nextTick !== "function") {
   };
 }
 
-// Ensure global and imported `process` references are the same object.
 (globalThis as { process?: typeof processRef }).process = processRef;
 
 const isStandaloneMetamaskRoute =
   window.location.pathname === "/wallet/metamask-auth";
 
-snapshotAuthReturnHash();
-
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    {isStandaloneMetamaskRoute ? <MetamaskAuth /> : <App />}
+    <Web3AuthProvider config={web3AuthContextConfig}>
+      {isStandaloneMetamaskRoute ? <MetamaskAuth /> : <App />}
+    </Web3AuthProvider>
   </React.StrictMode>,
 );

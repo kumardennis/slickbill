@@ -1,9 +1,8 @@
-import type { Web3Auth } from "@web3auth/modal";
+import { useWeb3Auth, useWeb3AuthConnect } from "@web3auth/modal/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { sb } from "../../theme";
 import { expressServerUrl } from "../../config";
 import {
-  createSlickBillsWeb3Auth,
   recoverConnectedWallet,
   waitForSocialWallet,
 } from "../../web3authClient";
@@ -19,11 +18,12 @@ type CompleteData = {
 };
 
 export function MoneriumSiwe() {
+  const { web3Auth, isInitialized, initError } = useWeb3Auth();
+  const { connect } = useWeb3AuthConnect();
   const [step, setStep] = useState<Step>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [statusText, setStatusText] = useState("Connecting wallet…");
 
-  const web3AuthRef = useRef<Web3Auth | null>(null);
   const startedRef = useRef(false);
 
   // Read all params from URL once
@@ -133,20 +133,11 @@ export function MoneriumSiwe() {
         // ignore storage errors
       }
 
-      // ── 1. Init web3auth ──────────────────────────────────────────────
+      // ── 1. Wait for the React SDK provider (already initialized) ────
       setStep("init");
       setStatusText("Initialising wallet…");
 
-      const clientId = import.meta.env.VITE_WEB3AUTH_CLIENT_ID as
-        | string
-        | undefined;
-
-      if (!clientId) throw new Error("Missing VITE_WEB3AUTH_CLIENT_ID");
-
-      const web3Auth = createSlickBillsWeb3Auth(clientId);
-
-      await web3Auth.init();
-      web3AuthRef.current = web3Auth;
+      if (!web3Auth) throw new Error("Web3Auth is not ready.");
 
       // ── 2. Get SIWE message from backend ─────────────────────────────
       setStatusText("Preparing sign-in message…");
@@ -183,7 +174,7 @@ export function MoneriumSiwe() {
         ? recovered
         : await waitForSocialWallet(
             web3Auth,
-            await web3Auth.connect(),
+            await connect(),
             walletAddress,
           );
       const provider = waited.provider;
@@ -260,13 +251,19 @@ export function MoneriumSiwe() {
       console.error("[MoneriumSiwe]", msg);
       fail(msg);
     }
-  }, [userId, walletAddress, appRedirectUri, orderId, fail]);
+  }, [userId, walletAddress, appRedirectUri, orderId, fail, web3Auth, connect]);
 
   useEffect(() => {
-    if (startedRef.current) return;
+    if (initError) {
+      fail(
+        initError instanceof Error ? initError.message : String(initError),
+      );
+      return;
+    }
+    if (!isInitialized || !web3Auth || startedRef.current) return;
     startedRef.current = true;
-    run();
-  }, [run]);
+    void run();
+  }, [fail, initError, isInitialized, run, web3Auth]);
 
   return (
     <div
