@@ -245,6 +245,8 @@ const moneriumLinkVerifyFetchTimeoutMs = Number(
 );
 
 const moneriumClientId = process.env.MONERIUM_CLIENT_ID?.trim() || "";
+// OAuth apps use Authorization Code + PKCE. Client secret is optional
+// (confidential clients only). Public OAuth apps only show a Client ID.
 const moneriumClientSecret = process.env.MONERIUM_CLIENT_SECRET?.trim() || "";
 const moneriumScope =
   process.env.MONERIUM_OAUTH_SCOPE?.trim() || "openid profile offline_access";
@@ -258,6 +260,19 @@ const moneriumAppAutoRedirectEnabled =
   process.env.MONERIUM_APP_AUTO_REDIRECT?.trim().toLowerCase() === "true";
 
 const moneriumPkceTtlMs = 10 * 60 * 1000;
+
+function moneriumTokenRequestBody(
+  params: Record<string, string>,
+): URLSearchParams {
+  const body = new URLSearchParams({
+    ...params,
+    client_id: moneriumClientId,
+  });
+  if (moneriumClientSecret) {
+    body.set("client_secret", moneriumClientSecret);
+  }
+  return body;
+}
 
 const makeMoneriumUrl = (path: string, query?: Record<string, string>) => {
   const url = new URL(path, moneriumBaseUrl);
@@ -680,13 +695,11 @@ const exchangeMoneriumCodeForToken = async (params: {
   codeVerifier: string;
   redirectUri: string;
 }) => {
-  const body = new URLSearchParams({
+  const body = moneriumTokenRequestBody({
     grant_type: "authorization_code",
     code: params.code,
     code_verifier: params.codeVerifier,
     redirect_uri: params.redirectUri,
-    client_id: moneriumClientId,
-    client_secret: moneriumClientSecret,
   });
 
   const response = await fetch(makeMoneriumUrl(moneriumTokenPath), {
@@ -774,11 +787,9 @@ const refreshMoneriumTokenInner = async (userId: string) => {
     );
   }
 
-  const body = new URLSearchParams({
+  const body = moneriumTokenRequestBody({
     grant_type: "refresh_token",
     refresh_token: existing.refreshToken,
-    client_id: moneriumClientId,
-    client_secret: moneriumClientSecret,
   });
 
   const response = await fetch(makeMoneriumUrl(moneriumTokenPath), {
@@ -1977,13 +1988,13 @@ app.post("/monerium/oauth/start", async (req: any, res: any) => {
   try {
     clearExpiredMoneriumState();
 
-    if (!moneriumClientId || !moneriumClientSecret) {
+    if (!moneriumClientId) {
       return res
         .status(500)
         .json(
           makeError(
             "MONERIUM_ENV_MISSING",
-            "Missing MONERIUM_CLIENT_ID or MONERIUM_CLIENT_SECRET on server.",
+            "Missing MONERIUM_CLIENT_ID on server.",
             undefined,
             500,
           ),
@@ -2264,11 +2275,9 @@ app.post("/monerium/oauth/refresh", async (req: any, res: any) => {
     if (stored?.refreshToken) {
       token = await refreshMoneriumToken(userId);
     } else if (bodyRefresh) {
-      const body = new URLSearchParams({
+      const body = moneriumTokenRequestBody({
         grant_type: "refresh_token",
         refresh_token: bodyRefresh,
-        client_id: moneriumClientId,
-        client_secret: moneriumClientSecret,
       });
 
       const response = await fetch(makeMoneriumUrl(moneriumTokenPath), {

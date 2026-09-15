@@ -1,6 +1,8 @@
 # Monerium sandbox → production cutover
 
-SlickBills invoices stay in Supabase. Production only changes **where orders and EURe live**. Until these env vars move, Express still talks to **sandbox** (`https://api.monerium.dev`).
+Stack split (git branches, hosts, new prod Supabase): **`docs/prod-migration.md`**. This file is only the money-path env checklist.
+
+Prod Express is a **new** Vercel project (not `express-ten-xi`). Redirect URI, SIWE domain, and Alchemy webhook must use that prod host. Staging Express stays `https://express-ten-xi.vercel.app` + `https://api.monerium.dev`.
 
 Do this as one cutover. Do not mix sandbox credentials with Polygon mainnet Alchemy, or prod API with the Amoy EURe contract.
 
@@ -8,10 +10,9 @@ Do this as one cutover. Do not mix sandbox credentials with Polygon mainnet Alch
 
 ## What does not change
 
-- Invoice tables / settlement matching in `vercel/express` (`digital_invoices`, `public_digital_invoices`)
-- App hosts: `app.slickbills.com`, `wallet.slickbills.com`
-- Express host (today): `https://express-ten-xi.vercel.app`
 - Pay path: Monerium **redeem to IBAN**, not a custom invoice contract
+- Public hosts stay `app.slickbills.com` and `wallet.slickbills.com` (prod only)
+- Staging Express stays `https://express-ten-xi.vercel.app`
 
 ---
 
@@ -23,8 +24,8 @@ Register **exactly**:
 
 | Portal field | Value |
 | --- | --- |
-| Redirect URI | `https://express-ten-xi.vercel.app/monerium/oauth/callback` |
-| SIWE domain | Host of `PUBLIC_SERVER_URL` → `express-ten-xi.vercel.app` |
+| Redirect URI | `https://<prod-express>/monerium/oauth/callback` |
+| SIWE domain | Host of prod `PUBLIC_SERVER_URL` (prod Express, not `express-ten-xi`) |
 | SIWE chain ID | `137` (Polygon mainnet) |
 | Statement / privacy / terms | Must match env below, character for character |
 
@@ -32,17 +33,17 @@ Sandbox client id/secret, IBANs, profiles, and refresh tokens **do not work** in
 
 ---
 
-## 2. Vercel (Express) — must change
+## 2. Vercel (prod Express project) — must change
 
-Project that serves `https://express-ten-xi.vercel.app`.
+Put these on the **prod** Express project only. Leave `express-ten-xi` on sandbox.
 
-| Variable | Sandbox (now) | Production |
+| Variable | Sandbox (`express-ten-xi`) | Production (new Express project) |
 | --- | --- | --- |
 | `MONERIUM_BASE_URL` | `https://api.monerium.dev` (code default) | `https://api.monerium.app` |
 | `MONERIUM_CLIENT_ID` | sandbox app | **prod** app id |
-| `MONERIUM_CLIENT_SECRET` | sandbox app | **prod** app secret |
-| `MONERIUM_REDIRECT_URI` | sandbox callback | `https://express-ten-xi.vercel.app/monerium/oauth/callback` |
-| `PUBLIC_SERVER_URL` | same host is fine | `https://express-ten-xi.vercel.app` |
+| `MONERIUM_CLIENT_SECRET` | sandbox (if the old app had one) | omit for PKCE OAuth apps |
+| `MONERIUM_REDIRECT_URI` | staging callback on `express-ten-xi` | `https://<prod-express>/monerium/oauth/callback` |
+| `PUBLIC_SERVER_URL` | `https://express-ten-xi.vercel.app` | prod Express origin |
 | `MONERIUM_WALLET_CHAIN` | `polygon` or `polygon:amoy` | `polygon` |
 | `MONERIUM_SIWE_CHAIN_ID` | `80002` if Amoy | `137` |
 | `MONERIUM_EURE_TOKEN_ADDRESS` | Amoy EURe | Polygon EURe `0xE0aEa583266584DafBB3f9C3211d5588c73fEa8d` |
@@ -78,7 +79,7 @@ Settlement watches **ERC-20 activity on EURe**, then loads the Monerium order.
 Webhook URL (unchanged path):
 
 ```text
-https://express-ten-xi.vercel.app/monerium/chain/transfers
+https://<prod-express>/monerium/chain/transfers
 ```
 
 Filter / contract: Polygon EURe `0xE0aEa583266584DafBB3f9C3211d5588c73fEa8d`.
@@ -98,12 +99,12 @@ MONERIUM_NETWORK_ADDRESS=0xE0aEa583266584DafBB3f9C3211d5588c73fEa8d
 
 | Piece | Why |
 | --- | --- |
-| Supabase | Invoice state stays off-chain |
-| `wallet.slickbills.com` | SIWE / sign happens there; it already calls Express |
+| Invoice tables | Settlement matching stays in Express; **prod uses a new Supabase project** (`docs/prod-migration.md`) |
+| `wallet.slickbills.com` | Prod wallet; its `VITE_EXPRESS_SERVER_URL` must be prod Express |
 | Web3Auth client id / network | That’s the **wallet key**, not Monerium. Changing Sapphire network gives users **new addresses** — don’t switch unless you mean to |
 | Coinbase CDP / Base EURC | Not on the Monerium pay path |
 
-`wallet-client` SIWE posts to `https://express-ten-xi.vercel.app` (hardcoded). No wallet-client env change for Monerium host.
+`wallet-client` Express host is `VITE_EXPRESS_SERVER_URL` (`wallet-client/src/config.ts`). Staging wallet → `express-ten-xi`; prod wallet → prod Express.
 
 ---
 
