@@ -4,6 +4,8 @@ import logo from "../../assets/logo_icon.png";
 import { sb } from "../../theme";
 import {
   createSlickBillsWeb3Auth,
+  listenForSdkAuthErrors,
+  logAuthReturn,
   logCurrentUrl,
   recoverConnectedWallet,
   waitForSocialWallet,
@@ -639,9 +641,12 @@ export function MetamaskAuth() {
         const web3Auth = createSlickBillsWeb3Auth(clientId);
         appendLog(`init: client ${clientId.slice(0, 8)}…`);
         logCurrentUrl(appendLog);
+        logAuthReturn(appendLog, "return before init");
+        listenForSdkAuthErrors(web3Auth, appendLog);
 
         await web3Auth.init();
         if (cancelled) return;
+        logAuthReturn(appendLog, "return after init");
         await waitUntilSdkReady(web3Auth, appendLog);
         if (cancelled) return;
 

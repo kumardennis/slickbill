@@ -4,6 +4,7 @@ import App from "./App.tsx";
 import React from "react";
 import { MetamaskAuth } from "./pages/metamask/MetamaskAuth.tsx";
 import processShim from "process";
+import { snapshotAuthReturnHash } from "./web3authClient";
 
 const processRef = processShim as {
   nextTick?: (cb: () => void) => void;
@@ -20,6 +21,8 @@ if (typeof processRef.nextTick !== "function") {
 
 const isStandaloneMetamaskRoute =
   window.location.pathname === "/wallet/metamask-auth";
+
+snapshotAuthReturnHash();
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

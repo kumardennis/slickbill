@@ -1,4 +1,4 @@
-import { WALLET_CONNECTORS, Web3Auth } from "@web3auth/modal";
+import { CONNECTOR_EVENTS, WALLET_CONNECTORS, Web3Auth } from "@web3auth/modal";
 import { resolveWeb3AuthNetwork } from "./config";
 import {
   inspectWeb3AuthSession,
@@ -73,6 +73,49 @@ export async function waitUntilSdkReady(
   log(`sdk still ${web3Auth.status ?? "unknown"} after wait`);
 }
 
+const AUTH_RETURN_HASH_KEY = "sb_w3a_return_hash";
+
+function decodeBase64Url(value: string): string {
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/");
+  const pad =
+    padded.length % 4 === 0 ? "" : "=".repeat(4 - (padded.length % 4));
+  return window.atob(padded + pad);
+}
+
+function authParamKeys(source: string): string[] {
+  try {
+    return [...new URLSearchParams(source.replace(/^#/, "")).keys()];
+  } catch {
+    return [];
+  }
+}
+
+function describeB64Params(raw: string | null): string {
+  if (!raw) return "b64=no";
+  try {
+    const parsed = JSON.parse(decodeBase64Url(raw)) as Record<string, unknown>;
+    const keys = Object.keys(parsed);
+    const error =
+      typeof parsed.error === "string" && parsed.error.trim()
+        ? parsed.error.trim()
+        : "none";
+    return `b64=yes keys=${keys.join(",") || "none"} sessionId=${Boolean(parsed.sessionId)} error=${error}`;
+  } catch (err) {
+    return `b64=yes decode=${err instanceof Error ? err.message : String(err)} len=${raw.length}`;
+  }
+}
+
+export function snapshotAuthReturnHash(): void {
+  try {
+    const hash = window.location.hash;
+    if (hash && hash !== "#") {
+      window.sessionStorage.setItem(AUTH_RETURN_HASH_KEY, hash);
+    }
+  } catch {
+    // Private mode can block sessionStorage; live location.hash is still logged.
+  }
+}
+
 export function logCurrentUrl(onLog: (line: string) => void) {
   try {
     const url = new URL(window.location.href);
@@ -83,6 +126,52 @@ export function logCurrentUrl(onLog: (line: string) => void) {
   } catch (err) {
     onLog(`url parse error=${err instanceof Error ? err.message : String(err)}`);
   }
+}
+
+/** Log Web3Auth redirect payload keys only — never token/session values. */
+export function logAuthReturn(onLog: (line: string) => void, label: string) {
+  try {
+    const liveHash = window.location.hash;
+    const savedHash =
+      window.sessionStorage.getItem(AUTH_RETURN_HASH_KEY)?.trim() || "";
+    const hash = liveHash && liveHash !== "#" ? liveHash : savedHash;
+    const params = new URLSearchParams(hash.replace(/^#/, ""));
+    onLog(
+      `${label} hashLen=${hash.replace(/^#/, "").length} keys=${authParamKeys(hash).join(",") || "none"} saved=${savedHash ? "yes" : "no"}`,
+    );
+    onLog(`${label} ${describeB64Params(params.get("b64Params"))}`);
+    const error = params.get("error");
+    if (error) onLog(`${label} oauthError=${error}`);
+  } catch (err) {
+    onLog(
+      `${label} parse error=${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+export function listenForSdkAuthErrors(
+  web3Auth: Web3Auth,
+  onLog: (line: string) => void,
+): void {
+  const logError = (kind: string, error: unknown) => {
+    const message =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : String(error);
+    onLog(`${kind}: ${message}`);
+  };
+
+  web3Auth.on(CONNECTOR_EVENTS.REHYDRATION_ERROR, (error: unknown) => {
+    logError("rehydrate error", error);
+  });
+  web3Auth.on(CONNECTOR_EVENTS.ERRORED, (error: unknown) => {
+    logError("sdk error", error);
+  });
+  web3Auth.on(CONNECTOR_EVENTS.CONNECTED, () => {
+    onLog("sdk event=connected");
+  });
 }
 
 export async function waitForSocialWallet(
