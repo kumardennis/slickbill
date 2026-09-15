@@ -1,4 +1,4 @@
-import { WALLET_CONNECTORS, Web3Auth } from "@web3auth/modal";
+import { CHAIN_NAMESPACES, WALLET_CONNECTORS, Web3Auth } from "@web3auth/modal";
 import { resolveWeb3AuthNetwork } from "./config";
 import {
   isWeb3AuthConnected,
@@ -57,20 +57,61 @@ export async function waitForSocialWallet(
   return waitForWalletAddress(web3Auth, connectResult, expectedAddress);
 }
 
+async function tryWait(
+  web3Auth: Web3Auth,
+  connectResult: unknown,
+  expectedAddress?: string | null,
+  attempts = 16,
+): Promise<{ provider: unknown; address: string } | null> {
+  try {
+    return await waitForWalletAddress(
+      web3Auth,
+      connectResult,
+      expectedAddress,
+      attempts,
+    );
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * After Google/Facebook redirect on Mainnet, AUTH is connected but the EOA
+ * is often not ready yet. Keep that social session and finish the embedded
+ * wallet instead of sending the user back to pick MetaMask/Rabby.
+ */
 export async function recoverConnectedWallet(
   web3Auth: Web3Auth,
   expectedAddress?: string | null,
 ): Promise<{ provider: unknown; address: string } | null> {
   if (!isWeb3AuthConnected(web3Auth)) return null;
+
+  const ready = await tryWait(web3Auth, undefined, expectedAddress, 16);
+  if (ready) return ready;
+
   try {
-    return await waitForWalletAddress(
-      web3Auth,
-      undefined,
-      expectedAddress,
-      8,
-    );
+    const authResult = await web3Auth.connectTo(WALLET_CONNECTORS.AUTH);
+    const fromAuth = await tryWait(web3Auth, authResult, expectedAddress, 12);
+    if (fromAuth) return fromAuth;
   } catch {
-    await discardSessionWithoutAddress(web3Auth);
-    return null;
+    // Social connector may already be mid-redirect; continue.
   }
+
+  try {
+    const embedded = await web3Auth.connectTo(WALLET_CONNECTORS.METAMASK, {
+      chainNamespace: CHAIN_NAMESPACES.EIP155,
+    });
+    const fromEmbedded = await tryWait(
+      web3Auth,
+      embedded,
+      expectedAddress,
+      12,
+    );
+    if (fromEmbedded) return fromEmbedded;
+  } catch {
+    // Connect Kit cancelled or unavailable.
+  }
+
+  await discardSessionWithoutAddress(web3Auth);
+  return null;
 }

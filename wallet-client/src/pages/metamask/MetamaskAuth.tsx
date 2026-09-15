@@ -222,8 +222,8 @@ export function MetamaskAuth() {
     }
     if (authState === "authenticating") {
       return isSignFlow
-        ? "Choose your wallet, then approve the request…"
-        : "Choose your wallet to connect…";
+        ? "Finishing your wallet, then approve the request…"
+        : "Finishing your wallet…";
     }
     if (authState === "authenticated") {
       return "Confirmed. Returning to SlickBills…";
@@ -581,6 +581,11 @@ export function MetamaskAuth() {
         web3AuthRef.current = web3Auth;
         setInitState("ready");
 
+        const wasConnected = Boolean(web3Auth.connected);
+        if (wasConnected) {
+          setAuthState("authenticating");
+        }
+
         const recovered = await recoverConnectedWallet(
           web3Auth,
           expectedAddressRef.current,
@@ -588,6 +593,12 @@ export function MetamaskAuth() {
         if (recovered && completeWithProviderRef.current) {
           await completeWithProviderRef.current(recovered.provider);
           return;
+        }
+
+        if (wasConnected) {
+          setErrorMessage(
+            "Signed in, but no wallet address came back. Try Google or Facebook again, or pick another wallet.",
+          );
         }
 
         setAuthState("idle");

@@ -58,11 +58,16 @@ export function eip1193Provider(
   const auth = web3Auth as {
     provider?: unknown;
     connection?: { ethereumProvider?: unknown; provider?: unknown };
+    connectedConnector?: { provider?: unknown };
+    accountAbstractionProvider?: unknown;
     getProvider?: () => unknown;
   };
   pushProvider(wrappers, seen, auth.connection);
   pushProvider(wrappers, seen, auth.connection?.ethereumProvider);
   pushProvider(wrappers, seen, auth.provider);
+  pushProvider(wrappers, seen, auth.connectedConnector);
+  pushProvider(wrappers, seen, auth.connectedConnector?.provider);
+  pushProvider(wrappers, seen, auth.accountAbstractionProvider);
   if (typeof auth.getProvider === "function") {
     try {
       pushProvider(wrappers, seen, auth.getProvider());
@@ -157,7 +162,7 @@ export async function waitForWalletAddress(
   web3Auth: unknown,
   connectResult?: unknown,
   expectedAddress?: string | null,
-  attempts = 12,
+  attempts = 20,
 ): Promise<{ provider: unknown; address: string }> {
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
