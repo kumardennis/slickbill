@@ -385,9 +385,11 @@ class SendNfcInvoice extends HookWidget {
         print('Public Invoice Created: $publicInvoice.public');
 
         if (publicInvoice != null) {
-          publicInvoiceToken.value = publicInvoice.publicToken;
-          qrData.value =
-              AppEnv.billUrl(publicInvoice.publicToken);
+          final token = publicInvoice.publicToken;
+          publicInvoiceToken.value = token;
+          if (token != null && token.isNotEmpty) {
+            qrData.value = AppEnv.billUrl(token);
+          }
 
           Get.snackbar(
             'Public Invoice Created!',
@@ -521,10 +523,10 @@ class SendNfcInvoice extends HookWidget {
     required Future<void> Function() createPublicInvoiceForQR,
     required Function(double) changeReceiverAmount,
   }) {
-    final hasQr = publicInvoiceToken.value != null;
-    final publicLink = hasQr
-        ? AppEnv.billUrl(publicInvoiceToken.value)
-        : '';
+    final token = publicInvoiceToken.value;
+    final hasQr = token != null && token.isNotEmpty;
+    final publicLink =
+        token == null || token.isEmpty ? '' : AppEnv.billUrl(token);
     final keyboardOpen = MediaQuery.of(context).viewInsets.bottom > 80;
 
     return ColoredBox(

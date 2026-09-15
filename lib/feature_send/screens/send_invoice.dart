@@ -259,8 +259,11 @@ class SendInvoice extends HookWidget {
         );
 
         if (publicInvoice != null) {
-          final shareableUrl =
-              AppEnv.billUrl(publicInvoice.publicToken);
+          final token = publicInvoice.publicToken;
+          if (token == null || token.isEmpty) {
+            throw Exception('Public invoice was created without a token');
+          }
+          final shareableUrl = AppEnv.billUrl(token);
 
           // Copy to clipboard
           await Clipboard.setData(ClipboardData(text: shareableUrl));
