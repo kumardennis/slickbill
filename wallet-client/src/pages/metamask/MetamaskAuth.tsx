@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import logo from "../../assets/logo_icon.png";
 import { sb } from "../../theme";
 import {
+  completePendingSocialReturn,
   createSlickBillsWeb3Auth,
   listenForSdkAuthErrors,
   logAuthReturn,
@@ -648,6 +649,8 @@ export function MetamaskAuth() {
         if (cancelled) return;
         logAuthReturn(appendLog, "return after init");
         await waitUntilSdkReady(web3Auth, appendLog);
+        if (cancelled) return;
+        await completePendingSocialReturn(web3Auth, appendLog);
         if (cancelled) return;
 
         web3AuthRef.current = web3Auth;

@@ -1,4 +1,10 @@
-import { CONNECTOR_EVENTS, WALLET_CONNECTORS, Web3Auth } from "@web3auth/modal";
+import {
+  authConnector,
+  CONNECTOR_EVENTS,
+  isAuthConnector,
+  WALLET_CONNECTORS,
+  Web3Auth,
+} from "@web3auth/modal";
 import { resolveWeb3AuthNetwork } from "./config";
 import {
   inspectWeb3AuthSession,
@@ -7,7 +13,13 @@ import {
 } from "./web3authProvider";
 import { web3AuthSocialLoginMethods } from "./web3authSocialLogin";
 
+function walletAuthRedirectUrl(): string {
+  if (typeof window === "undefined") return "";
+  return `${window.location.origin}${window.location.pathname}`;
+}
+
 export function createSlickBillsWeb3Auth(clientId: string): Web3Auth {
+  const redirectUrl = walletAuthRedirectUrl();
   return new Web3Auth({
     clientId,
     web3AuthNetwork: resolveWeb3AuthNetwork(),
@@ -16,6 +28,15 @@ export function createSlickBillsWeb3Auth(clientId: string): Web3Auth {
       uxMode: "redirect",
       appName: "SlickBills",
     },
+    // Listed first so the SDK's default AUTH connector (popup) is dropped as a duplicate.
+    connectors: [
+      authConnector({
+        connectorSettings: {
+          uxMode: "redirect",
+          redirectUrl,
+        },
+      }),
+    ],
     modalConfig: {
       hideWalletDiscovery: false,
       connectors: {
@@ -99,7 +120,7 @@ function describeB64Params(raw: string | null): string {
       typeof parsed.error === "string" && parsed.error.trim()
         ? parsed.error.trim()
         : "none";
-    return `b64=yes keys=${keys.join(",") || "none"} sessionId=${Boolean(parsed.sessionId)} error=${error}`;
+    return `b64=yes keys=${keys.join(",") || "none"} sessionId=${Boolean(parsed.sessionId)} loginParams=${typeof parsed.loginParams} error=${error}`;
   } catch (err) {
     return `b64=yes decode=${err instanceof Error ? err.message : String(err)} len=${raw.length}`;
   }
@@ -145,6 +166,102 @@ export function logAuthReturn(onLog: (line: string) => void, label: string) {
   } catch (err) {
     onLog(
       `${label} parse error=${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+}
+
+function readAuthReturnPayload(): Record<string, unknown> | null {
+  try {
+    const liveHash = window.location.hash;
+    const savedHash =
+      window.sessionStorage.getItem(AUTH_RETURN_HASH_KEY)?.trim() || "";
+    const hash = liveHash && liveHash !== "#" ? liveHash : savedHash;
+    const b64 = new URLSearchParams(hash.replace(/^#/, "")).get("b64Params");
+    if (!b64) return null;
+    const parsed = JSON.parse(decodeBase64Url(b64)) as unknown;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function parseLoginParams(raw: unknown): unknown {
+  if (typeof raw !== "string") return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Google currently returns iframe/popup params (`nonce` + `loginParams`), not
+ * `sessionId`. v11 Auth.init JSON.parse()s loginParams and aborts if it is
+ * already an object, and Safari View often cannot finish the hidden iframe.
+ * Complete that pending login, then connect AUTH.
+ */
+export async function completePendingSocialReturn(
+  web3Auth: Web3Auth,
+  onLog?: (line: string) => void,
+): Promise<void> {
+  const log = (line: string) => onLog?.(line);
+  if (isWeb3AuthConnected(web3Auth)) {
+    log("complete pending: already connected");
+    return;
+  }
+
+  const connector = web3Auth.getConnector(WALLET_CONNECTORS.AUTH);
+  if (!isAuthConnector(connector) || !connector.authInstance) {
+    log("complete pending: no AUTH connector");
+    return;
+  }
+
+  const auth = connector.authInstance;
+  const authInternal = auth as unknown as {
+    authProviderPromise?: Promise<unknown>;
+  };
+  log(
+    `auth uxMode=${auth.options.uxMode ?? "none"} sessionId=${Boolean(auth.sessionId)}`,
+  );
+  if (auth.sessionId) {
+    log("complete pending: session already on authInstance");
+    return;
+  }
+
+  const payload = readAuthReturnPayload();
+  const nonce = typeof payload?.nonce === "string" ? payload.nonce : "";
+  if (!nonce || payload?.loginParams == null) {
+    log("complete pending: no nonce/loginParams");
+    return;
+  }
+
+  const loginParams = parseLoginParams(payload.loginParams);
+  log("complete pending: posting nonce login to AUTH");
+  try {
+    if (authInternal.authProviderPromise) await authInternal.authProviderPromise;
+    await auth.postLoginInitiatedMessage(
+      loginParams as Parameters<typeof auth.postLoginInitiatedMessage>[0],
+      nonce,
+    );
+    log(`complete pending: sessionId=${Boolean(auth.sessionId)}`);
+  } catch (err) {
+    log(
+      `complete pending post failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return;
+  }
+
+  if (!auth.sessionId) return;
+
+  try {
+    const chainId = web3Auth.currentChainId || "0x89";
+    log(`complete pending: AUTH connect chain=${chainId}`);
+    await connector.connect({ chainId });
+    log(`complete pending: connected=${String(web3Auth.connected)}`);
+  } catch (err) {
+    log(
+      `complete pending connect failed: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }
