@@ -5,7 +5,7 @@
  *
  * Never put the Facebook App Secret here or in any VITE_ variable.
  */
-function facebookAuthConnectionId(): string {
+export function facebookAuthConnectionId(): string {
   const fromEnv =
     import.meta.env.VITE_WEB3AUTH_FACEBOOK_AUTH_CONNECTION_ID?.trim() ?? "";
   if (fromEnv) return fromEnv;

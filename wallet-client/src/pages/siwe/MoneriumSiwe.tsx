@@ -1,9 +1,12 @@
-import { Web3Auth } from "@web3auth/modal";
+import type { Web3Auth } from "@web3auth/modal";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { sb } from "../../theme";
-import { web3AuthSocialLoginMethods } from "../../web3authSocialLogin";
-import { expressServerUrl, resolveWeb3AuthNetwork } from "../../config";
-import { eip1193Provider } from "../../web3authProvider";
+import { expressServerUrl } from "../../config";
+import {
+  createSlickBillsWeb3Auth,
+  recoverConnectedWallet,
+  waitForSocialWallet,
+} from "../../web3authClient";
 
 const SIWE_PARAMS_SESSION_KEY = "monerium_siwe_params_v1";
 const SIWE_PARAMS_LOCAL_KEY = "monerium_siwe_params_v1_local";
@@ -140,23 +143,7 @@ export function MoneriumSiwe() {
 
       if (!clientId) throw new Error("Missing VITE_WEB3AUTH_CLIENT_ID");
 
-      const web3Auth = new Web3Auth({
-        clientId,
-        web3AuthNetwork: resolveWeb3AuthNetwork(),
-        uiConfig: { uxMode: "redirect" },
-        modalConfig: {
-          hideWalletDiscovery: true,
-          connectors: {
-            auth: {
-              label: "Web3Auth",
-              showOnModal: true,
-              loginMethods: web3AuthSocialLoginMethods(),
-            },
-            metamask: { label: "MetaMask", showOnModal: false },
-            "wallet-connect-v2": { label: "WalletConnect", showOnModal: false },
-          },
-        },
-      });
+      const web3Auth = createSlickBillsWeb3Auth(clientId);
 
       await web3Auth.init();
       web3AuthRef.current = web3Auth;
@@ -191,10 +178,15 @@ export function MoneriumSiwe() {
       setStep("signing");
       setStatusText("Please sign the message in your wallet…");
 
-      const result = await (
-        web3Auth as unknown as { connect: () => Promise<unknown> }
-      ).connect();
-      const provider = eip1193Provider(web3Auth, result);
+      const recovered = await recoverConnectedWallet(web3Auth, walletAddress);
+      const waited = recovered
+        ? recovered
+        : await waitForSocialWallet(
+            web3Auth,
+            await web3Auth.connect(),
+            walletAddress,
+          );
+      const provider = waited.provider;
 
       if (!provider) throw new Error("Web3Auth modal closed before signing.");
 

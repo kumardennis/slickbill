@@ -1,13 +1,14 @@
-import { Web3Auth } from "@web3auth/modal";
+import type { Web3Auth } from "@web3auth/modal";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import logo from "../../assets/logo_icon.png";
 import { sb } from "../../theme";
-import { web3AuthSocialLoginMethods } from "../../web3authSocialLogin";
-import { resolveWeb3AuthNetwork } from "../../config";
 import {
-  eip1193Provider,
-  isWeb3AuthConnected,
-} from "../../web3authProvider";
+  connectSocialLogin,
+  createSlickBillsWeb3Auth,
+  recoverConnectedWallet,
+  waitForSocialWallet,
+  type SocialAuthConnection,
+} from "../../web3authClient";
 
 type InitState = "idle" | "initializing" | "ready" | "error";
 type AuthState = "idle" | "authenticating" | "authenticated" | "error";
@@ -33,8 +34,6 @@ const sessionStorageKeys = {
   kind: "sb_pay_kind",
 } as const;
 
-const HEX_ADDRESS = /^0x[a-fA-F0-9]{40}$/;
-
 type RpcProvider = {
   request?: (args: { method: string; params?: unknown }) => Promise<unknown>;
   accounts?: unknown;
@@ -42,96 +41,6 @@ type RpcProvider = {
   address?: unknown;
   provider?: unknown;
 };
-
-function isHexAddress(value: unknown): value is string {
-  return typeof value === "string" && HEX_ADDRESS.test(value.trim());
-}
-
-function collectAddresses(raw: unknown, into: string[] = []): string[] {
-  if (isHexAddress(raw)) {
-    into.push(raw.trim());
-    return into;
-  }
-  if (Array.isArray(raw)) {
-    for (const item of raw) collectAddresses(item, into);
-    return into;
-  }
-  if (raw && typeof raw === "object") {
-    const obj = raw as Record<string, unknown>;
-    for (const key of [
-      "result",
-      "accounts",
-      "address",
-      "selectedAddress",
-      "data",
-    ]) {
-      if (key in obj) collectAddresses(obj[key], into);
-    }
-  }
-  return into;
-}
-
-async function requestAccounts(
-  provider: RpcProvider | null | undefined,
-  method: string,
-): Promise<string[]> {
-  if (!provider || typeof provider.request !== "function") return [];
-  try {
-    return collectAddresses(await provider.request({ method }));
-  } catch {
-    return [];
-  }
-}
-
-async function resolveWalletAddress(
-  provider: unknown,
-  expectedAddress?: string | null,
-): Promise<string> {
-  const expected = expectedAddress?.trim() || null;
-  const wrappers: RpcProvider[] = [];
-  const root = provider as RpcProvider | null;
-  if (root) wrappers.push(root);
-  if (root?.provider && root.provider !== root) {
-    wrappers.push(root.provider as RpcProvider);
-  }
-
-  const candidates: string[] = [];
-  for (const wrapper of wrappers) {
-    candidates.push(
-      ...collectAddresses([
-        wrapper.accounts,
-        wrapper.selectedAddress,
-        wrapper.address,
-      ]),
-    );
-    candidates.push(...(await requestAccounts(wrapper, "eth_accounts")));
-  }
-
-  if (candidates.length === 0) {
-    for (const wrapper of wrappers) {
-      candidates.push(
-        ...(await requestAccounts(wrapper, "eth_requestAccounts")),
-      );
-    }
-  }
-
-  const unique = [...new Set(candidates.map((value) => value.toLowerCase()))];
-  if (expected && isHexAddress(expected)) {
-    const match = unique.find((value) => value === expected.toLowerCase());
-    if (match) {
-      return (
-        candidates.find((value) => value.toLowerCase() === match) ?? expected
-      );
-    }
-    if (unique.length === 0) return expected;
-  }
-
-  const first = candidates[0];
-  if (first) return first;
-  if (expected && isHexAddress(expected)) return expected;
-
-  throw new Error("No wallet address returned by authenticated provider");
-}
 
 declare global {
   interface Window {
@@ -275,7 +184,7 @@ export function MetamaskAuth() {
     if (!isSignFlow) {
       return {
         title: "Connect wallet",
-        subtitle: "Choose how you want to sign in to SlickBills.",
+        subtitle: "Sign in with Google or Facebook.",
         cta: "Connect wallet",
         trust: "Your keys stay in your wallet. SlickBills never stores them.",
       };
@@ -315,8 +224,8 @@ export function MetamaskAuth() {
     }
     if (authState === "authenticating") {
       return isSignFlow
-        ? "Choose your wallet, then approve the request…"
-        : "Choose your wallet to connect…";
+        ? "Continue with Google or Facebook, then approve the request…"
+        : "Continue with Google or Facebook…";
     }
     if (authState === "authenticated") {
       return "Confirmed. Returning to SlickBills…";
@@ -433,18 +342,14 @@ export function MetamaskAuth() {
       }
 
       completionInFlightRef.current = true;
-      const providerWithRequest = provider as {
-        request?: (args: { method: string; params?: unknown }) => Promise<unknown>;
-        accounts?: unknown;
-        selectedAddress?: unknown;
-        address?: unknown;
-      };
 
       try {
-        const address = await resolveWalletAddress(
+        const { provider: readyProvider, address } = await waitForSocialWallet(
+          web3AuthRef.current,
           provider,
           expectedAddressRef.current,
         );
+        const providerWithRequest = readyProvider as RpcProvider;
 
         const signIfNeeded = async () => {
           if (flowMode.current !== "sign") return null;
@@ -455,7 +360,7 @@ export function MetamaskAuth() {
           }
 
           const signers: RpcProvider[] = [providerWithRequest];
-          const nested = (providerWithRequest as RpcProvider).provider;
+          const nested = providerWithRequest.provider;
           if (nested && nested !== providerWithRequest) {
             signers.push(nested as RpcProvider);
           }
@@ -547,7 +452,9 @@ export function MetamaskAuth() {
 
   completeWithProviderRef.current = completeWithProvider;
 
-  const connectAndGetAddress = useCallback(async () => {
+  const connectAndGetAddress = useCallback(async (
+    method: SocialAuthConnection,
+  ) => {
     const web3Auth = web3AuthRef.current;
     if (!web3Auth || isConnecting || connectInFlightRef.current) return;
 
@@ -557,21 +464,8 @@ export function MetamaskAuth() {
     setErrorMessage(null);
 
     try {
-      let provider = eip1193Provider(web3Auth);
-      if (!provider) {
-        const result = await (
-          web3Auth as unknown as {
-            connect: () => Promise<unknown>;
-          }
-        ).connect();
-        provider = eip1193Provider(web3Auth, result);
-      }
-
-      if (!provider) {
-        throw new Error("Web3Auth modal closed before a wallet connected.");
-      }
-
-      await completeWithProvider(provider);
+      const result = await connectSocialLogin(web3Auth, method);
+      await completeWithProvider(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const cancelled = isUserCancel(message);
@@ -674,34 +568,7 @@ export function MetamaskAuth() {
           throw new Error("Missing VITE_WEB3AUTH_CLIENT_ID");
         }
 
-        const web3Auth = new Web3Auth({
-          clientId,
-          web3AuthNetwork: resolveWeb3AuthNetwork(),
-          uiConfig: {
-            uxMode: "redirect",
-            appName: "SlickBills",
-          },
-          modalConfig: {
-            // Mainnet opens MetaMask Connect Kit ("Search through 1 wallets")
-            // if the metamask connector is enabled. This flow is Google/Facebook.
-            hideWalletDiscovery: true,
-            connectors: {
-              auth: {
-                label: "Web3Auth",
-                showOnModal: true,
-                loginMethods: web3AuthSocialLoginMethods(),
-              },
-              metamask: {
-                label: "MetaMask",
-                showOnModal: false,
-              },
-              "wallet-connect-v2": {
-                label: "WalletConnect",
-                showOnModal: false,
-              },
-            },
-          },
-        });
+        const web3Auth = createSlickBillsWeb3Auth(clientId);
 
         await web3Auth.init();
         if (cancelled) return;
@@ -709,13 +576,12 @@ export function MetamaskAuth() {
         web3AuthRef.current = web3Auth;
         setInitState("ready");
 
-        const existingProvider = eip1193Provider(web3Auth);
-        if (
-          (isWeb3AuthConnected(web3Auth) || existingProvider) &&
-          existingProvider &&
-          completeWithProviderRef.current
-        ) {
-          await completeWithProviderRef.current(existingProvider);
+        const recovered = await recoverConnectedWallet(
+          web3Auth,
+          expectedAddressRef.current,
+        );
+        if (recovered && completeWithProviderRef.current) {
+          await completeWithProviderRef.current(recovered.provider);
           return;
         }
 
@@ -930,31 +796,60 @@ export function MetamaskAuth() {
         ) : null}
 
         {showCta ? (
-          <button
-            type="button"
-            onClick={() => {
-              void connectAndGetAddress();
-            }}
-            disabled={isConnecting}
+          <div
             style={{
               marginTop: 18,
-              width: "100%",
-              borderRadius: 12,
-              border: "none",
-              background: isConnecting ? sb.outlineVariant : sb.deepNavy,
-              color: sb.onPrimary,
-              padding: "14px 16px",
-              fontSize: 15,
-              fontWeight: 700,
-              letterSpacing: 0.2,
-              cursor: isConnecting ? "not-allowed" : "pointer",
-              boxShadow: isConnecting
-                ? "none"
-                : "0 10px 20px rgba(11, 37, 69, 0.2)",
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
             }}
           >
-            {isConnecting ? "Opening confirmation…" : copy.cta}
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                void connectAndGetAddress("google");
+              }}
+              disabled={isConnecting}
+              style={{
+                width: "100%",
+                borderRadius: 12,
+                border: "none",
+                background: isConnecting ? sb.outlineVariant : sb.deepNavy,
+                color: sb.onPrimary,
+                padding: "14px 16px",
+                fontSize: 15,
+                fontWeight: 700,
+                letterSpacing: 0.2,
+                cursor: isConnecting ? "not-allowed" : "pointer",
+                boxShadow: isConnecting
+                  ? "none"
+                  : "0 10px 20px rgba(11, 37, 69, 0.2)",
+              }}
+            >
+              Continue with Google
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void connectAndGetAddress("facebook");
+              }}
+              disabled={isConnecting}
+              style={{
+                width: "100%",
+                borderRadius: 12,
+                border: `1px solid ${sb.outlineVariant}`,
+                background: sb.surface,
+                color: sb.onSurface,
+                padding: "14px 16px",
+                fontSize: 15,
+                fontWeight: 700,
+                letterSpacing: 0.2,
+                cursor: isConnecting ? "not-allowed" : "pointer",
+              }}
+            >
+              Continue with Facebook
+            </button>
+          </div>
         ) : null}
 
         {!busy || authState === "authenticated" ? (
