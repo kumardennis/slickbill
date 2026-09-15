@@ -3,11 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import logo from "../../assets/logo_icon.png";
 import { sb } from "../../theme";
 import {
-  connectSocialLogin,
   createSlickBillsWeb3Auth,
   recoverConnectedWallet,
   waitForSocialWallet,
-  type SocialAuthConnection,
 } from "../../web3authClient";
 
 type InitState = "idle" | "initializing" | "ready" | "error";
@@ -184,7 +182,7 @@ export function MetamaskAuth() {
     if (!isSignFlow) {
       return {
         title: "Connect wallet",
-        subtitle: "Sign in with Google or Facebook.",
+        subtitle: "Choose how you want to sign in to SlickBills.",
         cta: "Connect wallet",
         trust: "Your keys stay in your wallet. SlickBills never stores them.",
       };
@@ -224,8 +222,8 @@ export function MetamaskAuth() {
     }
     if (authState === "authenticating") {
       return isSignFlow
-        ? "Continue with Google or Facebook, then approve the request…"
-        : "Continue with Google or Facebook…";
+        ? "Choose your wallet, then approve the request…"
+        : "Choose your wallet to connect…";
     }
     if (authState === "authenticated") {
       return "Confirmed. Returning to SlickBills…";
@@ -452,9 +450,7 @@ export function MetamaskAuth() {
 
   completeWithProviderRef.current = completeWithProvider;
 
-  const connectAndGetAddress = useCallback(async (
-    method: SocialAuthConnection,
-  ) => {
+  const connectAndGetAddress = useCallback(async () => {
     const web3Auth = web3AuthRef.current;
     if (!web3Auth || isConnecting || connectInFlightRef.current) return;
 
@@ -464,7 +460,16 @@ export function MetamaskAuth() {
     setErrorMessage(null);
 
     try {
-      const result = await connectSocialLogin(web3Auth, method);
+      const recovered = await recoverConnectedWallet(
+        web3Auth,
+        expectedAddressRef.current,
+      );
+      if (recovered) {
+        await completeWithProvider(recovered.provider);
+        return;
+      }
+
+      const result = await web3Auth.connect();
       await completeWithProvider(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -796,60 +801,31 @@ export function MetamaskAuth() {
         ) : null}
 
         {showCta ? (
-          <div
+          <button
+            type="button"
+            onClick={() => {
+              void connectAndGetAddress();
+            }}
+            disabled={isConnecting}
             style={{
               marginTop: 18,
-              display: "flex",
-              flexDirection: "column",
-              gap: 10,
+              width: "100%",
+              borderRadius: 12,
+              border: "none",
+              background: isConnecting ? sb.outlineVariant : sb.deepNavy,
+              color: sb.onPrimary,
+              padding: "14px 16px",
+              fontSize: 15,
+              fontWeight: 700,
+              letterSpacing: 0.2,
+              cursor: isConnecting ? "not-allowed" : "pointer",
+              boxShadow: isConnecting
+                ? "none"
+                : "0 10px 20px rgba(11, 37, 69, 0.2)",
             }}
           >
-            <button
-              type="button"
-              onClick={() => {
-                void connectAndGetAddress("google");
-              }}
-              disabled={isConnecting}
-              style={{
-                width: "100%",
-                borderRadius: 12,
-                border: "none",
-                background: isConnecting ? sb.outlineVariant : sb.deepNavy,
-                color: sb.onPrimary,
-                padding: "14px 16px",
-                fontSize: 15,
-                fontWeight: 700,
-                letterSpacing: 0.2,
-                cursor: isConnecting ? "not-allowed" : "pointer",
-                boxShadow: isConnecting
-                  ? "none"
-                  : "0 10px 20px rgba(11, 37, 69, 0.2)",
-              }}
-            >
-              Continue with Google
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                void connectAndGetAddress("facebook");
-              }}
-              disabled={isConnecting}
-              style={{
-                width: "100%",
-                borderRadius: 12,
-                border: `1px solid ${sb.outlineVariant}`,
-                background: sb.surface,
-                color: sb.onSurface,
-                padding: "14px 16px",
-                fontSize: 15,
-                fontWeight: 700,
-                letterSpacing: 0.2,
-                cursor: isConnecting ? "not-allowed" : "pointer",
-              }}
-            >
-              Continue with Facebook
-            </button>
-          </div>
+            {isConnecting ? "Opening confirmation…" : copy.cta}
+          </button>
         ) : null}
 
         {!busy || authState === "authenticated" ? (

@@ -4,54 +4,34 @@ import {
   isWeb3AuthConnected,
   waitForWalletAddress,
 } from "./web3authProvider";
-import {
-  facebookAuthConnectionId,
-  web3AuthSocialLoginMethods,
-} from "./web3authSocialLogin";
-
-export type SocialAuthConnection = "google" | "facebook";
+import { web3AuthSocialLoginMethods } from "./web3authSocialLogin";
 
 export function createSlickBillsWeb3Auth(clientId: string): Web3Auth {
   return new Web3Auth({
     clientId,
     web3AuthNetwork: resolveWeb3AuthNetwork(),
-    // Mainnet otherwise discovers MetaMask and opens Connect Kit after Google.
-    multiInjectedProviderDiscovery: false,
     uiConfig: {
       uxMode: "redirect",
       appName: "SlickBills",
     },
     modalConfig: {
-      hideWalletDiscovery: true,
+      hideWalletDiscovery: false,
       connectors: {
         [WALLET_CONNECTORS.AUTH]: {
-          label: "Social",
+          label: "Web3Auth",
           showOnModal: true,
           loginMethods: web3AuthSocialLoginMethods(),
         },
         [WALLET_CONNECTORS.METAMASK]: {
           label: "MetaMask",
-          showOnModal: false,
+          showOnModal: true,
         },
         [WALLET_CONNECTORS.WALLET_CONNECT_V2]: {
           label: "WalletConnect",
-          showOnModal: false,
+          showOnModal: true,
         },
       },
     },
-  });
-}
-
-export async function connectSocialLogin(
-  web3Auth: Web3Auth,
-  method: SocialAuthConnection,
-): Promise<unknown> {
-  const facebookId = facebookAuthConnectionId();
-  return web3Auth.connectTo(WALLET_CONNECTORS.AUTH, {
-    authConnection: method,
-    ...(method === "facebook" && facebookId
-      ? { authConnectionId: facebookId }
-      : {}),
   });
 }
 
