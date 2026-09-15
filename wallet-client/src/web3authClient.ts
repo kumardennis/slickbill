@@ -11,7 +11,7 @@ export function createSlickBillsWeb3Auth(clientId: string): Web3Auth {
   return new Web3Auth({
     clientId,
     web3AuthNetwork: resolveWeb3AuthNetwork(),
-    defaultChainId: "0x89",
+    enableLogging: true,
     uiConfig: {
       uxMode: "redirect",
       appName: "SlickBills",
@@ -48,6 +48,40 @@ export async function discardSessionWithoutAddress(
     } catch {
       // Ignore cache-clear failures; the next login can still proceed.
     }
+  }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
+}
+
+export async function waitUntilSdkReady(
+  web3Auth: Web3Auth,
+  onLog?: (line: string) => void,
+): Promise<void> {
+  const log = (line: string) => onLog?.(line);
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    const status = web3Auth.status;
+    if (status && status !== "not_ready") {
+      log(`sdk status=${status} after ${attempt * 250}ms`);
+      return;
+    }
+    await delay(250);
+  }
+  log(`sdk still ${web3Auth.status ?? "unknown"} after wait`);
+}
+
+export function logCurrentUrl(onLog: (line: string) => void) {
+  try {
+    const url = new URL(window.location.href);
+    const keys = [...url.searchParams.keys()];
+    onLog(
+      `url origin=${url.origin} path=${url.pathname} search=${keys.join(",") || "none"} hash=${url.hash ? "yes" : "no"}`,
+    );
+  } catch (err) {
+    onLog(`url parse error=${err instanceof Error ? err.message : String(err)}`);
   }
 }
 

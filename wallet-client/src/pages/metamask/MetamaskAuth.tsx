@@ -4,8 +4,10 @@ import logo from "../../assets/logo_icon.png";
 import { sb } from "../../theme";
 import {
   createSlickBillsWeb3Auth,
+  logCurrentUrl,
   recoverConnectedWallet,
   waitForSocialWallet,
+  waitUntilSdkReady,
 } from "../../web3authClient";
 import { inspectWeb3AuthSession } from "../../web3authProvider";
 
@@ -635,16 +637,17 @@ export function MetamaskAuth() {
         }
 
         const web3Auth = createSlickBillsWeb3Auth(clientId);
-        appendLog(
-          `init: client ${clientId.slice(0, 8)}… network from env`,
-        );
+        appendLog(`init: client ${clientId.slice(0, 8)}…`);
+        logCurrentUrl(appendLog);
 
         await web3Auth.init();
+        if (cancelled) return;
+        await waitUntilSdkReady(web3Auth, appendLog);
         if (cancelled) return;
 
         web3AuthRef.current = web3Auth;
         setInitState("ready");
-        appendLog("init: ready");
+        appendLog(`init: sdk status=${web3Auth.status}`);
         (await inspectWeb3AuthSession(web3Auth)).forEach(appendLog);
 
         const wasConnected = Boolean(web3Auth.connected);
