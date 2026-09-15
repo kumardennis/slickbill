@@ -1,4 +1,4 @@
-import { WEB3AUTH_NETWORK } from "@web3auth/base";
+import { WEB3AUTH_NETWORK } from "@web3auth/modal";
 
 const STAGING_EXPRESS_SERVER_URL = "https://express-ten-xi.vercel.app";
 

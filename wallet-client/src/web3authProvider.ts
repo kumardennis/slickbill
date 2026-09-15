@@ -29,6 +29,7 @@ function collectAddresses(raw: unknown, into: string[] = []): string[] {
       "accounts",
       "address",
       "selectedAddress",
+      "eoaAddress",
       "data",
     ]) {
       if (key in obj) collectAddresses(obj[key], into);
@@ -37,60 +38,42 @@ function collectAddresses(raw: unknown, into: string[] = []): string[] {
   return into;
 }
 
-function pushProvider(into: RpcProvider[], seen: Set<unknown>, value: unknown) {
-  if (!value || typeof value !== "object" || seen.has(value)) return;
-  seen.add(value);
-  into.push(value as RpcProvider);
-  const obj = value as RpcProvider;
-  pushProvider(into, seen, obj.ethereumProvider);
-  pushProvider(into, seen, obj.provider);
+function connectionEthereumProvider(
+  web3Auth: unknown,
+  connectResult?: unknown,
+): unknown {
+  const result = connectResult as {
+    ethereumProvider?: unknown;
+    request?: unknown;
+  } | null;
+  if (result?.ethereumProvider) return result.ethereumProvider;
+  if (result && typeof result.request === "function") return result;
+
+  const auth = web3Auth as {
+    connection?: { ethereumProvider?: unknown } | null;
+  };
+  return auth.connection?.ethereumProvider ?? null;
 }
 
-/** Web3Auth v10 `connect()` may return a Connection, not an EIP-1193 provider. */
+/** v11: EOA lives on `connection.ethereumProvider`, not `web3auth.provider`. */
 export function eip1193Provider(
   web3Auth: unknown,
   connectResult?: unknown,
 ): unknown {
-  const wrappers: RpcProvider[] = [];
-  const seen = new Set<unknown>();
-  pushProvider(wrappers, seen, connectResult);
-
-  const auth = web3Auth as {
-    provider?: unknown;
-    connection?: { ethereumProvider?: unknown; provider?: unknown };
-    connectedConnector?: { provider?: unknown };
-    accountAbstractionProvider?: unknown;
-    getProvider?: () => unknown;
-  };
-  pushProvider(wrappers, seen, auth.connection);
-  pushProvider(wrappers, seen, auth.connection?.ethereumProvider);
-  pushProvider(wrappers, seen, auth.provider);
-  pushProvider(wrappers, seen, auth.connectedConnector);
-  pushProvider(wrappers, seen, auth.connectedConnector?.provider);
-  pushProvider(wrappers, seen, auth.accountAbstractionProvider);
-  if (typeof auth.getProvider === "function") {
-    try {
-      pushProvider(wrappers, seen, auth.getProvider());
-    } catch {
-      // Ignore getters that throw before the session is ready.
-    }
-  }
-
-  const withRequest = wrappers.find(
-    (wrapper) => typeof wrapper.request === "function",
-  );
-  return withRequest ?? wrappers[0] ?? null;
+  return connectionEthereumProvider(web3Auth, connectResult);
 }
 
 export function isWeb3AuthConnected(web3Auth: unknown): boolean {
   const auth = web3Auth as {
     connected?: boolean;
+    connection?: unknown;
     status?: string;
-    connectedConnectorName?: string | null;
+    primaryConnectorName?: string | null;
   };
   return Boolean(
     auth.connected ||
-      auth.connectedConnectorName ||
+      auth.connection ||
+      auth.primaryConnectorName ||
       auth.status === "connected" ||
       auth.status === "authorized",
   );
@@ -108,16 +91,38 @@ async function requestAccounts(
   }
 }
 
+async function linkedEoaAddresses(web3Auth: unknown): Promise<string[]> {
+  const auth = web3Auth as {
+    getLinkedAccounts?: () => Promise<unknown>;
+    getConnectedAccountsWithProviders?: () => unknown;
+  };
+  const found: string[] = [];
+  if (typeof auth.getLinkedAccounts === "function") {
+    try {
+      collectAddresses(await auth.getLinkedAccounts(), found);
+    } catch {
+      // Linked accounts may be unavailable before the session hydrates.
+    }
+  }
+  if (typeof auth.getConnectedAccountsWithProviders === "function") {
+    try {
+      collectAddresses(auth.getConnectedAccountsWithProviders(), found);
+    } catch {
+      // Ignore snapshot failures.
+    }
+  }
+  return found;
+}
+
 export async function resolveWalletAddress(
   provider: unknown,
   expectedAddress?: string | null,
+  extraAddresses: string[] = [],
 ): Promise<string> {
   const expected = expectedAddress?.trim() || null;
-  const wrappers: RpcProvider[] = [];
-  pushProvider(wrappers, new Set<unknown>(), provider);
-
-  const candidates: string[] = [];
-  for (const wrapper of wrappers) {
+  const wrapper = provider as RpcProvider | null;
+  const candidates: string[] = [...extraAddresses];
+  if (wrapper) {
     candidates.push(
       ...collectAddresses([
         wrapper.accounts,
@@ -126,13 +131,8 @@ export async function resolveWalletAddress(
       ]),
     );
     candidates.push(...(await requestAccounts(wrapper, "eth_accounts")));
-  }
-
-  if (candidates.length === 0) {
-    for (const wrapper of wrappers) {
-      candidates.push(
-        ...(await requestAccounts(wrapper, "eth_requestAccounts")),
-      );
+    if (candidates.length === 0) {
+      candidates.push(...(await requestAccounts(wrapper, "eth_requestAccounts")));
     }
   }
 
@@ -167,13 +167,22 @@ export async function waitForWalletAddress(
   let lastError: Error | null = null;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const provider = eip1193Provider(web3Auth, connectResult);
+    const linked = await linkedEoaAddresses(web3Auth);
     if (provider) {
       try {
-        const address = await resolveWalletAddress(provider, expectedAddress);
+        const address = await resolveWalletAddress(
+          provider,
+          expectedAddress,
+          linked,
+        );
         return { provider, address };
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
       }
+    } else if (linked[0]) {
+      lastError = new Error(
+        "No wallet address returned by authenticated provider",
+      );
     }
     await delay(250);
   }

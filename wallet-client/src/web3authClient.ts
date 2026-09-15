@@ -1,4 +1,4 @@
-import { CHAIN_NAMESPACES, WALLET_CONNECTORS, Web3Auth } from "@web3auth/modal";
+import { WALLET_CONNECTORS, Web3Auth } from "@web3auth/modal";
 import { resolveWeb3AuthNetwork } from "./config";
 import {
   isWeb3AuthConnected,
@@ -10,6 +10,7 @@ export function createSlickBillsWeb3Auth(clientId: string): Web3Auth {
   return new Web3Auth({
     clientId,
     web3AuthNetwork: resolveWeb3AuthNetwork(),
+    defaultChainId: "0x89",
     uiConfig: {
       uxMode: "redirect",
       appName: "SlickBills",
@@ -42,7 +43,7 @@ export async function discardSessionWithoutAddress(
     await web3Auth.logout({ cleanup: true });
   } catch {
     try {
-      web3Auth.clearCache();
+      await web3Auth.clearCache();
     } catch {
       // Ignore cache-clear failures; the next login can still proceed.
     }
@@ -57,28 +58,9 @@ export async function waitForSocialWallet(
   return waitForWalletAddress(web3Auth, connectResult, expectedAddress);
 }
 
-async function tryWait(
-  web3Auth: Web3Auth,
-  connectResult: unknown,
-  expectedAddress?: string | null,
-  attempts = 16,
-): Promise<{ provider: unknown; address: string } | null> {
-  try {
-    return await waitForWalletAddress(
-      web3Auth,
-      connectResult,
-      expectedAddress,
-      attempts,
-    );
-  } catch {
-    return null;
-  }
-}
-
 /**
- * After Google/Facebook redirect on Mainnet, AUTH is connected but the EOA
- * is often not ready yet. Keep that social session and finish the embedded
- * wallet instead of sending the user back to pick MetaMask/Rabby.
+ * After Google/Facebook redirect, v11 hydrates `connection.ethereumProvider`.
+ * Keep the social session and wait for that provider instead of opening MetaMask.
  */
 export async function recoverConnectedWallet(
   web3Auth: Web3Auth,
@@ -86,32 +68,25 @@ export async function recoverConnectedWallet(
 ): Promise<{ provider: unknown; address: string } | null> {
   if (!isWeb3AuthConnected(web3Auth)) return null;
 
-  const ready = await tryWait(web3Auth, undefined, expectedAddress, 16);
-  if (ready) return ready;
-
   try {
-    const authResult = await web3Auth.connectTo(WALLET_CONNECTORS.AUTH);
-    const fromAuth = await tryWait(web3Auth, authResult, expectedAddress, 12);
-    if (fromAuth) return fromAuth;
-  } catch {
-    // Social connector may already be mid-redirect; continue.
-  }
-
-  try {
-    const embedded = await web3Auth.connectTo(WALLET_CONNECTORS.METAMASK, {
-      chainNamespace: CHAIN_NAMESPACES.EIP155,
-    });
-    const fromEmbedded = await tryWait(
+    return await waitForWalletAddress(
       web3Auth,
-      embedded,
+      web3Auth.connection,
       expectedAddress,
-      12,
+      20,
     );
-    if (fromEmbedded) return fromEmbedded;
   } catch {
-    // Connect Kit cancelled or unavailable.
+    try {
+      await web3Auth.switchChain({ chainId: "0x89" });
+      return await waitForWalletAddress(
+        web3Auth,
+        web3Auth.connection,
+        expectedAddress,
+        12,
+      );
+    } catch {
+      await discardSessionWithoutAddress(web3Auth);
+      return null;
+    }
   }
-
-  await discardSessionWithoutAddress(web3Auth);
-  return null;
 }
