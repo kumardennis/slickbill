@@ -158,6 +158,87 @@ function delay(ms: number): Promise<void> {
   });
 }
 
+function safeJson(value: unknown): string {
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+export async function inspectWeb3AuthSession(
+  web3Auth: unknown,
+  connectResult?: unknown,
+): Promise<string[]> {
+  const auth = web3Auth as {
+    connected?: boolean;
+    status?: string;
+    primaryConnectorName?: string | null;
+    currentChainId?: string | null;
+    connection?: {
+      ethereumProvider?: unknown;
+      connectorName?: string;
+      connectorNamespace?: string;
+    } | null;
+    getUserInfo?: () => Promise<Record<string, unknown>>;
+  };
+  const lines: string[] = [];
+  lines.push(`connected=${String(auth.connected)} status=${auth.status ?? "?"}`);
+  lines.push(
+    `connector=${auth.primaryConnectorName ?? "none"} chain=${auth.currentChainId ?? "none"}`,
+  );
+  const connection = auth.connection ?? null;
+  const result = connectResult as {
+    ethereumProvider?: unknown;
+    connectorName?: string;
+  } | null;
+  const ethProvider =
+    result?.ethereumProvider ?? connection?.ethereumProvider ?? null;
+  lines.push(
+    `connection=${connection ? "yes" : "no"} resultConnector=${result?.connectorName ?? "none"}`,
+  );
+  lines.push(
+    `ethereumProvider=${ethProvider ? "yes" : "no"} hasRequest=${
+      typeof (ethProvider as { request?: unknown } | null)?.request ===
+      "function"
+        ? "yes"
+        : "no"
+    }`,
+  );
+
+  const provider = ethProvider as RpcProvider | null;
+  if (provider && typeof provider.request === "function") {
+    for (const method of ["eth_accounts", "eth_chainId"] as const) {
+      try {
+        const raw = await provider.request({ method });
+        lines.push(`${method}=${safeJson(raw)}`);
+      } catch (err) {
+        lines.push(
+          `${method} error=${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+  }
+
+  const linked = await linkedEoaAddresses(web3Auth);
+  lines.push(`linkedEoas=${linked.length ? linked.join(",") : "none"}`);
+
+  if (typeof auth.getUserInfo === "function") {
+    try {
+      const info = await auth.getUserInfo();
+      lines.push(
+        `user=${String(info.email ?? info.name ?? info.verifierId ?? "none")} type=${String(info.typeOfLogin ?? info.authConnection ?? "?")}`,
+      );
+    } catch (err) {
+      lines.push(
+        `userInfo error=${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  return lines;
+}
+
 export async function waitForWalletAddress(
   web3Auth: unknown,
   connectResult?: unknown,
