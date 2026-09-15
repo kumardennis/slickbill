@@ -10,7 +10,7 @@ Work on `master`. Merge `master` → `production` only when staging is good. Do 
 | --- | --- | --- |
 | Supabase | `fwujdruuvspdoqflttrl` | `zgeegkwdcgfwiamjylfg` |
 | Express | `express-ten-xi.vercel.app` (`express` project) | `slickbills-express-prod` → https://slickbills-express-prod.vercel.app |
-| Wallet | `wallet.slickbills.com` | **new** Vercel project |
+| Wallet | `wallet-staging.slickbills.com` (`slickbills-wallet-client`) | `slickbills-wallet-client-prod` → `wallet.slickbills.com` |
 | Flutter web | `app-staging.slickbills.com` (`slickbills-app`) | `slickbills-app-prod` → `app.slickbills.com` |
 | Monerium | `api.monerium.dev` | `api.monerium.app` |
 | Alchemy | test chain | Polygon mainnet |
@@ -23,7 +23,7 @@ Work on `master`. Merge `master` → `production` only when staging is good. Do 
 2. `production` git branch. New Express Vercel project, Production Branch = `production`, root `vercel/express`. Prod env only.
 3. New wallet-client Vercel project, Production Branch = `production`, root `wallet-client`. `VITE_APP_ENV=production`, `VITE_EXPRESS_SERVER_URL` = new Express.
 4. Monerium prod portal + Alchemy webhook on the **new** Express host.
-5. `app.slickbills.com` → prod Flutter web (`slickbills-app-prod`). Staging Flutter web is `app-staging.slickbills.com` (`slickbills-app`). Leave `wallet.slickbills.com` on staging until a later wallet cutover.
+5. `app.slickbills.com` → prod Flutter web (`slickbills-app-prod`). Staging Flutter web is `app-staging.slickbills.com` (`slickbills-app`). `wallet.slickbills.com` → prod wallet (`slickbills-wallet-client-prod`). Staging wallet is `wallet-staging.slickbills.com` (`slickbills-wallet-client`).
 
 ## Prod database
 

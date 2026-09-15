@@ -100,7 +100,7 @@ MONERIUM_NETWORK_ADDRESS=0xE0aEa583266584DafBB3f9C3211d5588c73fEa8d
 | Piece | Why |
 | --- | --- |
 | Invoice tables | Settlement matching stays in Express; **prod uses a new Supabase project** (`docs/prod-migration.md`) |
-| `wallet.slickbills.com` | Prod wallet; its `VITE_EXPRESS_SERVER_URL` must be prod Express |
+| `wallet.slickbills.com` | Prod wallet (`slickbills-wallet-client-prod`); `VITE_EXPRESS_SERVER_URL` must be prod Express. Staging is `wallet-staging.slickbills.com` |
 | Web3Auth client id / network | That’s the **wallet key**, not Monerium. Changing Sapphire network gives users **new addresses** — don’t switch unless you mean to |
 | Coinbase CDP / Base EURC | Not on the Monerium pay path |
 

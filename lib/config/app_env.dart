@@ -12,8 +12,10 @@ class AppEnv {
 
   static const stagingSupabaseUrl = 'https://fwujdruuvspdoqflttrl.supabase.co';
   static const stagingExpressServerUrl = 'https://express-ten-xi.vercel.app';
-  static const stagingWalletClientUrl = 'https://wallet.slickbills.com';
-  static const stagingAppBaseUrl = 'https://app.slickbills.com';
+  static const stagingWalletClientUrl = 'https://wallet-staging.slickbills.com';
+  static const productionWalletClientUrl = 'https://wallet.slickbills.com';
+  static const stagingAppBaseUrl = 'https://app-staging.slickbills.com';
+  static const productionAppBaseUrl = 'https://app.slickbills.com';
 
   static const _appEnvDefine =
       String.fromEnvironment('APP_ENV', defaultValue: '');
@@ -97,11 +99,7 @@ class AppEnv {
       _fromDotenv('WALLET_CLIENT_URL'),
     ]);
     if (override.isNotEmpty) return _stripSlash(override);
-    if (isDev) return stagingWalletClientUrl;
-    throw StateError(
-      'WALLET_CLIENT_URL is required when APP_ENV=production. '
-      'Until DNS cutover use https://slickbills-wallet-client-prod.vercel.app',
-    );
+    return isDev ? stagingWalletClientUrl : productionWalletClientUrl;
   }
 
   static String get appBaseUrl {
@@ -110,7 +108,7 @@ class AppEnv {
       _fromDotenv('APP_BASE_URL'),
     ]);
     if (override.isNotEmpty) return _stripSlash(override);
-    return stagingAppBaseUrl;
+    return isDev ? stagingAppBaseUrl : productionAppBaseUrl;
   }
 
   static String get walletClientOrigin => Uri.parse(walletClientUrl).origin;

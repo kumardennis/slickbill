@@ -8,6 +8,7 @@ import 'package:slickbill/config/app_env.dart';
 
 Set<String> get _allowedOrigins => {
       'https://wallet.slickbills.com',
+      'https://wallet-staging.slickbills.com',
       'https://slickbills-wallet-client.vercel.app',
       'https://slickbills-wallet-client-prod.vercel.app',
       'http://localhost:53532',

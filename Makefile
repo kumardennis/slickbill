@@ -25,7 +25,7 @@ CLIENT_DART_DEFINES=--dart-define=APP_ENV=$(APP_ENV) \
 
 .PHONY: help build-web build-aab build-ipa build-aab-prod build-ipa-prod \
 	run-web run-mobile run-release-mobile run-release-mobile-prod \
-	check-prod-env clean test deploy-web
+	check-prod-env clean test deploy-web deploy-web-prod
 
 help:
 	@echo "Available commands:"
@@ -39,7 +39,8 @@ help:
 	@echo "  make run-release-mobile DEVICE=Dennis   - Release run on a named device"
 	@echo "  make run-release-mobile-prod DEVICE=…   - Release run against prod stack"
 	@echo "  make clean                              - Clean build artifacts"
-	@echo "  make test                               - Run tests"
+	@echo "  make deploy-web                         - Build+deploy Flutter web to slickbills-app (staging)"
+	@echo "  make deploy-web-prod                    - Build+deploy Flutter web to slickbills-app-prod"
 
 check-prod-env:
 	@test -f .env.production || (echo "Missing .env.production — copy .env.production.example and fill secrets." && exit 1)
@@ -88,4 +89,14 @@ test:
 	flutter test
 
 deploy-web: build-web
-	@echo "🚀 Deploying to production..."
+	@echo "🚀 Deploying Flutter web to slickbills-app (staging)..."
+	VERCEL_ORG_ID=team_zHj53Y9qsJ0w95k4Aj0c6KXh \
+	VERCEL_PROJECT_ID=prj_Y0QTGVzguHHXP3Ck8wpIitoehA6i \
+	vercel deploy --prod --yes --cwd build/web
+
+deploy-web-prod: check-prod-env
+	$(MAKE) build-web ENV_FILE=.env.production
+	@echo "🚀 Deploying Flutter web to slickbills-app-prod..."
+	VERCEL_ORG_ID=team_zHj53Y9qsJ0w95k4Aj0c6KXh \
+	VERCEL_PROJECT_ID=prj_LYf2DMN7BU40CZLqlWkvzJD5M23f \
+	vercel deploy --prod --yes --cwd build/web
