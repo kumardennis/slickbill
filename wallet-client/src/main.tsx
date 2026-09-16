@@ -5,7 +5,10 @@ import React from "react";
 import { Web3AuthProvider } from "@web3auth/modal/react";
 import { MetamaskAuth } from "./pages/metamask/MetamaskAuth.tsx";
 import processShim from "process";
-import { web3AuthContextConfig } from "./web3authContext";
+import {
+  isWeb3AuthRedirectReturn,
+  web3AuthContextConfig,
+} from "./web3authContext";
 
 const processRef = processShim as {
   nextTick?: (cb: () => void) => void;
@@ -20,7 +23,8 @@ if (typeof processRef.nextTick !== "function") {
 (globalThis as { process?: typeof processRef }).process = processRef;
 
 const isStandaloneMetamaskRoute =
-  window.location.pathname === "/wallet/metamask-auth";
+  window.location.pathname === "/wallet/metamask-auth" ||
+  isWeb3AuthRedirectReturn();
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
