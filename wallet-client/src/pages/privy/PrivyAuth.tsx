@@ -35,6 +35,7 @@ const sessionKeys = {
   callbackUri: "sb_privy_callback_uri",
   flowMode: "sb_privy_flow_mode",
   signMessage: "sb_privy_sign_message",
+  expectedAddress: "sb_privy_expected_address",
 } as const;
 
 function isUserCancel(message: string): boolean {
@@ -163,6 +164,17 @@ export function PrivyAuth() {
   });
   const flowModeRef = useRef<"connect" | "sign">(flowMode);
   const signMessageRef = useRef<string | null>(null);
+  const expectedAddressRef = useRef<string | null>(
+    (() => {
+      try {
+        return hexAddress(
+          new URLSearchParams(window.location.search).get("address"),
+        );
+      } catch {
+        return null;
+      }
+    })(),
+  );
   const callbackSentRef = useRef(false);
 
   useEffect(() => {
@@ -170,6 +182,7 @@ export function PrivyAuth() {
     const callbackFromQuery = params.get("callback_uri")?.trim();
     const modeFromQuery = params.get("mode")?.trim().toLowerCase();
     const signFromQuery = params.get("sign_message")?.trim();
+    const addressFromQuery = hexAddress(params.get("address"));
     const callbackFromSession = window.sessionStorage
       .getItem(sessionKeys.callbackUri)
       ?.trim();
@@ -180,6 +193,9 @@ export function PrivyAuth() {
     const signFromSession = window.sessionStorage
       .getItem(sessionKeys.signMessage)
       ?.trim();
+    const addressFromSession = hexAddress(
+      window.sessionStorage.getItem(sessionKeys.expectedAddress),
+    );
 
     const nextMode: "connect" | "sign" =
       modeFromQuery === "sign" || modeFromSession === "sign"
@@ -208,9 +224,25 @@ export function PrivyAuth() {
         signMessageRef.current,
       );
     }
+    expectedAddressRef.current = addressFromQuery ?? addressFromSession;
+    if (expectedAddressRef.current) {
+      window.sessionStorage.setItem(
+        sessionKeys.expectedAddress,
+        expectedAddressRef.current,
+      );
+    }
   }, []);
 
   const resolveAddress = useCallback((): string | null => {
+    const expected = hexAddress(expectedAddressRef.current);
+    if (expected) {
+      const matching = wallets.find(
+        (wallet) =>
+          hexAddress(wallet.address)?.toLowerCase() === expected.toLowerCase(),
+      );
+      return hexAddress(matching?.address);
+    }
+
     const privyWallet = wallets.find(
       (wallet) => wallet.walletClientType === "privy",
     );
@@ -308,9 +340,25 @@ export function PrivyAuth() {
           if (!message) {
             throw new Error("Missing sign_message for wallet signing flow.");
           }
+          const expected = hexAddress(expectedAddressRef.current);
+          if (
+            expected &&
+            address.toLowerCase() !== expected.toLowerCase()
+          ) {
+            throw new Error(
+              "Connected wallet does not match the address used in SlickBills.",
+            );
+          }
           const wallet =
-            wallets.find((item) => item.walletClientType === "privy") ??
-            wallets[0];
+            wallets.find(
+              (item) =>
+                hexAddress(item.address)?.toLowerCase() ===
+                address.toLowerCase(),
+            ) ??
+            (expected
+              ? undefined
+              : (wallets.find((item) => item.walletClientType === "privy") ??
+                wallets[0]));
           if (!wallet || typeof wallet.getEthereumProvider !== "function") {
             throw new Error("Privy wallet does not support signing.");
           }
@@ -353,8 +401,28 @@ export function PrivyAuth() {
       return;
     }
 
+    const expected = hexAddress(expectedAddressRef.current);
     let address = resolveAddress();
-    if (!address && !createAttemptedRef.current) {
+
+    if (expected && !address && !createAttemptedRef.current) {
+      createAttemptedRef.current = true;
+      try {
+        const created = await createWallet();
+        const createdAddress = hexAddress(created?.address);
+        if (createdAddress?.toLowerCase() === expected.toLowerCase()) {
+          return;
+        }
+      } catch {
+        address = resolveAddress();
+      }
+      if (!address) {
+        setErrorMessage(
+          "Connected wallet does not match the address used in SlickBills. Use the same Google account, then try again.",
+        );
+        setBusy(false);
+        return;
+      }
+    } else if (!expected && !address && !createAttemptedRef.current) {
       createAttemptedRef.current = true;
       try {
         const created = await createWallet();
@@ -363,6 +431,15 @@ export function PrivyAuth() {
         address = resolveAddress();
       }
     }
+
+    if (expected && !address) {
+      setErrorMessage(
+        "Connected wallet does not match the address used in SlickBills. Use the same Google account, then try again.",
+      );
+      setBusy(false);
+      return;
+    }
+
     if (address) {
       await completeWithAddress(address);
       return;
