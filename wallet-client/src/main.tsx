@@ -4,6 +4,7 @@ import App from "./App.tsx";
 import React from "react";
 import { Web3AuthProvider } from "@web3auth/modal/react";
 import { MetamaskAuth } from "./pages/metamask/MetamaskAuth.tsx";
+import { PrivyAuthRoot } from "./pages/privy/PrivyAuthRoot";
 import processShim from "process";
 import {
   isWeb3AuthRedirectReturn,
@@ -22,14 +23,21 @@ if (typeof processRef.nextTick !== "function") {
 
 (globalThis as { process?: typeof processRef }).process = processRef;
 
+const pathname = window.location.pathname;
+const isStandalonePrivyRoute = pathname === "/wallet/privy-auth";
 const isStandaloneMetamaskRoute =
-  window.location.pathname === "/wallet/metamask-auth" ||
-  isWeb3AuthRedirectReturn();
+  pathname === "/wallet/metamask-auth" || isWeb3AuthRedirectReturn();
 
-createRoot(document.getElementById("root")!).render(
+const root = (
   <React.StrictMode>
-    <Web3AuthProvider config={web3AuthContextConfig}>
-      {isStandaloneMetamaskRoute ? <MetamaskAuth /> : <App />}
-    </Web3AuthProvider>
-  </React.StrictMode>,
+    {isStandalonePrivyRoute ? (
+      <PrivyAuthRoot />
+    ) : (
+      <Web3AuthProvider config={web3AuthContextConfig}>
+        {isStandaloneMetamaskRoute ? <MetamaskAuth /> : <App />}
+      </Web3AuthProvider>
+    )}
+  </React.StrictMode>
 );
+
+createRoot(document.getElementById("root")!).render(root);

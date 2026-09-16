@@ -6,6 +6,7 @@ interface ImportMetaEnv {
   readonly VITE_WEB3AUTH_CLIENT_ID?: string;
   readonly VITE_WEB3AUTH_NETWORK?: string;
   readonly VITE_WEB3AUTH_FACEBOOK_AUTH_CONNECTION_ID?: string;
+  readonly VITE_PRIVY_APP_ID?: string;
 }
 
 interface ImportMeta {
