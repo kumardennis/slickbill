@@ -1,12 +1,32 @@
 import {
   useCreateWallet,
   useLogin,
+  useLoginWithOAuth,
+  useLogout,
   usePrivy,
   useWallets,
+  type User,
 } from "@privy-io/react-auth";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import logo from "../../assets/logo_icon.png";
 import { sb } from "../../theme";
+import {
+  armGoogleAccountPicker,
+  clearLoginStarted,
+  loginWasStarted,
+  markLoginStarted,
+  readLastUsedAccount,
+  shortenAddress,
+  writeLastUsedAccount,
+  type LastUsedAccount,
+} from "./accountChoice";
 
 type RpcProvider = {
   request?: (args: { method: string; params?: unknown }) => Promise<unknown>;
@@ -30,17 +50,119 @@ function hexAddress(value: unknown): string | null {
   return /^0x[a-fA-F0-9]{40}$/.test(trimmed) ? trimmed : null;
 }
 
+function identityFromUser(
+  user: User | null,
+  address: string | null,
+): LastUsedAccount {
+  return {
+    email: user?.google?.email || user?.email?.address || undefined,
+    name: user?.google?.name || undefined,
+    address: address || undefined,
+  };
+}
+
+function lastUsedTitle(account: LastUsedAccount): string {
+  return account.name || account.email || "Last used account";
+}
+
+function lastUsedSubtitle(account: LastUsedAccount): string | null {
+  const lines = [
+    account.email && account.name ? account.email : null,
+    account.address ? shortenAddress(account.address) : null,
+  ].filter(Boolean);
+  return lines.length > 0 ? lines.join(" · ") : null;
+}
+
+const primaryButtonStyle: CSSProperties = {
+  marginTop: 18,
+  width: "100%",
+  borderRadius: 12,
+  border: "none",
+  background: sb.deepNavy,
+  color: sb.onPrimary,
+  padding: "14px 16px",
+  fontSize: 15,
+  fontWeight: 700,
+  letterSpacing: 0.2,
+  cursor: "pointer",
+  boxShadow: "0 10px 20px rgba(11, 37, 69, 0.2)",
+};
+
+const secondaryButtonStyle: CSSProperties = {
+  marginTop: 10,
+  width: "100%",
+  borderRadius: 12,
+  border: `1px solid ${sb.outlineVariant}`,
+  background: sb.surfaceLowest,
+  color: sb.deepNavy,
+  padding: "14px 16px",
+  fontSize: 15,
+  fontWeight: 700,
+  letterSpacing: 0.2,
+  cursor: "pointer",
+};
+
 export function PrivyAuth() {
   const { ready, authenticated, user } = usePrivy();
-  const { login } = useLogin();
+  const { login } = useLogin({
+    onComplete: ({ wasAlreadyAuthenticated }) => {
+      if (wasAlreadyAuthenticated) return;
+      markLoginStarted();
+      setAutoAfterLogin(true);
+    },
+    onError: (error) => {
+      const message = String(error);
+      if (!isUserCancel(message)) {
+        setErrorMessage(message);
+      }
+      clearLoginStarted();
+      setAutoAfterLogin(false);
+      setBusy(false);
+    },
+  });
+  const { initOAuth } = useLoginWithOAuth({
+    onComplete: ({ wasAlreadyAuthenticated }) => {
+      if (wasAlreadyAuthenticated) return;
+      markLoginStarted();
+      setAutoAfterLogin(true);
+    },
+    onError: (error) => {
+      const message = String(error);
+      if (!isUserCancel(message)) {
+        setErrorMessage(message);
+      }
+      clearLoginStarted();
+      setAutoAfterLogin(false);
+      setBusy(false);
+    },
+  });
+  const { logout } = useLogout();
   const { wallets, ready: walletsReady } = useWallets();
   const { createWallet } = useCreateWallet();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [autoAfterLogin, setAutoAfterLogin] = useState(loginWasStarted);
+  const [storedLastUsed, setStoredLastUsed] = useState<LastUsedAccount | null>(
+    readLastUsedAccount,
+  );
   const completingRef = useRef(false);
   const createAttemptedRef = useRef(false);
   const callbackUri = useRef<string | null>(null);
-  const flowMode = useRef<"connect" | "sign">("connect");
+  const [flowMode, setFlowMode] = useState<"connect" | "sign">(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const fromQuery = params.get("mode")?.trim().toLowerCase();
+      const fromSession = window.sessionStorage
+        .getItem(sessionKeys.flowMode)
+        ?.trim()
+        .toLowerCase();
+      return fromQuery === "sign" || fromSession === "sign" ? "sign" : "connect";
+    } catch {
+      return "connect";
+    }
+  });
+  const flowModeRef = useRef<"connect" | "sign">(flowMode);
   const signMessageRef = useRef<string | null>(null);
   const callbackSentRef = useRef(false);
 
@@ -60,10 +182,12 @@ export function PrivyAuth() {
       .getItem(sessionKeys.signMessage)
       ?.trim();
 
-    flowMode.current =
+    const nextMode: "connect" | "sign" =
       modeFromQuery === "sign" || modeFromSession === "sign"
         ? "sign"
         : "connect";
+    flowModeRef.current = nextMode;
+    setFlowMode(nextMode);
     signMessageRef.current = signFromQuery || signFromSession || null;
     callbackUri.current =
       callbackFromQuery && callbackFromQuery.length > 0
@@ -78,7 +202,7 @@ export function PrivyAuth() {
         callbackUri.current,
       );
     }
-    window.sessionStorage.setItem(sessionKeys.flowMode, flowMode.current);
+    window.sessionStorage.setItem(sessionKeys.flowMode, nextMode);
     if (signMessageRef.current) {
       window.sessionStorage.setItem(
         sessionKeys.signMessage,
@@ -104,6 +228,22 @@ export function PrivyAuth() {
       )
     );
   }, [user, wallets]);
+
+  const lastUsed = useMemo(() => {
+    const live = identityFromUser(user ?? null, resolveAddress());
+    const merged: LastUsedAccount = { ...storedLastUsed };
+    if (live.email) merged.email = live.email;
+    if (live.name) merged.name = live.name;
+    if (live.address) merged.address = live.address;
+    return merged.email || merged.name || merged.address ? merged : null;
+  }, [resolveAddress, storedLastUsed, user]);
+
+  useEffect(() => {
+    if (!user && !resolveAddress()) return;
+    const next = identityFromUser(user ?? null, resolveAddress());
+    writeLastUsedAccount(next);
+    setStoredLastUsed(readLastUsedAccount());
+  }, [resolveAddress, user]);
 
   const returnToCallback = useCallback((params: Record<string, string>) => {
     if (callbackSentRef.current) return;
@@ -159,10 +299,12 @@ export function PrivyAuth() {
       completingRef.current = true;
       setWalletAddress(address);
       setErrorMessage(null);
+      writeLastUsedAccount(identityFromUser(user ?? null, address));
+      setStoredLastUsed(readLastUsedAccount());
 
       try {
         let signature: string | null = null;
-        if (flowMode.current === "sign") {
+        if (flowModeRef.current === "sign") {
           const message = signMessageRef.current?.trim();
           if (!message) {
             throw new Error("Missing sign_message for wallet signing flow.");
@@ -201,39 +343,33 @@ export function PrivyAuth() {
             : message,
         );
         completingRef.current = false;
+        setBusy(false);
       }
     },
-    [returnToCallback, wallets],
+    [returnToCallback, user, wallets],
   );
 
-  useEffect(() => {
+  const proceedWithWallet = useCallback(async () => {
     if (!ready || !authenticated || !walletsReady || completingRef.current) {
       return;
     }
 
-    let cancelled = false;
-    void (async () => {
-      let address = resolveAddress();
-      if (!address && !createAttemptedRef.current) {
-        createAttemptedRef.current = true;
-        try {
-          const created = await createWallet();
-          address = hexAddress(created?.address);
-        } catch {
-          address = resolveAddress();
-        }
+    let address = resolveAddress();
+    if (!address && !createAttemptedRef.current) {
+      createAttemptedRef.current = true;
+      try {
+        const created = await createWallet();
+        address = hexAddress(created?.address);
+      } catch {
+        address = resolveAddress();
       }
-      if (cancelled) return;
-      if (address) {
-        await completeWithAddress(address);
-        return;
-      }
-      setErrorMessage("Signed in, but no wallet address came back.");
-    })();
-
-    return () => {
-      cancelled = true;
-    };
+    }
+    if (address) {
+      await completeWithAddress(address);
+      return;
+    }
+    setErrorMessage("Signed in, but no wallet address came back.");
+    setBusy(false);
   }, [
     authenticated,
     completeWithAddress,
@@ -243,11 +379,69 @@ export function PrivyAuth() {
     walletsReady,
   ]);
 
+  const shouldAutoComplete = flowMode === "sign" || autoAfterLogin;
+
+  useEffect(() => {
+    if (!shouldAutoComplete) return;
+    void proceedWithWallet();
+  }, [proceedWithWallet, shouldAutoComplete]);
+
+  const handleContinueLastUsed = async () => {
+    setErrorMessage(null);
+    setBusy(true);
+    markLoginStarted();
+    setAutoAfterLogin(true);
+    if (authenticated) {
+      await proceedWithWallet();
+      return;
+    }
+    try {
+      await initOAuth({ provider: "google" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!isUserCancel(message)) {
+        setErrorMessage(message);
+      }
+      clearLoginStarted();
+      setAutoAfterLogin(false);
+      setBusy(false);
+    }
+  };
+
+  const handleChooseAnother = async () => {
+    setErrorMessage(null);
+    setBusy(true);
+    armGoogleAccountPicker();
+    try {
+      if (authenticated) {
+        await logout();
+      }
+      login();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!isUserCancel(message)) {
+        setErrorMessage(message);
+      }
+      clearLoginStarted();
+      setAutoAfterLogin(false);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const showChoice =
+    ready &&
+    !walletAddress &&
+    flowMode !== "sign" &&
+    (!authenticated || !autoAfterLogin);
+
   const statusCopy = !ready
     ? "Preparing a secure connection…"
     : walletAddress
       ? "Confirmed. Returning to SlickBills…"
-      : null;
+      : busy && !showChoice
+        ? "Continue in the Google or wallet window…"
+        : null;
 
   return (
     <div
@@ -316,8 +510,8 @@ export function PrivyAuth() {
             color: sb.onSurfaceVariant,
           }}
         >
-          Google, MetaMask, Rabby, WalletConnect, and other Ethereum wallets.
-          Facebook is not a native Privy login.
+          Continue with the last Google account, or choose a different Google
+          account or wallet.
         </p>
 
         {statusCopy ? (
@@ -375,29 +569,84 @@ export function PrivyAuth() {
           </div>
         ) : null}
 
-        {ready && !authenticated ? (
-          <button
-            type="button"
-            onClick={() => {
-              setErrorMessage(null);
-              login();
-            }}
+        {showChoice && lastUsed ? (
+          <div
             style={{
               marginTop: 18,
-              width: "100%",
+              padding: 14,
               borderRadius: 12,
-              border: "none",
-              background: sb.deepNavy,
-              color: sb.onPrimary,
-              padding: "14px 16px",
-              fontSize: 15,
-              fontWeight: 700,
-              letterSpacing: 0.2,
-              cursor: "pointer",
-              boxShadow: "0 10px 20px rgba(11, 37, 69, 0.2)",
+              border: `1px solid ${sb.outlineVariant}`,
+              background: sb.surface,
             }}
           >
-            Connect wallet
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 700,
+                letterSpacing: 0.6,
+                textTransform: "uppercase",
+                color: sb.onSurfaceVariant,
+              }}
+            >
+              Last used
+            </div>
+            <div
+              style={{
+                marginTop: 8,
+                fontSize: 16,
+                fontWeight: 700,
+                color: sb.onSurface,
+              }}
+            >
+              {lastUsedTitle(lastUsed)}
+            </div>
+            {lastUsedSubtitle(lastUsed) ? (
+              <div
+                style={{
+                  marginTop: 4,
+                  fontSize: 13,
+                  color: sb.onSurfaceVariant,
+                  wordBreak: "break-word",
+                }}
+              >
+                {lastUsedSubtitle(lastUsed)}
+              </div>
+            ) : null}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                void handleContinueLastUsed();
+              }}
+              style={{
+                ...primaryButtonStyle,
+                marginTop: 14,
+                opacity: busy ? 0.7 : 1,
+              }}
+            >
+              Continue as{" "}
+              {lastUsed.email ||
+                lastUsed.name ||
+                (lastUsed.address ? shortenAddress(lastUsed.address) : "this account")}
+            </button>
+          </div>
+        ) : null}
+
+        {showChoice ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              void handleChooseAnother();
+            }}
+            style={{
+              ...(lastUsed ? secondaryButtonStyle : primaryButtonStyle),
+              opacity: busy ? 0.7 : 1,
+            }}
+          >
+            {lastUsed
+              ? "Use another Google account or wallet"
+              : "Choose Google account or wallet"}
           </button>
         ) : null}
       </div>

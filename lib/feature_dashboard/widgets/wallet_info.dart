@@ -1127,18 +1127,21 @@ class WalletInfo extends HookWidget {
       return null;
     }, [userController.user.value.privateUserId]);
 
-    final user = userController.user.value;
-    final alreadySetUp = PaymentSetupController.userHasMoneriumIban(user) ||
-        moneriumIbans.value.isNotEmpty ||
-        paymentSetupController.hasMoneriumIban.value;
-    final showSetupWizard = !alreadySetUp;
-    final showReconnect = alreadySetUp &&
-        (metamaskWalletAddress.value?.trim().isNotEmpty ?? false) &&
-        !isMoneriumConnected.value;
-    final isMoneriumBusy = isLoadingMoneriumStatus.value ||
-        isConnectingMonerium.value;
+    return Obx(() {
+      final user = userController.user.value;
+      paymentSetupController.step.value;
+      final alreadySetUp = PaymentSetupController.userHasMoneriumIban(user) ||
+          moneriumIbans.value.isNotEmpty;
+      final needsWallet = metamaskWalletAddress.value?.trim().isEmpty ?? true;
+      final showSetupWizard = !alreadySetUp;
+      final showWalletSetup = showSetupWizard || needsWallet;
+      final showReconnect = alreadySetUp &&
+          !needsWallet &&
+          !isMoneriumConnected.value;
+      final isMoneriumBusy = isLoadingMoneriumStatus.value ||
+          isConnectingMonerium.value;
 
-    return Column(
+      return Column(
       children: [
         Container(
           width: double.infinity,
@@ -1240,21 +1243,41 @@ class WalletInfo extends HookWidget {
                             icon: const Icon(Icons.tune, color: Colors.white),
                             tooltip: 'Manage wallet actions',
                           )
-                        : Text(
-                            metamaskWalletAddress.value == null
-                                ? 'Step 1'
-                                : 'Done',
-                            style:
-                                Theme.of(context).textTheme.labelSmall?.copyWith(
+                        : needsWallet
+                            ? TextButton(
+                                onPressed: isConnectingMetamask.value
+                                    ? null
+                                    : handleConnectMetamask,
+                                style: TextButton.styleFrom(
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                  ),
+                                ),
+                                child: Text(
+                                  isConnectingMetamask.value
+                                      ? 'Connecting…'
+                                      : 'Connect',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              )
+                            : Text(
+                                'Done',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .labelSmall
+                                    ?.copyWith(
                                       color: Colors.white.withOpacity(0.85),
                                       fontWeight: FontWeight.w700,
                                     ),
-                          ),
+                              ),
                   ],
                 ),
               ),
 
-              if (showSetupWizard) ...[
+              if (showWalletSetup) ...[
                 const SizedBox(height: 16),
                 Text(
                   'Payment setup',
@@ -1281,27 +1304,29 @@ class WalletInfo extends HookWidget {
                   onPressed: isConnectingMetamask.value
                       ? null
                       : handleConnectMetamask,
+                  isLast: !showSetupWizard,
                 ),
-                _buildSetupStep(
-                  context: context,
-                  stepNumber: 2,
-                  title: 'Set up payments',
-                  subtitle: isAddressLinked.value &&
-                          moneriumIbans.value.isEmpty
-                      ? 'Finish Monerium KYC if asked, then tap again for your IBAN'
-                      : 'Sign in to Monerium. We will link your wallet and request an IBAN',
-                  isDone: false,
-                  isActive: metamaskWalletAddress.value != null,
-                  isEnabled: metamaskWalletAddress.value != null &&
-                      !isConnectingMonerium.value,
-                  isLoading: isConnectingMonerium.value,
-                  buttonLabel: 'Continue',
-                  onPressed: metamaskWalletAddress.value == null ||
-                          isConnectingMonerium.value
-                      ? null
-                      : () => handleMoneriumConnect(),
-                  isLast: true,
-                ),
+                if (showSetupWizard)
+                  _buildSetupStep(
+                    context: context,
+                    stepNumber: 2,
+                    title: 'Connect Monerium',
+                    subtitle: isAddressLinked.value &&
+                            moneriumIbans.value.isEmpty
+                        ? 'Finish Monerium KYC if asked, then tap again for your IBAN'
+                        : 'Sign in to Monerium. We will link your wallet and request an IBAN',
+                    isDone: false,
+                    isActive: metamaskWalletAddress.value != null,
+                    isEnabled: metamaskWalletAddress.value != null &&
+                        !isConnectingMonerium.value,
+                    isLoading: isConnectingMonerium.value,
+                    buttonLabel: 'Connect Monerium',
+                    onPressed: metamaskWalletAddress.value == null ||
+                            isConnectingMonerium.value
+                        ? null
+                        : () => handleMoneriumConnect(),
+                    isLast: true,
+                  ),
               ],
 
               if (showReconnect) ...[
@@ -1526,6 +1551,7 @@ class WalletInfo extends HookWidget {
         ),
       ],
     );
+    });
   }
 }
 

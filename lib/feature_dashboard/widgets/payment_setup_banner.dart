@@ -105,8 +105,8 @@ class PaymentSetupBanner extends StatelessWidget {
       case PaymentSetupStep.connectMonerium:
         return _BannerConfig(
           icon: FontAwesomeIcons.buildingColumns,
-          title: 'Set up payments',
-          subtitle: 'Connect Monerium to get your IBAN.',
+          title: 'Connect Monerium',
+          subtitle: 'Sign in to Monerium to get your IBAN.',
           background: colorScheme.yellow.withOpacity(0.18),
         );
       case PaymentSetupStep.reconnectMonerium:

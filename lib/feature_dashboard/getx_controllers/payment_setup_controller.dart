@@ -39,6 +39,14 @@ class PaymentSetupController extends GetxController {
     super.onClose();
   }
 
+  void reset() {
+    step.value = PaymentSetupStep.connectWallet;
+    hasWallet.value = false;
+    hasMoneriumSession.value = false;
+    isAddressLinked.value = false;
+    hasMoneriumIban.value = false;
+  }
+
   static bool userHasMoneriumIban(ClientUserModel user) {
     final primaryBank = user.bankName?.trim().toLowerCase() ?? '';
     if (primaryBank.contains('monerium')) {
@@ -87,7 +95,12 @@ class PaymentSetupController extends GetxController {
       if (!walletReady) {
         hasMoneriumSession.value = false;
         isAddressLinked.value = false;
-        step.value = PaymentSetupStep.connectWallet;
+        if (!ibanReady && !balanceReady) {
+          hasMoneriumIban.value = false;
+        }
+        step.value = ibanReady || balanceReady
+            ? PaymentSetupStep.reconnectMonerium
+            : PaymentSetupStep.connectWallet;
         return;
       }
 
