@@ -305,7 +305,7 @@ export function PrivyAuth() {
             color: sb.onSurface,
           }}
         >
-          Connect with Google
+          Connect wallet
         </h1>
         <p
           style={{
@@ -316,8 +316,9 @@ export function PrivyAuth() {
             color: sb.onSurfaceVariant,
           }}
         >
-          Privy trial page. Web3Auth is unchanged at /wallet/metamask-auth.
-          Facebook is not a native Privy login.
+          Google, MetaMask, Rabby, WalletConnect, and other Ethereum wallets.
+          Web3Auth is unchanged at /wallet/metamask-auth. Facebook is not a
+          native Privy login.
         </p>
 
         {statusCopy ? (
@@ -380,7 +381,7 @@ export function PrivyAuth() {
             type="button"
             onClick={() => {
               setErrorMessage(null);
-              login({ loginMethods: ["google"] });
+              login();
             }}
             style={{
               marginTop: 18,
@@ -397,7 +398,7 @@ export function PrivyAuth() {
               boxShadow: "0 10px 20px rgba(11, 37, 69, 0.2)",
             }}
           >
-            Continue with Google
+            Connect wallet
           </button>
         ) : null}
       </div>
