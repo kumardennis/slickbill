@@ -613,7 +613,10 @@ const isProductionAppEnv =
 
 /** Sandbox chains are sepolia/amoy/chiado. Production uses ethereum/polygon/gnosis. */
 const toMoneriumApiChain = (chain: string): string => {
-  const key = chain.trim().toLowerCase();
+  const key = chain
+    .trim()
+    .toLowerCase()
+    .replace(/^etherium/, "ethereum");
   if (!key) return key;
 
   if (isMoneriumSandboxHost) {
