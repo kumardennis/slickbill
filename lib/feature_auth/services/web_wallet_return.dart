@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
@@ -8,6 +9,124 @@ import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_con
 import 'package:slickbill/feature_dashboard/getx_controllers/payment_setup_controller.dart';
 import 'package:slickbill/feature_dashboard/screens/profile.dart';
 import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
+
+/// After Monerium OAuth the Flutter web tab reloads, so link/IBAN must resume here.
+Future<void> completeWebMoneriumOAuthReturnIfNeeded() async {
+  if (!kIsWeb) return;
+
+  final shouldResume =
+      await MoneriumService.consumeWebOAuthCallbackIfPresent();
+  if (!shouldResume) return;
+
+  if (!Get.isRegistered<UserController>()) return;
+  final userController = Get.find<UserController>();
+  if (userController.user.value.id <= 0) {
+    await userController.loadUserData();
+  }
+  if (userController.user.value.id <= 0) return;
+
+  final user = userController.user.value;
+  final userId = PaymentSetupController.resolveMoneriumUserId(user);
+  final address = user.metamaskWalletAddress?.trim() ?? '';
+
+  try {
+    final hasSession = await MoneriumService.hasActiveSession(userId: userId);
+    if (!hasSession) {
+      await MoneriumService.clearWebConnectPending();
+      throw Exception('Monerium session was not established.');
+    }
+
+    if (address.isEmpty) {
+      await MoneriumService.clearWebConnectPending();
+      Get.snackbar(
+        'Wallet required',
+        'Connect your wallet, then tap Reconnect Monerium again.',
+        snackPosition: SnackPosition.TOP,
+        duration: const Duration(seconds: 4),
+      );
+      return;
+    }
+
+    final linkedResponse = await MoneriumService.getLinkedAddresses(
+      userId: userId,
+      address: address,
+    );
+    var linked = linkedResponse['linked'] == true;
+
+    if (!linked) {
+      final signature =
+          await MetamaskWalletService.signAddressOwnershipMessage(
+        address: address,
+        preview: const WalletClientPaymentPreview(kind: 'link'),
+      );
+      final linkResponse = await MoneriumService.linkWallet(
+        userId: userId,
+        address: address,
+        message: MetamaskWalletService.moneriumOwnershipMessage,
+        signature: signature,
+      );
+      linked = linkResponse['linkedConfirmed'] == true ||
+          linkResponse['linked'] == true;
+    }
+
+    var ibansResponse = await MoneriumService.getIbans(userId: userId);
+    var ibans = MoneriumService.extractIbansFromResponse(ibansResponse);
+
+    if (ibans.isEmpty && linked) {
+      await MoneriumService.requestIban(
+        userId: userId,
+        address: address,
+      );
+      ibansResponse = await MoneriumService.getIbans(userId: userId);
+      ibans = MoneriumService.extractIbansFromResponse(ibansResponse);
+    }
+
+    if (Get.isRegistered<PaymentSetupController>()) {
+      final setup = Get.find<PaymentSetupController>();
+      if (ibans.isNotEmpty) {
+        await setup.markIbanReady();
+      } else if (linked) {
+        await setup.markAddressLinked(userId: userId);
+      } else {
+        await setup.markMoneriumConnected();
+      }
+    }
+
+    await MoneriumService.clearWebConnectPending();
+
+    Get.snackbar(
+      ibans.isNotEmpty
+          ? 'Payments ready'
+          : (linked ? 'Wallet linked' : 'Monerium connected'),
+      ibans.isNotEmpty
+          ? 'Your Monerium IBAN is set up.'
+          : (linked
+              ? 'Wallet is linked. If the IBAN is still provisioning, tap Reconnect again.'
+              : 'Sign in succeeded. Complete Monerium KYC, then tap Reconnect again.'),
+      snackPosition: SnackPosition.TOP,
+      duration: const Duration(seconds: 4),
+    );
+  } catch (error) {
+    if (MetamaskWalletService.isCancelled(error)) {
+      Get.snackbar(
+        'Monerium',
+        'Sign the wallet ownership message to finish linking.',
+        snackPosition: SnackPosition.TOP,
+        duration: const Duration(seconds: 4),
+      );
+      return;
+    }
+    await MoneriumService.clearWebConnectPending();
+    Get.snackbar(
+      'Monerium',
+      error.toString(),
+      snackPosition: SnackPosition.TOP,
+      backgroundColor: Colors.red.shade700,
+      colorText: Colors.white,
+      duration: const Duration(seconds: 4),
+    );
+  }
+}
 
 /// After a web wallet redirect, finish pay/withdraw or Monerium IBAN linking.
 Future<void> completeWebWalletReturn(WebWalletCallback? callback) async {

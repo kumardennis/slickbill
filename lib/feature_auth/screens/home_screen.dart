@@ -85,6 +85,8 @@ class HomeScreen extends HookWidget {
           completeWebWalletReturn,
         );
         if (cancelled) return;
+        await completeWebMoneriumOAuthReturnIfNeeded();
+        if (cancelled) return;
         await userController.ensureSignedInOrRedirect();
       }
 

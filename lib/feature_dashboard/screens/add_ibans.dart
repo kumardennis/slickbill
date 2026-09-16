@@ -1,10 +1,9 @@
-//// filepath: /Users/denniskumar/Documents/GitHub/slickbill/lib/feature_dashboard/screens/add_iban_screen.dart
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
+import 'package:slickbill/feature_auth/getx_controllers/current_bank_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
-import 'package:slickbill/feature_auth/utils/supabase_auth_manger.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:slickbill/feature_auth/models/user_model.dart';
 
 class AddIbanScreen extends StatefulWidget {
   const AddIbanScreen({super.key});
@@ -21,7 +20,9 @@ class _AddIbanScreenState extends State<AddIbanScreen> {
   bool _isSubmitting = false;
 
   final _userController = Get.find<UserController>();
-  final _authManager = SupabaseAuthManger();
+  final _currentBankController = Get.isRegistered<CurrentBankController>()
+      ? Get.find<CurrentBankController>()
+      : Get.put(CurrentBankController());
 
   @override
   void dispose() {
@@ -37,15 +38,31 @@ class _AddIbanScreenState extends State<AddIbanScreen> {
     setState(() => _isSubmitting = true);
 
     try {
-      final user = Supabase.instance.client.auth.currentUser;
-      if (user == null) throw Exception('Not authenticated');
+      final iban = _ibanController.text.replaceAll(RegExp(r'\s+'), '').trim();
+      final bankName = _bankNameController.text.trim();
+      final bankAccountName = _bankAccountNameController.text.trim();
 
-      await Supabase.instance.client.from('banks').insert({
-        'user_id': user.id,
-        'iban': _ibanController.text.trim(),
-        'account_holder': _bankAccountNameController.text.trim(),
-        'created_at': DateTime.now().toIso8601String(),
-      });
+      if (_userController.user.value.privateUserId == null) {
+        throw Exception('Your profile is not ready yet. Sign out and back in.');
+      }
+
+      final saved = await _userController.updatePrimaryIbanColumn(
+        iban: iban,
+        bankName: bankName,
+        bankAccountName: bankAccountName,
+      );
+      if (!saved) {
+        throw Exception('Could not save IBAN to your profile.');
+      }
+
+      _currentBankController.loadCurrentBank(
+        BankAccount(
+          iban: iban,
+          bankName: bankName,
+          bankAccountName: bankAccountName,
+          isPrimary: true,
+        ),
+      );
 
       if (!mounted) return;
 
@@ -56,7 +73,6 @@ class _AddIbanScreenState extends State<AddIbanScreen> {
         colorText: Colors.green,
       );
 
-      // ✅ Return true to trigger refresh
       Get.back(result: true);
     } catch (e) {
       if (!mounted) return;

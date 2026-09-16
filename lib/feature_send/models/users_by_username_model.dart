@@ -11,10 +11,18 @@ class UsersByUsername {
   late final Users users;
 
   UsersByUsername.fromJson(Map<String, dynamic> json) {
-    id = json['id'];
-    firstName = json['firstName'];
-    lastName = json['lastName'];
-    users = Users.fromJson(json['users']);
+    id = json['id'] is int
+        ? json['id'] as int
+        : int.tryParse(json['id']?.toString() ?? '') ?? 0;
+    firstName = (json['firstName'] ?? '').toString();
+    lastName = (json['lastName'] ?? '').toString();
+    final rawUsers = json['users'];
+    final usersJson = rawUsers is List && rawUsers.isNotEmpty
+        ? rawUsers.first
+        : rawUsers;
+    users = Users.fromJson(
+      usersJson is Map ? Map<String, dynamic>.from(usersJson) : const {},
+    );
   }
 
   Map<String, dynamic> toJson() {
@@ -36,8 +44,10 @@ class Users {
   late final int id;
 
   Users.fromJson(Map<String, dynamic> json) {
-    username = json['username'];
-    id = json['id'];
+    username = (json['username'] ?? '').toString();
+    id = json['id'] is int
+        ? json['id'] as int
+        : int.tryParse(json['id']?.toString() ?? '') ?? 0;
   }
 
   Map<String, dynamic> toJson() {

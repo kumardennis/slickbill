@@ -11,6 +11,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../feature_auth/utils/money_formatter.dart';
 import '../../shared_widgets/sb_dark_surface_theme.dart';
+import '../../shared_widgets/sb_receipt_stamp.dart';
+import 'package:slickbill/theme/sb_colors.dart';
 import '../models/invoice_model.dart';
 import 'from_business_badge.dart';
 
@@ -38,24 +40,7 @@ class SentPublicInvoiceSheet extends HookWidget {
 
     return SbDarkSurfaceTheme(
       builder: (context) => Container(
-      decoration: BoxDecoration(
-          gradient: LinearGradient(
-              colors: [
-            Theme.of(context).colorScheme.darkerBlue,
-            Theme.of(context).colorScheme.blue,
-            Theme.of(context).colorScheme.turqouise,
-            Theme.of(context).colorScheme.darkerBlue,
-          ],
-              stops: const [
-            0.0,
-            0.2,
-            0.7,
-            0.85
-          ],
-              transform: GradientRotation(3.14 / 4),
-              tileMode: TileMode.clamp,
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight)),
+      decoration: const BoxDecoration(color: SbColors.deepNavy),
       height: double.infinity,
       child: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -130,7 +115,23 @@ class SentPublicInvoiceSheet extends HookWidget {
                             .displayLarge
                             ?.copyWith(
                                 fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.light))
+                                color: Theme.of(context).colorScheme.light)),
+                    if (invoice.status == 'PAID') ...[
+                      const SizedBox(height: 10),
+                      SbReceiptStamp(
+                        label: 'lbl_Paid'.tr,
+                        color: Theme.of(context).colorScheme.green,
+                        fontSize: 16,
+                        animate: true,
+                      ),
+                    ] else if (dateIsPassed) ...[
+                      const SizedBox(height: 10),
+                      SbReceiptStamp(
+                        label: 'lbl_Overdue'.tr,
+                        color: Theme.of(context).colorScheme.red,
+                        fontSize: 13,
+                      ),
+                    ],
                   ],
                 )
               ],

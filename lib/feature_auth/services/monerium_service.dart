@@ -40,6 +40,9 @@ class MoneriumService {
       String.fromEnvironment('MONERIUM_WALLET_CHAIN', defaultValue: '');
   static String get _walletClientBaseUrl => AppEnv.walletClientUrl;
   static const String _walletSiwePath = '/wallet/siwe';
+  static const String _webConnectPendingAtKey =
+      'monerium_web_connect_pending_at';
+  static const _webConnectPendingTtl = Duration(minutes: 20);
 
   static String get _serverBaseUrl => CoinbaseService.baseUrl;
 
@@ -47,18 +50,24 @@ class MoneriumService {
     debugPrint('[MoneriumService] $message');
   }
 
+  static int? _asEpochMs(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is int) return raw;
+    if (raw is num) return raw.round();
+    final text = raw.toString().trim();
+    if (text.isEmpty) return null;
+    return int.tryParse(text.split('.').first);
+  }
+
   static bool _isSessionExpiringSoon(Map<String, dynamic>? session) {
     if (session == null) {
       return true;
     }
 
-    final rawExpiresAt = session['expiresAt'];
-    final expiresAtMs = rawExpiresAt is int
-        ? rawExpiresAt
-        : int.tryParse(rawExpiresAt?.toString() ?? '');
-
+    final expiresAtMs = _asEpochMs(session['expiresAt']);
     if (expiresAtMs == null || expiresAtMs <= 0) {
-      return true;
+      // Token present but expiry missing/unparsed: keep it and refresh on 401.
+      return false;
     }
 
     const skewMs = 30 * 1000;
@@ -78,10 +87,9 @@ class MoneriumService {
     required Map<String, dynamic> refreshed,
     Map<String, dynamic>? previous,
   }) async {
-    final data = refreshed['data'];
-    if (data is! Map<String, dynamic>) {
-      return null;
-    }
+    final data = refreshed['data'] is Map
+        ? Map<String, dynamic>.from(refreshed['data'] as Map)
+        : refreshed;
 
     final accessToken = data['accessToken']?.toString().trim() ?? '';
     if (accessToken.isEmpty) {
@@ -94,10 +102,8 @@ class MoneriumService {
       'accessToken': accessToken,
       if (data['refreshToken'] != null)
         'refreshToken': data['refreshToken'].toString(),
-      if (data['expiresAt'] != null)
-        'expiresAt': data['expiresAt'] is int
-            ? data['expiresAt']
-            : int.tryParse(data['expiresAt'].toString()),
+      if (_asEpochMs(data['expiresAt']) != null)
+        'expiresAt': _asEpochMs(data['expiresAt']),
     };
     await _saveSession(session);
     return session;
@@ -130,7 +136,8 @@ class MoneriumService {
           refreshed: refreshed,
           previous: session,
         );
-        if (_hasUsableAccessToken(saved)) {
+        if (saved != null &&
+            (saved['accessToken']?.toString().trim().isNotEmpty ?? false)) {
           return saved;
         }
       } catch (error) {
@@ -296,9 +303,61 @@ class MoneriumService {
     } catch (_) {}
   }
 
+  static Future<void> markWebConnectPending() async {
+    if (!kIsWeb) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(
+      _webConnectPendingAtKey,
+      DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  static Future<void> clearWebConnectPending() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_webConnectPendingAtKey);
+  }
+
+  static Future<bool> hasWebConnectPending() async {
+    if (!kIsWeb) return false;
+    final prefs = await SharedPreferences.getInstance();
+    final at = prefs.getInt(_webConnectPendingAtKey);
+    if (at == null) return false;
+    final age = DateTime.now().millisecondsSinceEpoch - at;
+    if (age > _webConnectPendingTtl.inMilliseconds) {
+      await prefs.remove(_webConnectPendingAtKey);
+      return false;
+    }
+    return true;
+  }
+
+  /// Web OAuth leaves this tab. Persist the callback even with no in-memory completer.
+  static Future<bool> consumeWebOAuthCallbackIfPresent() async {
+    if (!kIsWeb) return false;
+    final uri = Uri.base;
+    final isMonerium = uri.queryParameters['monerium'] == '1' ||
+        uri.queryParameters['provider'] == 'monerium';
+    if (!isMonerium) {
+      return hasWebConnectPending();
+    }
+
+    onAuthCallbackUri(uri);
+    slickBillsClearWalletCallbackQuery();
+    final status = uri.queryParameters['status']?.trim() ?? '';
+    if (status == 'success') {
+      await markWebConnectPending();
+      return true;
+    }
+    await clearWebConnectPending();
+    return false;
+  }
+
   static Future<bool> _openAuthTab(Uri uri) async {
     if (kIsWeb) {
-      return launchUrl(uri, mode: LaunchMode.platformDefault);
+      return launchUrl(
+        uri,
+        mode: LaunchMode.platformDefault,
+        webOnlyWindowName: '_self',
+      );
     }
 
     // iOS SFSafariViewController (url_launcher custom tab) does not return
@@ -467,6 +526,7 @@ class MoneriumService {
 
         _log('Opening Monerium OAuth');
         openedAuthTab = true;
+        await markWebConnectPending();
         AppLockController.beginExternalAuthSession();
         final opened = await _openAuthTab(Uri.parse(authUrl));
 
@@ -529,41 +589,46 @@ class MoneriumService {
     _log('onAuthCallbackUri() received: $uri');
     unawaited(_closeAuthTab());
 
-    final completer = _pendingOAuthCompleter;
-    if (completer == null || completer.isCompleted) {
-      _log('onAuthCallbackUri() no pending oauth completer');
-      return;
-    }
-
     final status = uri.queryParameters['status']?.trim() ?? 'error';
     final message = uri.queryParameters['message']?.trim();
     _lastOAuthStatus = status;
     _lastOAuthMessage = message;
 
-    if (status == 'success') {
-      final session = {
-        'status': status,
-        'message': message,
-        'provider': uri.queryParameters['provider'],
-        'userId': uri.queryParameters['userId'],
-        'accessToken': uri.queryParameters['accessToken'],
-        'refreshToken': uri.queryParameters['refreshToken'],
-        'expiresAt': int.tryParse(uri.queryParameters['expiresAt'] ?? ''),
-      };
+    final session = {
+      'status': status,
+      'message': message,
+      'provider': uri.queryParameters['provider'],
+      'userId': uri.queryParameters['userId'],
+      'accessToken': uri.queryParameters['accessToken'],
+      'refreshToken': uri.queryParameters['refreshToken'],
+      'expiresAt': _asEpochMs(uri.queryParameters['expiresAt']),
+    };
 
+    if (status == 'success') {
       final accessToken = session['accessToken']?.toString();
       if (accessToken != null && accessToken.isNotEmpty) {
         _log('OAuth callback includes token data; persisting session');
         unawaited(_saveSession(session));
       } else {
-        _log('OAuth callback missing access token in deep link');
+        _log(
+            'OAuth callback missing access token in URL; Express refresh can still restore it');
       }
 
-      completer.complete(session);
+      final completer = _pendingOAuthCompleter;
+      if (completer != null && !completer.isCompleted) {
+        completer.complete(session);
+      } else {
+        _log(
+            'onAuthCallbackUri() no in-memory completer (web reload); session kept for resume');
+      }
       return;
     }
 
-    completer.completeError(Exception(message ?? 'Monerium OAuth failed.'));
+    unawaited(clearWebConnectPending());
+    final completer = _pendingOAuthCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.completeError(Exception(message ?? 'Monerium OAuth failed.'));
+    }
   }
 
   static Future<Map<String, dynamic>> getOAuthStatus({

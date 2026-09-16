@@ -219,8 +219,9 @@ class SendInvoice extends HookWidget {
 
     Future createInvoice() async {
       print(receiverUsers.value.first.amount);
+      var sent = false;
       if (receiverUsers.value.length == 1) {
-        await sendInvoicesClass.createSendPrivateInvoice(
+        sent = await sendInvoicesClass.createSendPrivateInvoice(
             originalInvoiceNoController.text,
             descriptionController.text,
             dueDateController.text,
@@ -230,7 +231,7 @@ class SendInvoice extends HookWidget {
       }
 
       if (receiverUsers.value.length > 1) {
-        await sendInvoicesClass.createSendGroupInvoice(
+        sent = await sendInvoicesClass.createSendGroupInvoice(
             originalInvoiceNoController.text,
             descriptionController.text,
             dueDateController.text,
@@ -239,7 +240,9 @@ class SendInvoice extends HookWidget {
             category.value);
       }
 
-      navigationController.changeIndex(0);
+      if (sent) {
+        navigationController.changeIndex(0);
+      }
     }
 
     Future createShareableInvoiceLink() async {
@@ -420,15 +423,26 @@ class SendInvoice extends HookWidget {
                           );
                         },
                         onSelected: (suggestion) {
+                          if (receiverUsers.value
+                              .any((user) => user.id == suggestion.id)) {
+                            Get.snackbar(
+                              'Already added',
+                              '@${suggestion.users.username} is already on this bill.',
+                            );
+                            return;
+                          }
                           receiverUserId.value = suggestion.id;
-                          receiverUsers.value.add(ReceiverUserModel(
-                            userId: suggestion.users.id,
-                            amount: 0.0,
-                            username: suggestion.users.username,
-                            firstName: suggestion.firstName,
-                            lastName: suggestion.lastName,
-                            id: suggestion.id,
-                          ));
+                          receiverUsers.value = [
+                            ...receiverUsers.value,
+                            ReceiverUserModel(
+                              userId: suggestion.users.id,
+                              amount: 0.0,
+                              username: suggestion.users.username,
+                              firstName: suggestion.firstName,
+                              lastName: suggestion.lastName,
+                              id: suggestion.id,
+                            ),
+                          ];
                         },
                       ),
                     ],

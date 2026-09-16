@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:get/get.dart';
-import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_auth/getx_controllers/current_bank_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_dashboard/screens/add_ibans.dart';
@@ -14,6 +13,7 @@ import 'package:slickbill/feature_dashboard/widgets/business_profile_card.dart';
 import 'package:slickbill/feature_loyalty/widgets/customer_my_merchants_entry.dart';
 import 'package:slickbill/feature_loyalty/widgets/rewards_summary_card.dart';
 import 'package:slickbill/shared_widgets/custom_appbar.dart';
+import 'package:slickbill/shared_widgets/sb_page_background.dart';
 import 'package:slickbill/theme/sb_colors.dart';
 
 class Profile extends HookWidget {
@@ -83,8 +83,10 @@ class Profile extends HookWidget {
 
     // Bank section
     return Scaffold(
+      backgroundColor: Colors.transparent,
       appBar: const CustomAppbar(title: 'Profile', appbarIcon: null),
-      body: Obx(
+      body: SbPageBackground(
+        child: Obx(
         () {
           final user = userController.user.value;
           final moneriumUserId =
@@ -104,112 +106,111 @@ class Profile extends HookWidget {
                   const BusinessProfileCard(),
                   const WalletInfo(),
                   MoneriumKycStatusCard(userId: moneriumUserId),
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 12),
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(16),
                     margin: const EdgeInsets.symmetric(horizontal: 20),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.light,
-                      borderRadius: BorderRadius.circular(12),
+                      color: SbColors.surfaceLowest,
+                      borderRadius: BorderRadius.circular(SbRadii.md),
+                      boxShadow: SbShadows.cardSoft,
                     ),
                     child: Column(
                       children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20.0,
-                            vertical: 12.0,
-                          ),
-                          child: SizedBox(
-                            width: double.infinity,
-                            child: OutlinedButton.icon(
-                              onPressed: () async {
-                                final result =
-                                    await Get.to(() => const AddIbanScreen());
-                                if (result == true) {
-                                  await userController.loadUserData();
-                                }
-                              },
-                              icon: Icon(
-                                Icons.add,
-                                color: Theme.of(context).colorScheme.blue,
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              final result =
+                                  await Get.to(() => const AddIbanScreen());
+                              if (result == true) {
+                                await userController.loadUserData();
+                              }
+                            },
+                            icon: const Icon(
+                              Icons.add,
+                              color: SbColors.deepNavy,
+                            ),
+                            label: Text(
+                              'Add bank account / IBAN',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    color: SbColors.deepNavy,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: SbColors.deepNavy),
+                              padding: const EdgeInsets.symmetric(
+                                vertical: 14,
+                                horizontal: 16,
                               ),
-                              label: Text(
-                                'Add bank account / IBAN',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      color: Theme.of(context).colorScheme.blue,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                              style: OutlinedButton.styleFrom(
-                                side: BorderSide(
-                                  color: Theme.of(context).colorScheme.blue,
-                                ),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                  horizontal: 16,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(SbRadii.md),
                               ),
                             ),
                           ),
                         ),
                         if ((user.bankName?.trim().isNotEmpty ?? false) ||
-                            (user.bankAccountName?.trim().isNotEmpty ?? false))
-                          Column(
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.account_balance,
-                                    color: Theme.of(context).colorScheme.blue,
-                                    size: 20,
+                            (user.bankAccountName?.trim().isNotEmpty ?? false) ||
+                            (user.iban?.trim().isNotEmpty ?? false)) ...[
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Your IBANs',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .labelMedium
+                                  ?.copyWith(
+                                    color: SbColors.onSurfaceVariant,
+                                    fontWeight: FontWeight.w600,
                                   ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Primary Bank Account',
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelMedium
-                                        ?.copyWith(
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .blue,
-                                        ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                (user.bankName?.trim().isNotEmpty ?? false)
-                                    ? user.bankName!
-                                    : (user.bankAccountName ?? ''),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      color: Theme.of(context).colorScheme.blue,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                              Text(
-                                user.iban ?? '',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      color: Theme.of(context).colorScheme.blue,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                              ),
-                            ],
+                            ),
                           ),
+                          const SizedBox(height: 6),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              user.iban ?? '',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleMedium
+                                  ?.copyWith(
+                                    color: SbColors.onSurface,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                            ),
+                          ),
+                          if ((user.bankAccountName?.trim().isNotEmpty ??
+                                  false) ||
+                              (user.bankName?.trim().isNotEmpty ?? false))
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                [
+                                  if (user.bankAccountName
+                                          ?.trim()
+                                          .isNotEmpty ??
+                                      false)
+                                    user.bankAccountName!.trim(),
+                                  if (user.bankName?.trim().isNotEmpty ??
+                                      false)
+                                    user.bankName!.trim(),
+                                ].join(' · '),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: SbColors.onSurfaceVariant,
+                                    ),
+                              ),
+                            ),
+                        ],
                       ],
                     ),
                   ),
@@ -235,7 +236,7 @@ class Profile extends HookWidget {
                           ),
                         ),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
+                          backgroundColor: SbColors.error,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
@@ -251,6 +252,7 @@ class Profile extends HookWidget {
             ),
           );
         },
+      ),
       ),
     );
   }

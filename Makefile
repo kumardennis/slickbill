@@ -58,10 +58,7 @@ check-prod-env:
 
 bump-play-version:
 ifeq ($(BUMP_VERSION),1)
-	@python3 -c 'import pathlib,re;p=pathlib.Path("pubspec.yaml");t=p.read_text();m=re.search(r"^(version:\s*)(\d+\.\d+\.\d+)\+(\d+)\s*$$",t,re.M); \
-	raise SystemExit("pubspec.yaml version must look like 0.1.1+32") if not m else None; \
-	n=int(m.group(3))+1;p.write_text(t[:m.start()]+("%s%s+%d"%(m.group(1),m.group(2),n))+t[m.end():]); \
-	print("Bumped Play Store version to %s+%d (versionCode %d)"%(m.group(2),n,n))'
+	@python3 -c 'import pathlib,re,sys;p=pathlib.Path("pubspec.yaml");t=p.read_text();m=re.search(r"^(version:\s*)(\d+\.\d+\.\d+)\+(\d+)\s*$$",t,re.M); m or sys.exit("pubspec.yaml version must look like 0.1.1+32"); n=int(m.group(3))+1; p.write_text(t[:m.start()]+("%s%s+%d"%(m.group(1),m.group(2),n))+t[m.end():]); print("Bumped Play Store version to %s+%d (versionCode %d)"%(m.group(2),n,n))'
 else
 	@echo "Skipping version bump (BUMP_VERSION=$(BUMP_VERSION))"
 endif

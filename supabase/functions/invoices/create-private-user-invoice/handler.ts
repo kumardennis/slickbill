@@ -4,7 +4,6 @@
 
 import {
   confirmedRequiredParams,
-  errorResponseData,
 } from "../../_shared/confirmedRequiredParams.ts";
 import { corsHeaders } from "../../_shared/cors.ts";
 import { requireOwnPrivateUser } from "../../_shared/requireOwnPrivateUser.ts";
@@ -28,23 +27,31 @@ export const handler = async (req: Request) => {
       category,
     } = await req.json();
 
-    if (
-      !confirmedRequiredParams([
-        privateUserId,
-        senderName,
-        receiverPrivateUserId,
-        receiverUserId,
-        receiverIsPrivate,
-        senderIban,
-        amount,
-        description,
-        dueDate,
-        category,
-      ])
-    ) {
-      return new Response(JSON.stringify(errorResponseData), {
-        headers: { "Content-Type": "application/json" },
-      });
+    const missing = [
+      ["privateUserId", privateUserId],
+      ["senderName", senderName],
+      ["receiverPrivateUserId", receiverPrivateUserId],
+      ["receiverUserId", receiverUserId],
+      ["receiverIsPrivate", receiverIsPrivate],
+      ["senderIban", senderIban],
+      ["amount", amount],
+      ["dueDate", dueDate],
+      ["category", category],
+    ]
+      .filter(([, value]) => !confirmedRequiredParams([value]))
+      .map(([key]) => key);
+
+    if (missing.length > 0) {
+      return new Response(
+        JSON.stringify({
+          isRequestSuccessfull: false,
+          data: { missing },
+          error: `Some values were not correct or are missing: ${missing.join(", ")}`,
+        }),
+        {
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     }
 
     const authz = await requireOwnPrivateUser(req, privateUserId);
@@ -112,7 +119,9 @@ export const handler = async (req: Request) => {
           senderId: senderData[0].id,
           receiverId: receiverData[0].id,
           amount,
-          description,
+          description: typeof description === "string" && description.trim().length > 0
+            ? description.trim()
+            : "Slickbill",
           senderName,
           senderIban,
           senderIsBusiness,

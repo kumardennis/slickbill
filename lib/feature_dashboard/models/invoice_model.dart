@@ -115,6 +115,9 @@ class InvoiceModel {
 
   bool get isFromBusiness => senderIsBusiness;
 
+  /// Memo we put on in-app euro pays so statements can match this bill.
+  String get paymentMemo => '[sb:$id]';
+
   String get displaySenderName {
     final snapshotted = senderName.trim();
     if (snapshotted.isNotEmpty) return snapshotted;

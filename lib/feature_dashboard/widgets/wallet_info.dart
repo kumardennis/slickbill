@@ -12,6 +12,7 @@ import 'package:slickbill/feature_dashboard/getx_controllers/payment_setup_contr
 import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
 import 'package:slickbill/feature_dashboard/utils/sent_invoices_class.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:slickbill/theme/sb_colors.dart';
 
 class WalletInfo extends HookWidget {
   const WalletInfo({super.key});
@@ -454,41 +455,13 @@ class WalletInfo extends HookWidget {
           throw Exception('Monerium session was not established.');
         }
 
-        var ibans = await refreshMoneriumIbansNow(
-          userId: userId,
-          walletAddress: walletAddress,
-        );
-
-        if (!isMounted()) return;
-
-        moneriumIbans.value = ibans;
-        isMoneriumConnected.value = true;
-
-        if (ibans.isNotEmpty) {
-          isAddressLinked.value = true;
-          await MoneriumService.setAddressLinked(
-            userId: userId,
-            linked: true,
-          );
-          unawaited(
-            MoneriumService.registerWalletForTracking(
-              userId: userId,
-              walletAddress: walletAddress,
-            ),
-          );
-          await paymentSetupController.markIbanReady();
-          Get.snackbar(
-            'Payments ready',
-            'Your Monerium IBAN is set up.',
-            backgroundColor: Theme.of(context).colorScheme.green,
-            colorText: Colors.white,
-            duration: const Duration(seconds: 3),
-          );
-          return;
+        if (isMounted()) {
+          isMoneriumConnected.value = true;
         }
-
         await paymentSetupController.markMoneriumConnected();
 
+        // Link this Privy wallet even if an older Monerium IBAN is already
+        // on the profile. Returning early on existing IBANs skipped POST /addresses.
         var linked = await isAddressLinkedOnMonerium(
           userId: userId,
           walletAddress: walletAddress,
@@ -500,8 +473,9 @@ class WalletInfo extends HookWidget {
           );
         }
 
-        if (!isMounted()) return;
-        isAddressLinked.value = linked;
+        if (isMounted()) {
+          isAddressLinked.value = linked;
+        }
         if (linked) {
           unawaited(
             MoneriumService.registerWalletForTracking(
@@ -512,14 +486,15 @@ class WalletInfo extends HookWidget {
           await paymentSetupController.markAddressLinked(userId: userId);
         }
 
-        ibans = await refreshMoneriumIbansNow(
+        var ibans = await refreshMoneriumIbansNow(
           userId: userId,
           walletAddress: walletAddress,
         );
-        if (!isMounted()) return;
-        moneriumIbans.value = ibans;
+        if (isMounted()) {
+          moneriumIbans.value = ibans;
+        }
 
-        if (ibans.isNotEmpty) {
+        if (ibans.isNotEmpty && linked) {
           await paymentSetupController.markIbanReady();
           Get.snackbar(
             'Payments ready',
@@ -534,7 +509,7 @@ class WalletInfo extends HookWidget {
         if (!linked) {
           Get.snackbar(
             'Finish in Monerium',
-            'Sign in succeeded, but wallet linking is still pending. Complete any Monerium KYC prompt, then tap Set up payments again.',
+            'Sign in succeeded, but wallet linking is still pending. Complete any Monerium KYC prompt, then tap Reconnect again.',
             backgroundColor: Colors.orange.shade700,
             colorText: Colors.white,
             duration: const Duration(seconds: 5),
@@ -550,9 +525,10 @@ class WalletInfo extends HookWidget {
           userId: userId,
           walletAddress: walletAddress,
         );
-        if (!isMounted()) return;
-        moneriumIbans.value = ibans;
-        isAddressLinked.value = true;
+        if (isMounted()) {
+          moneriumIbans.value = ibans;
+          isAddressLinked.value = true;
+        }
 
         if (ibans.isNotEmpty) {
           await paymentSetupController.markIbanReady();
@@ -570,14 +546,13 @@ class WalletInfo extends HookWidget {
         Get.snackbar(
           alreadyExists ? 'IBAN pending' : 'Almost done',
           alreadyExists
-              ? 'Monerium has an IBAN, but it is not visible yet. Tap Set up payments again in a few seconds.'
-              : 'IBAN requested. If Monerium asked for KYC, finish that, then tap Set up payments again.',
+              ? 'Monerium has an IBAN, but it is not visible yet. Tap Reconnect again in a few seconds.'
+              : 'IBAN requested. If Monerium asked for KYC, finish that, then tap Reconnect again.',
           backgroundColor: Colors.orange.shade700,
           colorText: Colors.white,
           duration: const Duration(seconds: 5),
         );
       } catch (e) {
-        if (!isMounted()) return;
         Get.snackbar(
           'Monerium Error',
           userFriendlyMoneriumError(e),
@@ -1148,22 +1123,9 @@ class WalletInfo extends HookWidget {
           margin: const EdgeInsets.fromLTRB(20, 8, 20, 8),
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Theme.of(context).colorScheme.blue,
-                Theme.of(context).colorScheme.turqouise,
-              ],
-            ),
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Theme.of(context).colorScheme.blue.withOpacity(0.3),
-                blurRadius: 12,
-                offset: const Offset(0, 6),
-              ),
-            ],
+            color: SbColors.deepNavy,
+            borderRadius: BorderRadius.circular(SbRadii.md),
+            boxShadow: SbShadows.navyButton,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1191,14 +1153,14 @@ class WalletInfo extends HookWidget {
               ],
               Row(
                 children: [
-                  const FaIcon(
-                    FontAwesomeIcons.ethereum,
+                  const Icon(
+                    Icons.account_balance_rounded,
                     color: Colors.white,
-                    size: 16,
+                    size: 18,
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Wallet',
+                    'Euro account',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Colors.white.withOpacity(0.9),
                           fontWeight: FontWeight.w600,
@@ -1342,9 +1304,11 @@ class WalletInfo extends HookWidget {
                   isEnabled: !isConnectingMonerium.value,
                   isLoading: isConnectingMonerium.value,
                   buttonLabel: 'Reconnect',
-                  onPressed: isConnectingMonerium.value
+                    onPressed: isConnectingMonerium.value
                       ? null
-                      : () => handleMoneriumConnect(),
+                      : () => handleMoneriumConnect(
+                            forceBrowserReconnect: true,
+                          ),
                   isLast: true,
                 ),
               ],

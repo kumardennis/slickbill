@@ -6,6 +6,7 @@ import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_loyalty/screens/merchant_cashier_screen.dart';
 import 'package:slickbill/feature_loyalty/screens/merchant_checkout_qr_screen.dart';
 import 'package:slickbill/feature_loyalty/screens/merchant_customers_screen.dart';
+import 'package:slickbill/theme/sb_colors.dart';
 
 class BusinessProfileCard extends HookWidget {
   const BusinessProfileCard({super.key});
@@ -69,8 +70,9 @@ class BusinessProfileCard extends HookWidget {
         padding: const EdgeInsets.all(20),
         margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.light,
-          borderRadius: BorderRadius.circular(12),
+          color: SbColors.surfaceLowest,
+          borderRadius: BorderRadius.circular(SbRadii.md),
+          boxShadow: SbShadows.cardSoft,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -80,18 +82,18 @@ class BusinessProfileCard extends HookWidget {
               title: Text(
                 'lbl_UseAsBusiness'.tr,
                 style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: Theme.of(context).colorScheme.dark,
+                      color: SbColors.onSurface,
                       fontWeight: FontWeight.w600,
                     ),
               ),
               subtitle: Text(
                 'lbl_UseAsBusinessHint'.tr,
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.gray,
+                      color: SbColors.onSurfaceVariant,
                     ),
               ),
               value: user.isBusiness,
-              activeThumbColor: Theme.of(context).colorScheme.blue,
+              activeThumbColor: SbColors.deepNavy,
               onChanged: isSaving.value
                   ? null
                   : (value) async {
@@ -192,18 +194,17 @@ class BusinessProfileCard extends HookWidget {
                   onPressed: isSaving.value
                       ? null
                       : () => Get.to(() => const MerchantCheckoutQrScreen()),
-                  icon: Icon(
+                  icon: const Icon(
                     Icons.qr_code_2_outlined,
-                    color: Theme.of(context).colorScheme.blue,
+                    color: SbColors.deepNavy,
                   ),
                   label: Text('btn_CheckoutQr'.tr),
                   style: OutlinedButton.styleFrom(
-                    side: BorderSide(
-                      color: Theme.of(context).colorScheme.blue,
-                    ),
+                    foregroundColor: SbColors.deepNavy,
+                    side: const BorderSide(color: SbColors.deepNavy),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(SbRadii.md),
                     ),
                   ),
                 ),
@@ -215,18 +216,17 @@ class BusinessProfileCard extends HookWidget {
                   onPressed: isSaving.value
                       ? null
                       : () => Get.to(() => const MerchantCashierScreen()),
-                  icon: Icon(
+                  icon: const Icon(
                     Icons.point_of_sale_outlined,
-                    color: Theme.of(context).colorScheme.blue,
+                    color: SbColors.deepNavy,
                   ),
                   label: Text('btn_Cashier'.tr),
                   style: OutlinedButton.styleFrom(
-                    side: BorderSide(
-                      color: Theme.of(context).colorScheme.blue,
-                    ),
+                    foregroundColor: SbColors.deepNavy,
+                    side: const BorderSide(color: SbColors.deepNavy),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(SbRadii.md),
                     ),
                   ),
                 ),
@@ -238,18 +238,17 @@ class BusinessProfileCard extends HookWidget {
                   onPressed: isSaving.value
                       ? null
                       : () => Get.to(() => const MerchantCustomersScreen()),
-                  icon: Icon(
+                  icon: const Icon(
                     Icons.insights_outlined,
-                    color: Theme.of(context).colorScheme.blue,
+                    color: SbColors.deepNavy,
                   ),
                   label: Text('btn_ViewCustomers'.tr),
                   style: OutlinedButton.styleFrom(
-                    side: BorderSide(
-                      color: Theme.of(context).colorScheme.blue,
-                    ),
+                    foregroundColor: SbColors.deepNavy,
+                    side: const BorderSide(color: SbColors.deepNavy),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(SbRadii.md),
                     ),
                   ),
                 ),

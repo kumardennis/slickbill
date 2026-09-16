@@ -11,6 +11,46 @@ class SendInvoicesClass {
   final UserController userController = Get.find<UserController>();
   CurrentBankController currentBankController = Get.find();
 
+  String _resolvedSenderIban() {
+    final current = currentBankController.current.value.iban.trim();
+    if (current.isNotEmpty) return current;
+    return (userController.user.value.iban ?? '').trim();
+  }
+
+  String _resolvedSenderName() {
+    final name = userController.user.value.requestDisplayName.trim();
+    if (name.isNotEmpty) return name;
+    return userController.user.value.username.trim();
+  }
+
+  String _resolvedDescription(dynamic description) {
+    final text = description?.toString().trim() ?? '';
+    return text.isEmpty ? 'Slickbill' : text;
+  }
+
+  String? _sendBlockReason(List<ReceiverUserModel> receiverUsers) {
+    if (userController.user.value.privateUserId == null ||
+        userController.user.value.privateUserId == 0) {
+      return 'Your profile is not ready yet. Sign out and back in.';
+    }
+    if (_resolvedSenderName().isEmpty) {
+      return 'Add your name in Profile before sending.';
+    }
+    if (_resolvedSenderIban().isEmpty) {
+      return 'Add an IBAN in Profile, or reconnect Monerium, before sending a bill.';
+    }
+    if (receiverUsers.isEmpty) {
+      return 'Pick a username first.';
+    }
+    if (receiverUsers.any((user) => user.userId <= 0 || user.id <= 0)) {
+      return 'That username did not resolve. Search again and pick from the list.';
+    }
+    if (receiverUsers.any((user) => user.amount <= 0)) {
+      return 'Enter an amount greater than 0.';
+    }
+    return null;
+  }
+
   /// create-private-user-invoice returns `data` as an inserted-row array.
   String? _createdInvoiceId(dynamic responseData) {
     if (responseData is! Map) return null;
@@ -35,25 +75,28 @@ class SendInvoicesClass {
     return id.toString();
   }
 
-  Future<void> createSendPrivateInvoice(originalInvoiceNo, description, dueDate,
+  Future<bool> createSendPrivateInvoice(originalInvoiceNo, description, dueDate,
       referenceNo, List<ReceiverUserModel> receiverUsers, category) async {
+    final blocked = _sendBlockReason(receiverUsers);
+    if (blocked != null) {
+      Get.snackbar('Oops..', blocked);
+      return false;
+    }
+
     try {
       final response = await Supabase.instance.client.functions
           .invoke('invoices/create-private-user-invoice', headers: {
         'Authorization': 'Bearer ${userController.accessToken}'
       }, body: {
         "privateUserId": userController.user.value.privateUserId,
-        "senderName": userController.user.value.requestDisplayName,
+        "senderName": _resolvedSenderName(),
         "senderIsBusiness": userController.user.value.isBusiness,
-
-        "senderIban": currentBankController.current.value.iban,
-
+        "senderIban": _resolvedSenderIban(),
         "receiverUserId": receiverUsers.first.userId,
         "receiverPrivateUserId": receiverUsers.first.id,
         "receiverIsPrivate": true,
-        // "originalInvoiceNo": originalInvoiceNo,
         "amount": receiverUsers.first.amount,
-        "description": description,
+        "description": _resolvedDescription(description),
         "dueDate": dueDate,
         "referenceNo": referenceNo,
         "category": category
@@ -63,13 +106,15 @@ class SendInvoicesClass {
 
       if (data['isRequestSuccessfull'] == true) {
         Get.snackbar('Success', 'inf_AddedToSlickBill'.tr);
+        return true;
       } else {
         Get.snackbar('Oops..', data['error'].toString());
-        return null;
+        return false;
       }
     } catch (err) {
       print(err);
-      return null;
+      Get.snackbar('Oops..', err.toString());
+      return false;
     }
   }
 
@@ -205,8 +250,14 @@ class SendInvoicesClass {
     }
   }
 
-  Future<void> createSendGroupInvoice(originalInvoiceNo, description, dueDate,
+  Future<bool> createSendGroupInvoice(originalInvoiceNo, description, dueDate,
       referenceNo, List<ReceiverUserModel> receiverUsers, category) async {
+    final blocked = _sendBlockReason(receiverUsers);
+    if (blocked != null) {
+      Get.snackbar('Oops..', blocked);
+      return false;
+    }
+
     List<Map<String, dynamic>> receivers = [];
 
     for (var element in receiverUsers) {
@@ -223,11 +274,11 @@ class SendInvoicesClass {
         'Authorization': 'Bearer ${userController.accessToken}'
       }, body: {
         "privateUserId": userController.user.value.privateUserId,
-        "senderName": userController.user.value.requestDisplayName,
+        "senderName": _resolvedSenderName(),
         "senderIsBusiness": userController.user.value.isBusiness,
-        "senderIban": currentBankController.current.value.iban,
+        "senderIban": _resolvedSenderIban(),
         "receiverUsers": receivers,
-        "description": description,
+        "description": _resolvedDescription(description),
         "dueDate": dueDate,
         "referenceNo": referenceNo,
         "category": category
@@ -237,13 +288,15 @@ class SendInvoicesClass {
 
       if (data['isRequestSuccessfull'] == true) {
         Get.snackbar('Success', 'inf_AddedToSlickBill'.tr);
+        return true;
       } else {
         Get.snackbar('Oops..', data['error'].toString());
-        return null;
+        return false;
       }
     } catch (err) {
       print(err);
-      return null;
+      Get.snackbar('Oops..', err.toString());
+      return false;
     }
   }
 

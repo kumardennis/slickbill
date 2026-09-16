@@ -7,6 +7,7 @@ import 'package:slickbill/feature_auth/models/user_model.dart';
 import 'package:slickbill/feature_auth/services/monerium_service.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/payment_setup_controller.dart';
 import 'package:slickbill/feature_dashboard/screens/add_withdraw_money.dart';
+import 'package:slickbill/theme/sb_colors.dart';
 
 class MoneriumBalanceCard extends HookWidget {
   final ClientUserModel user;
@@ -263,25 +264,11 @@ class MoneriumBalanceCard extends HookWidget {
       width: double.infinity,
       margin: const EdgeInsets.fromLTRB(20, 16, 20, 8),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Theme.of(context).colorScheme.darkerBlue.withOpacity(0.96),
-            Theme.of(context).colorScheme.blue.withOpacity(0.88),
-            Theme.of(context).colorScheme.turqouise.withOpacity(0.78),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Theme.of(context).colorScheme.darkerBlue.withOpacity(0.28),
-            blurRadius: 22,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        color: SbColors.deepNavy,
+        borderRadius: BorderRadius.circular(SbRadii.md),
+        boxShadow: SbShadows.navyButton,
         border: Border.all(
-          color: Colors.white.withOpacity(0.16),
+          color: Colors.white.withValues(alpha: 0.12),
           width: 1,
         ),
       ),

@@ -178,6 +178,15 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         processIncomingDeepLinkUri(startupUri);
       });
+    } else if (kIsWeb) {
+      final webUri = Uri.base;
+      if (webUri.queryParameters['monerium'] == '1' ||
+          webUri.queryParameters['provider'] == 'monerium') {
+        print('🔗 Startup web Monerium callback: $webUri');
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          processIncomingDeepLinkUri(webUri);
+        });
+      }
     }
   }
 

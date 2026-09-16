@@ -13,6 +13,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../feature_auth/utils/money_formatter.dart';
 import '../../shared_widgets/sb_dark_surface_theme.dart';
+import '../../shared_widgets/sb_receipt_stamp.dart';
+import '../../shared_widgets/sb_status_mark.dart';
+import 'package:slickbill/theme/sb_colors.dart';
 import '../models/invoice_model.dart';
 import 'from_business_badge.dart';
 
@@ -235,24 +238,7 @@ class ReceivedInvoiceSheet extends HookWidget {
 
     return SbDarkSurfaceTheme(
       builder: (context) => Container(
-      decoration: BoxDecoration(
-          gradient: LinearGradient(
-              colors: [
-            Theme.of(context).colorScheme.darkerBlue,
-            Theme.of(context).colorScheme.blue,
-            Theme.of(context).colorScheme.turqouise,
-            Theme.of(context).colorScheme.darkerBlue,
-          ],
-              stops: const [
-            0.0,
-            0.2,
-            0.7,
-            0.85
-          ],
-              transform: GradientRotation(3.14 / 4),
-              tileMode: TileMode.clamp,
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight)),
+      decoration: const BoxDecoration(color: SbColors.deepNavy),
       height: double.infinity,
       child: Padding(
         padding: const EdgeInsets.all(20.0),
@@ -295,64 +281,68 @@ class ReceivedInvoiceSheet extends HookWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Text(
-                            normalizedStatus == 'PAID'
-                                ? 'lbl_Paid'.tr
-                                : normalizedStatus == 'PROCESSING'
-                                    ? 'Waiting'
-                                    : 'lbl_Unpaid'.tr,
-                            style: Theme.of(context)
-                                .textTheme
-                                .displayMedium
-                                ?.copyWith(
-                                    color: normalizedStatus == 'PAID'
-                                        ? Theme.of(context).colorScheme.green
-                                        : normalizedStatus == 'PROCESSING'
-                                            ? Theme.of(context)
-                                                .colorScheme
-                                                .yellow
-                                            : dateIsPassed
-                                                ? Theme.of(context)
-                                                    .colorScheme
-                                                    .red
-                                                : Theme.of(context)
-                                                    .colorScheme
-                                                    .yellow)),
-                        const SizedBox(
-                          width: 10,
-                        ),
-                        normalizedStatus == 'PAID'
-                            ? FaIcon(
-                                FontAwesomeIcons.circleCheck,
-                                size: 20,
-                                color: Theme.of(context).colorScheme.green,
-                              )
-                            : FaIcon(
-                                FontAwesomeIcons.clockRotateLeft,
-                                size: 20,
-                                color: normalizedStatus == 'PROCESSING'
-                                    ? Theme.of(context).colorScheme.yellow
-                                    : dateIsPassed
-                                        ? Theme.of(context).colorScheme.red
-                                        : Theme.of(context).colorScheme.yellow,
-                              )
-                      ],
-                    ),
-                    const SizedBox(
-                      height: 10,
-                    ),
+                    if (normalizedStatus != 'PAID' &&
+                        !(normalizedStatus != 'PROCESSING' && dateIsPassed)) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Text(
+                              normalizedStatus == 'PROCESSING'
+                                  ? 'Waiting'
+                                  : 'lbl_Unpaid'.tr,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .displayMedium
+                                  ?.copyWith(
+                                      color: normalizedStatus == 'PROCESSING'
+                                          ? Theme.of(context)
+                                              .colorScheme
+                                              .electricCyan
+                                          : Theme.of(context)
+                                              .colorScheme
+                                              .yellow)),
+                          const SizedBox(width: 10),
+                          if (normalizedStatus == 'PROCESSING')
+                            const SbStatusMark(
+                              mark: SbInvoiceStatusMark.processing,
+                              size: 22,
+                            )
+                          else
+                            FaIcon(
+                              FontAwesomeIcons.clockRotateLeft,
+                              size: 20,
+                              color: Theme.of(context).colorScheme.yellow,
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                    ],
                     Text(formatNumber.formatMoney(displayedInvoice.amount),
                         style: Theme.of(context)
                             .textTheme
                             .displayLarge
                             ?.copyWith(
                                 fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.light))
+                                color: Theme.of(context).colorScheme.light)),
+                    if (normalizedStatus == 'PAID') ...[
+                      const SizedBox(height: 10),
+                      SbReceiptStamp(
+                        label: 'lbl_Paid'.tr,
+                        color: Theme.of(context).colorScheme.green,
+                        fontSize: 16,
+                        animate: true,
+                      ),
+                    ] else if (normalizedStatus != 'PROCESSING' &&
+                        dateIsPassed) ...[
+                      const SizedBox(height: 10),
+                      SbReceiptStamp(
+                        label: 'lbl_Overdue'.tr,
+                        color: Theme.of(context).colorScheme.red,
+                        fontSize: 13,
+                      ),
+                    ],
                   ],
-                )
+                ),
               ],
             ),
             if (normalizedStatus == 'PAID') ...[
@@ -792,6 +782,10 @@ class ReceivedInvoiceSheet extends HookWidget {
                       },
                     ),
                   ],
+                  const SizedBox(height: 12),
+                  SbDashedDivider(
+                    color: Theme.of(context).colorScheme.light.withOpacity(0.35),
+                  ),
                 ],
               ),
             ),
@@ -981,6 +975,46 @@ class ReceivedInvoiceSheet extends HookWidget {
                       Get.snackbar(
                           'inf_Copied'.tr, displayedInvoice.referenceNo ?? '');
                     }
+                  },
+                  child: FaIcon(
+                    FontAwesomeIcons.copy,
+                    color: Theme.of(context).colorScheme.gray,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(
+              height: 30,
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(displayedInvoice.paymentMemo,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context)
+                              .textTheme
+                              .displayMedium
+                              ?.copyWith(fontWeight: FontWeight.w600)),
+                      Text('lbl_Memo'.tr,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(
+                                  color: Theme.of(context).colorScheme.gray))
+                    ],
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () async {
+                    await Clipboard.setData(
+                        ClipboardData(text: displayedInvoice.paymentMemo));
+                    Get.snackbar(
+                        'inf_Copied'.tr, displayedInvoice.paymentMemo);
                   },
                   child: FaIcon(
                     FontAwesomeIcons.copy,
