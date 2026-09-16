@@ -4,7 +4,7 @@ Stack split (git branches, hosts, new prod Supabase): **`docs/prod-migration.md`
 
 Prod Express is a **new** Vercel project (not `express-ten-xi`). Redirect URI, SIWE domain, and Alchemy webhook must use that prod host. Staging Express stays `https://express-ten-xi.vercel.app` + `https://api.monerium.dev`.
 
-Do this as one cutover. Do not mix sandbox credentials with Polygon mainnet Alchemy, or prod API with the Amoy EURe contract.
+Do this as one cutover. Do not mix sandbox credentials with Ethereum mainnet Alchemy, or prod API with the Amoy EURe contract.
 
 ---
 
@@ -26,7 +26,7 @@ Register **exactly**:
 | --- | --- |
 | Redirect URI | `https://<prod-express>/monerium/oauth/callback` |
 | SIWE domain | Host of prod `PUBLIC_SERVER_URL` (prod Express, not `express-ten-xi`) |
-| SIWE chain ID | `137` (Polygon mainnet) |
+| SIWE chain ID | `1` (Ethereum mainnet) |
 | Statement / privacy / terms | Must match env below, character for character |
 
 Sandbox client id/secret, IBANs, profiles, and refresh tokens **do not work** in prod. Testers KYC on **monerium.app**. After cutover, everyone reconnects Monerium in the app (wipe `monerium_tokens` rows if SIWE fails on stale sandbox tokens).
@@ -44,10 +44,10 @@ Put these on the **prod** Express project only. Leave `express-ten-xi` on sandbo
 | `MONERIUM_CLIENT_SECRET` | sandbox (if the old app had one) | omit for PKCE OAuth apps |
 | `MONERIUM_REDIRECT_URI` | staging callback on `express-ten-xi` | `https://<prod-express>/monerium/oauth/callback` |
 | `PUBLIC_SERVER_URL` | `https://express-ten-xi.vercel.app` | prod Express origin |
-| `MONERIUM_WALLET_CHAIN` | `polygon` or `polygon:amoy` | `polygon` |
-| `MONERIUM_SIWE_CHAIN_ID` | `80002` if Amoy | `137` |
-| `MONERIUM_EURE_TOKEN_ADDRESS` | Amoy EURe | Polygon EURe `0xE0aEa583266584DafBB3f9C3211d5588c73fEa8d` |
-| `MONERIUM_NETWORK_ADDRESS` | same as above if used | same Polygon EURe address |
+| `MONERIUM_WALLET_CHAIN` | `polygon` or `polygon:amoy` | `ethereum` |
+| `MONERIUM_SIWE_CHAIN_ID` | `80002` if Amoy | `1` |
+| `MONERIUM_EURE_TOKEN_ADDRESS` | Amoy EURe | Ethereum EURe `0x39b8B6385416f4cA36a20319F70D28621895279D` |
+| `MONERIUM_NETWORK_ADDRESS` | same as above if used | same Ethereum EURe address |
 | `MONERIUM_STATE_SECRET` | may fall back to `"dev-monerium-state-secret"` | set a long random secret (not the default) |
 
 Leave path overrides alone unless Monerium tells you otherwise (`/auth`, `/auth/token`, `/addresses`, `/ibans`, `/orders`, `/profiles`).
@@ -65,15 +65,15 @@ Redeploy Express after saving env.
 
 ---
 
-## 3. Alchemy — Polygon mainnet
+## 3. Alchemy — Ethereum mainnet
 
 Settlement watches **ERC-20 activity on EURe**, then loads the Monerium order.
 
 | Variable | Production |
 | --- | --- |
-| `ALCHEMY_NETWORK_URL` | Polygon **mainnet** HTTPS RPC (not Amoy) |
+| `ALCHEMY_NETWORK_URL` | Ethereum **mainnet** HTTPS RPC (not Sepolia) |
 | `ALCHEMY_WEBHOOK_SIGNING_KEY` | signing key of the **new** webhook |
-| `ALCHEMY_WEBHOOK_ID` | Address Activity webhook on Polygon mainnet |
+| `ALCHEMY_WEBHOOK_ID` | Address Activity webhook on Ethereum mainnet |
 | `ALCHEMY_NOTIFY_AUTH_TOKEN` | dashboard token so new wallets get added to the webhook |
 
 Webhook URL (unchanged path):
@@ -82,13 +82,13 @@ Webhook URL (unchanged path):
 https://<prod-express>/monerium/chain/transfers
 ```
 
-Filter / contract: Polygon EURe `0xE0aEa583266584DafBB3f9C3211d5588c73fEa8d`.
+Filter / contract: Ethereum EURe `0x39b8B6385416f4cA36a20319F70D28621895279D`.
 
 The Flutter listener uses the same RPC + token via dart-define / `.env`:
 
 ```text
-ALCHEMY_NETWORK_URL=https://polygon-mainnet.g.alchemy.com/v2/<key>
-MONERIUM_NETWORK_ADDRESS=0xE0aEa583266584DafBB3f9C3211d5588c73fEa8d
+ALCHEMY_NETWORK_URL=https://eth-mainnet.g.alchemy.com/v2/<key>
+MONERIUM_NETWORK_ADDRESS=0x39b8B6385416f4cA36a20319F70D28621895279D
 ```
 
 `make run-mobile` / `make build-web` already pass those two. Rebuild the app after changing `.env`.
@@ -112,7 +112,7 @@ MONERIUM_NETWORK_ADDRESS=0xE0aEa583266584DafBB3f9C3211d5588c73fEa8d
 
 Use €1–2.
 
-1. Connect wallet + Monerium SIWE. IBAN shows. Balance is Polygon EURe.
+1. Connect wallet + Monerium SIWE. IBAN shows. Balance is Ethereum EURe.
 2. SEPA into that IBAN → mint → balance in app.
 3. A sends invoice to B. B pays. Order `processed`. Invoice **PAID**. Both notified. `moneriumOrderId` / `txHash` stored.
 4. Withdraw to an external IBAN.
@@ -125,6 +125,6 @@ If 3 fails but the bank/EURe moved, Alchemy webhook or EURe contract address is 
 ## 6. Quick verify after deploy
 
 - Express logs / a test SIWE: authorize URL host is `api.monerium.app`, not `api.monerium.dev`
-- SIWE log line: `chainId: 137`, `redirectUri` = the portal callback
-- Alchemy dashboard: webhook is Polygon mainnet, last ping hits `/monerium/chain/transfers` with 200
+- SIWE log line: `chainId: 1`, `redirectUri` = the portal callback
+- Alchemy dashboard: webhook is Ethereum mainnet, last ping hits `/monerium/chain/transfers` with 200
 - No leftover Amoy token address in Vercel or Flutter `.env`

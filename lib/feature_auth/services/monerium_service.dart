@@ -744,7 +744,7 @@ class MoneriumService {
     if (_configuredWalletChain.trim().isNotEmpty) {
       return _configuredWalletChain.trim();
     }
-    return 'polygon';
+    return AppEnv.isProduction ? 'ethereum' : 'polygon';
   }
 
   static double? extractEurAvailable(dynamic data) {

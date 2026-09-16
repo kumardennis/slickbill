@@ -209,7 +209,7 @@ const moneriumSiweTermsUrl =
   process.env.MONERIUM_TERMS_URL?.trim() || "https://slickbills.com/terms";
 
 // EIP-4361 Chain ID for the SIWE message. Can be overridden via env.
-// Falls back to a mapping from MONERIUM_WALLET_CHAIN name, then defaults to 137 (Polygon).
+// Falls back to a mapping from MONERIUM_WALLET_CHAIN name, then Ethereum.
 const resolveSiweChainId = (): number => {
   const fromEnv = process.env.MONERIUM_SIWE_CHAIN_ID?.trim();
   if (fromEnv) {
@@ -226,8 +226,7 @@ const resolveSiweChainId = (): number => {
   };
   const chainKey = configuredMoneriumWalletChain.toLowerCase();
   if (chainKey && chainMap[chainKey] !== undefined) return chainMap[chainKey];
-  // Default to Polygon (most common Monerium chain)
-  return 137;
+    return 1;
 };
 const moneriumSiweChainId = resolveSiweChainId();
 

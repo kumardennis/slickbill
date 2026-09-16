@@ -15,6 +15,7 @@ export const web3AuthContextConfig: Web3AuthContextConfig = {
     clientId,
     web3AuthNetwork: resolveWeb3AuthNetwork(),
     enableLogging: true,
+    defaultChainId: "0x1",
     uiConfig: {
       uxMode: "redirect",
       appName: "SlickBills",

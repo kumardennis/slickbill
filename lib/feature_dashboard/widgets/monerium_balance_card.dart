@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
+import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/feature_auth/models/user_model.dart';
 import 'package:slickbill/feature_auth/services/monerium_service.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/payment_setup_controller.dart';
@@ -101,7 +102,7 @@ class MoneriumBalanceCard extends HookWidget {
       if (configured.trim().isNotEmpty) {
         return configured.trim();
       }
-      return 'polygon';
+      return AppEnv.isProduction ? 'ethereum' : 'polygon';
     }
 
     String summarizeMoneriumBalances(dynamic data) {

@@ -6,6 +6,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
+import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/models/user_model.dart';
@@ -190,7 +191,13 @@ class AddWithdrawMoneyScreen extends HookWidget {
           return;
         }
 
-        var chain = 'polygon';
+        var chain = const String.fromEnvironment(
+          'MONERIUM_WALLET_CHAIN',
+          defaultValue: '',
+        ).trim();
+        if (chain.isEmpty) {
+          chain = AppEnv.isProduction ? 'ethereum' : 'polygon';
+        }
         for (final row in ibans) {
           if (row is Map && row['chain']?.toString().trim().isNotEmpty == true) {
             chain = row['chain'].toString().trim();

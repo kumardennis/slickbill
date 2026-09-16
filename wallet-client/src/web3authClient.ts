@@ -41,8 +41,8 @@ export async function recoverConnectedWallet(
   }
 
   try {
-    log("recover: switchChain 0x89");
-    await web3Auth.switchChain({ chainId: "0x89" });
+    log("recover: switchChain 0x1");
+    await web3Auth.switchChain({ chainId: "0x1" });
     const afterSwitch = await waitForWalletAddress(
       web3Auth,
       web3Auth.connection,
