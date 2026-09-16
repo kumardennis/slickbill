@@ -18,7 +18,6 @@ import {
 import logo from "../../assets/logo_icon.png";
 import { sb } from "../../theme";
 import {
-  armGoogleAccountPicker,
   clearLoginStarted,
   loginWasStarted,
   markLoginStarted,
@@ -411,7 +410,6 @@ export function PrivyAuth() {
   const handleChooseAnother = async () => {
     setErrorMessage(null);
     setBusy(true);
-    armGoogleAccountPicker();
     try {
       if (authenticated) {
         await logout();
