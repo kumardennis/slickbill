@@ -607,6 +607,59 @@ const makeError = (
   status = 400,
 ) => ({ ok: false, error: { code, message, details }, status });
 
+const isMoneriumSandboxHost = /monerium\.dev/i.test(moneriumBaseUrl);
+const isProductionAppEnv =
+  (process.env.APP_ENV || "").trim().toLowerCase() === "production";
+
+/** Sandbox chains are sepolia/amoy/chiado. Production uses ethereum/polygon/gnosis. */
+const toMoneriumApiChain = (chain: string): string => {
+  const key = chain.trim().toLowerCase();
+  if (!key) return key;
+
+  if (isMoneriumSandboxHost) {
+    if (
+      isProductionAppEnv &&
+      (key === "ethereum" || key === "ethereum:mainnet")
+    ) {
+      throw makeError(
+        "MONERIUM_CHAIN_ENV_MISMATCH",
+        "Production asked for Ethereum mainnet, but Express is calling sandbox api.monerium.dev. Set MONERIUM_BASE_URL=https://api.monerium.app on slickbills-express-prod.",
+        { chain, moneriumBaseUrl },
+        500,
+      );
+    }
+    const sandbox: Record<string, string> = {
+      ethereum: "sepolia",
+      "ethereum:mainnet": "sepolia",
+      "ethereum:sepolia": "sepolia",
+      sepolia: "sepolia",
+      polygon: "amoy",
+      "polygon:amoy": "amoy",
+      amoy: "amoy",
+      gnosis: "chiado",
+      "gnosis:chiado": "chiado",
+      chiado: "chiado",
+    };
+    return sandbox[key] ?? key;
+  }
+
+  const production: Record<string, string> = {
+    ethereum: "ethereum",
+    "ethereum:mainnet": "ethereum",
+    polygon: "polygon",
+    "polygon:mainnet": "polygon",
+    gnosis: "gnosis",
+    "gnosis:mainnet": "gnosis",
+  };
+  return production[key] ?? key;
+};
+
+console.log("Monerium API host", {
+  base: moneriumBaseUrl,
+  configuredChain: configuredMoneriumWalletChain || null,
+  sandbox: isMoneriumSandboxHost,
+});
+
 const summarizeMoneriumErrorData = (data: unknown): string | null => {
   if (!data || typeof data !== "object") {
     return null;
@@ -902,22 +955,7 @@ const moneriumApiRequest = async (params: {
   const resolveToken = async () => getValidMoneriumToken(params.userId);
 
   const execute = async (token: MoneriumTokenEntry) => {
-    const normalizedPath = params.path.split("?")[0].replace(/\/+$/, "");
-    const normalizedOrdersPath = moneriumOrdersPath.replace(/\/+$/, "");
-    const normalizedRedeemPath = moneriumRedeemPath.replace(/\/+$/, "");
-    const normalizedProfilesPath = moneriumProfilesPath.replace(/\/+$/, "");
-
-    const requiresV2Accept =
-      normalizedPath === normalizedOrdersPath ||
-      normalizedPath.startsWith(`${normalizedOrdersPath}/`) ||
-      normalizedPath === normalizedRedeemPath ||
-      normalizedPath.startsWith(`${normalizedRedeemPath}/`) ||
-      normalizedPath === normalizedProfilesPath ||
-      normalizedPath.startsWith(`${normalizedProfilesPath}/`);
-
-    const acceptHeader = requiresV2Accept
-      ? "application/vnd.monerium.api-v2+json"
-      : "application/json";
+    const acceptHeader = "application/vnd.monerium.api-v2+json";
     const url = makeMoneriumUrl(params.path, params.query);
     const controller = new AbortController();
     const requestTimeoutMs = params.timeoutMs ?? moneriumHttpTimeoutMs;
@@ -2611,7 +2649,9 @@ app.post("/monerium/wallet/link", async (req: any, res: any) => {
       req.body ?? {};
     const requestedChain =
       typeof chain === "string" && chain.trim().length > 0 ? chain.trim() : "";
-    const resolvedChain = configuredMoneriumWalletChain || requestedChain;
+    const resolvedChain = toMoneriumApiChain(
+      configuredMoneriumWalletChain || requestedChain,
+    );
 
     if (!userId || typeof userId !== "string") {
       return res
@@ -3023,7 +3063,9 @@ app.post("/monerium/ibans/request", async (req: any, res: any) => {
     const { userId, address, chain } = req.body ?? {};
     const requestedChain =
       typeof chain === "string" && chain.trim().length > 0 ? chain.trim() : "";
-    const resolvedChain = configuredMoneriumWalletChain || requestedChain;
+    const resolvedChain = toMoneriumApiChain(
+      configuredMoneriumWalletChain || requestedChain,
+    );
 
     if (!userId || typeof userId !== "string") {
       return res
@@ -3127,7 +3169,9 @@ app.get("/monerium/balances", async (req: any, res: any) => {
       typeof req.query?.address === "string" ? req.query.address.trim() : "";
     const requestedChain =
       typeof req.query?.chain === "string" ? req.query.chain.trim() : "";
-    const chain = requestedChain || configuredMoneriumWalletChain;
+    const chain = toMoneriumApiChain(
+      requestedChain || configuredMoneriumWalletChain,
+    );
 
     if (!userId) {
       return res
@@ -3377,7 +3421,9 @@ app.post("/monerium/orders/send", async (req: any, res: any) => {
 
     const bodyChain =
       typeof orderPayload.chain === "string" ? orderPayload.chain.trim() : "";
-    const resolvedChain = bodyChain || configuredMoneriumWalletChain;
+    const resolvedChain = toMoneriumApiChain(
+      bodyChain || configuredMoneriumWalletChain,
+    );
     if (!resolvedChain) {
       return res
         .status(400)
@@ -3618,7 +3664,9 @@ app.post("/monerium/orders/withdraw", async (req: any, res: any) => {
 
     const bodyChain =
       typeof orderPayload.chain === "string" ? orderPayload.chain.trim() : "";
-    const resolvedChain = bodyChain || configuredMoneriumWalletChain;
+    const resolvedChain = toMoneriumApiChain(
+      bodyChain || configuredMoneriumWalletChain,
+    );
     if (!resolvedChain) {
       return res
         .status(400)
