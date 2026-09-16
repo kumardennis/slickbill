@@ -120,7 +120,7 @@ class MetamaskWalletService {
   }
 
   static String get _walletClientBaseUrl => AppEnv.walletClientUrl;
-  static const String _metamaskAuthPath = '/wallet/metamask-auth';
+  static const String _walletAuthPath = '/wallet/privy-auth';
   static const String _callbackHost = 'home-screen';
   static const String moneriumOwnershipMessage =
       'I hereby declare that I am the address owner.';
@@ -135,13 +135,13 @@ class MetamaskWalletService {
   static String _callbackUriForPlatform({Map<String, String>? extra}) {
     if (kIsWeb) {
       final requestId = DateTime.now().microsecondsSinceEpoch.toString();
-      final origin = Uri.base.origin.isNotEmpty
-          ? Uri.base.origin
-          : AppEnv.appBaseUrl;
+      final origin =
+          Uri.base.origin.isNotEmpty ? Uri.base.origin : AppEnv.appBaseUrl;
 
       return Uri.parse('$origin/home-screen').replace(
         queryParameters: {
           'metamask': '1',
+          'privy': '1',
           'request_id': requestId,
           ...?extra,
         },
@@ -158,6 +158,7 @@ class MetamaskWalletService {
       host: _callbackHost,
       queryParameters: {
         'metamask': '1',
+        'privy': '1',
         'request_id': requestId,
         ...?extra,
       },
@@ -302,7 +303,8 @@ class MetamaskWalletService {
     _webCallbackSub = slickBillsPostMessages().listen((msg) {
       final type = msg['type']?.toString();
       if (type != 'SB_METAMASK_AUTH' && type != 'SB_AUTH') return;
-      if (type == 'SB_AUTH' && msg['provider']?.toString() != 'metamask') {
+      final provider = msg['provider']?.toString();
+      if (type == 'SB_AUTH' && provider != 'metamask' && provider != 'privy') {
         return;
       }
 
@@ -339,17 +341,18 @@ class MetamaskWalletService {
     if (!kIsWeb) return null;
 
     final uri = Uri.base;
-    final isMetaMask = uri.queryParameters['metamask'] == '1';
-    if (!isMetaMask) return null;
+    final isWalletCallback = uri.queryParameters['metamask'] == '1' ||
+        uri.queryParameters['privy'] == '1';
+    if (!isWalletCallback) return null;
 
     final signature = uri.queryParameters['signature']?.trim() ?? '';
     final address = uri.queryParameters['address']?.trim() ?? '';
-    final kind = (uri.queryParameters['kind']?.trim().toLowerCase().isNotEmpty ??
-            false)
-        ? uri.queryParameters['kind']!.trim().toLowerCase()
-        : (signature.isNotEmpty ? 'link' : 'connect');
-    final hadPendingSign = _pendingSignCompleter != null &&
-        !_pendingSignCompleter!.isCompleted;
+    final kind =
+        (uri.queryParameters['kind']?.trim().toLowerCase().isNotEmpty ?? false)
+            ? uri.queryParameters['kind']!.trim().toLowerCase()
+            : (signature.isNotEmpty ? 'link' : 'connect');
+    final hadPendingSign =
+        _pendingSignCompleter != null && !_pendingSignCompleter!.isCompleted;
 
     onAuthCallbackUri(uri);
     slickBillsBroadcastWalletMessage({
@@ -472,8 +475,7 @@ class MetamaskWalletService {
 
     _listenForWebWalletCallback();
 
-    final authUri =
-        Uri.parse('$_walletClientBaseUrl$_metamaskAuthPath').replace(
+    final authUri = Uri.parse('$_walletClientBaseUrl$_walletAuthPath').replace(
       queryParameters: {
         'sb': '1',
         'provider': loginProvider,
@@ -534,8 +536,7 @@ class MetamaskWalletService {
     _listenForWebWalletCallback();
 
     final kind = preview?.kind ?? 'link';
-    final signUri =
-        Uri.parse('$_walletClientBaseUrl$_metamaskAuthPath').replace(
+    final signUri = Uri.parse('$_walletClientBaseUrl$_walletAuthPath').replace(
       queryParameters: {
         'sb': '1',
         'mode': 'sign',

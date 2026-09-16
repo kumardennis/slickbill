@@ -317,8 +317,7 @@ export function PrivyAuth() {
           }}
         >
           Google, MetaMask, Rabby, WalletConnect, and other Ethereum wallets.
-          Web3Auth is unchanged at /wallet/metamask-auth. Facebook is not a
-          native Privy login.
+          Facebook is not a native Privy login.
         </p>
 
         {statusCopy ? (

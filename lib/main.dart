@@ -18,7 +18,6 @@ import 'package:slickbill/feature_auth/screens/home_screen.dart';
 import 'package:slickbill/feature_auth/screens/sign_up.dart';
 import 'package:slickbill/feature_auth/screens/spash_screen.dart';
 import 'package:slickbill/feature_auth/services/deep_links.dart';
-import 'package:slickbill/feature_auth/services/native_web3auth_service.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
 import 'package:slickbill/feature_navigation/getx_controllers/navigation_controller.dart';
 import 'package:slickbill/feature_loyalty/screens/merchant_check_in_landing_screen.dart';
@@ -86,13 +85,6 @@ Future<void> main() async {
   Get.put<DigitalInvoiceController>(DigitalInvoiceController(),
       permanent: true);
   Get.put<NavigationController>(NavigationController(), permanent: true);
-
-  try {
-    await NativeWeb3AuthService.initialize();
-    print('✅ Native Web3Auth initialized');
-  } catch (e) {
-    print('⚠️ Native Web3Auth init failed: $e');
-  }
 
   runApp(const MyApp());
 }

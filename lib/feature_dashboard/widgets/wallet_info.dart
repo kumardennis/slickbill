@@ -349,7 +349,7 @@ class WalletInfo extends HookWidget {
             '[WalletConnectUI] connectWalletAddress() returned empty=${address == null || address.isEmpty}');
 
         if (address == null || address.isEmpty) {
-          throw Exception('No wallet address returned from Web3Auth login.');
+          throw Exception('No wallet address returned from wallet login.');
         }
 
         debugPrint(
@@ -360,7 +360,7 @@ class WalletInfo extends HookWidget {
 
         if (!updated) {
           throw Exception(
-              'Failed to save Web3Auth wallet address for user ID ${userController.user.value.id}.');
+              'Failed to save wallet address for user ID ${userController.user.value.id}.');
         }
 
         if (!isMounted()) return;
@@ -383,7 +383,7 @@ class WalletInfo extends HookWidget {
         if (!isMounted()) return;
         Get.snackbar(
           'Error',
-          'Failed to connect Web3Auth wallet: ${e.toString()}',
+          'Failed to connect wallet: ${e.toString()}',
           backgroundColor: Theme.of(context).colorScheme.red,
           colorText: Colors.white,
           duration: const Duration(seconds: 3),
@@ -1195,7 +1195,7 @@ class WalletInfo extends HookWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Web3Auth Wallet',
+                    'Wallet',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Colors.white.withOpacity(0.9),
                           fontWeight: FontWeight.w600,
@@ -1226,7 +1226,7 @@ class WalletInfo extends HookWidget {
                     Expanded(
                       child: Text(
                         metamaskWalletAddress.value == null
-                            ? 'Web3Auth wallet not connected'
+                            ? 'Wallet not connected'
                             : 'Wallet: ${shortAddress(metamaskWalletAddress.value!)}',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: Colors.white,

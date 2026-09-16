@@ -3,13 +3,11 @@ import "./index.css";
 import App from "./App.tsx";
 import React from "react";
 import { Web3AuthProvider } from "@web3auth/modal/react";
-import { MetamaskAuth } from "./pages/metamask/MetamaskAuth.tsx";
-import { PrivyAuthRoot } from "./pages/privy/PrivyAuthRoot";
+import { PrivyAuth } from "./pages/privy/PrivyAuth";
+import { PrivyRoot } from "./pages/privy/PrivyAuthRoot";
+import { MoneriumSiwe } from "./pages/siwe/MoneriumSiwe";
 import processShim from "process";
-import {
-  isWeb3AuthRedirectReturn,
-  web3AuthContextConfig,
-} from "./web3authContext";
+import { web3AuthContextConfig } from "./web3authContext";
 
 const processRef = processShim as {
   nextTick?: (cb: () => void) => void;
@@ -24,17 +22,19 @@ if (typeof processRef.nextTick !== "function") {
 (globalThis as { process?: typeof processRef }).process = processRef;
 
 const pathname = window.location.pathname;
-const isStandalonePrivyRoute = pathname === "/wallet/privy-auth";
-const isStandaloneMetamaskRoute =
-  pathname === "/wallet/metamask-auth" || isWeb3AuthRedirectReturn();
+const isPrivySiweRoute = pathname === "/wallet/siwe";
+const isPrivyConnectRoute =
+  pathname === "/wallet/privy-auth" || pathname === "/wallet/metamask-auth";
 
 const root = (
   <React.StrictMode>
-    {isStandalonePrivyRoute ? (
-      <PrivyAuthRoot />
+    {isPrivySiweRoute || isPrivyConnectRoute ? (
+      <PrivyRoot>
+        {isPrivySiweRoute ? <MoneriumSiwe /> : <PrivyAuth />}
+      </PrivyRoot>
     ) : (
       <Web3AuthProvider config={web3AuthContextConfig}>
-        {isStandaloneMetamaskRoute ? <MetamaskAuth /> : <App />}
+        <App />
       </Web3AuthProvider>
     )}
   </React.StrictMode>

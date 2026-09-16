@@ -1,11 +1,12 @@
-import { useWeb3Auth, useWeb3AuthConnect } from "@web3auth/modal/react";
+import {
+  useCreateWallet,
+  useLogin,
+  usePrivy,
+  useWallets,
+} from "@privy-io/react-auth";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { sb } from "../../theme";
 import { expressServerUrl } from "../../config";
-import {
-  recoverConnectedWallet,
-  waitForSocialWallet,
-} from "../../web3authClient";
 
 const SIWE_PARAMS_SESSION_KEY = "monerium_siwe_params_v1";
 const SIWE_PARAMS_LOCAL_KEY = "monerium_siwe_params_v1_local";
@@ -17,16 +18,22 @@ type CompleteData = {
   status?: "success" | "pending" | string;
 };
 
+type RpcProvider = {
+  request?: (args: { method: string; params?: unknown }) => Promise<unknown>;
+};
+
 export function MoneriumSiwe() {
-  const { web3Auth, isInitialized, initError } = useWeb3Auth();
-  const { connect } = useWeb3AuthConnect();
+  const { ready, authenticated } = usePrivy();
+  const { login } = useLogin();
+  const { wallets, ready: walletsReady } = useWallets();
+  const { createWallet } = useCreateWallet();
   const [step, setStep] = useState<Step>("idle");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [statusText, setStatusText] = useState("Connecting wallet…");
 
-  const startedRef = useRef(false);
+  const loginStartedRef = useRef(false);
+  const signStartedRef = useRef(false);
 
-  // Read all params from URL once
   const params = new URLSearchParams(window.location.search);
   const rawUserId = params.get("userId")?.trim() ?? "";
   const rawWalletAddress = params.get("address")?.trim() ?? "";
@@ -124,36 +131,18 @@ export function MoneriumSiwe() {
         throw new Error("Missing userId or walletAddress in URL params.");
       }
 
-      try {
-        sessionStorage.setItem(
-          SIWE_PARAMS_SESSION_KEY,
-          JSON.stringify({ userId, walletAddress, appRedirectUri, orderId }),
-        );
-      } catch {
-        // ignore storage errors
-      }
-
-      // ── 1. Wait for the React SDK provider (already initialized) ────
       setStep("init");
-      setStatusText("Initialising wallet…");
-
-      if (!web3Auth) throw new Error("Web3Auth is not ready.");
-
-      // ── 2. Get SIWE message from backend ─────────────────────────────
       setStatusText("Preparing sign-in message…");
-      const startRes = await fetch(
-        `${expressServerUrl}/monerium/siwe/start`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userId,
-            walletAddress,
-            appRedirectUri,
-            orderId,
-          }),
-        },
-      );
+      const startRes = await fetch(`${expressServerUrl}/monerium/siwe/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          walletAddress,
+          appRedirectUri,
+          orderId,
+        }),
+      });
 
       if (!startRes.ok) {
         const err = await startRes.json().catch(() => null);
@@ -165,39 +154,39 @@ export function MoneriumSiwe() {
         state: string;
       };
 
-      // ── 3. Connect wallet and sign ───────────────────────────────────
       setStep("signing");
       setStatusText("Please sign the message in your wallet…");
 
-      const recovered = await recoverConnectedWallet(web3Auth, walletAddress);
-      const waited = recovered
-        ? recovered
-        : await waitForSocialWallet(
-            web3Auth,
-            await connect(),
-            walletAddress,
-          );
-      const provider = waited.provider;
+      const wanted = walletAddress.toLowerCase();
+      let wallet =
+        wallets.find((item) => item.address.toLowerCase() === wanted) ?? null;
+      if (!wallet) {
+        const created = await createWallet().catch(() => null);
+        if (created && created.address.toLowerCase() === wanted) {
+          wallet = created;
+        }
+      }
 
-      if (!provider) throw new Error("Web3Auth modal closed before signing.");
+      if (!wallet || typeof wallet.getEthereumProvider !== "function") {
+        throw new Error(
+          "Connected wallet does not match the address used to link Monerium.",
+        );
+      }
 
-      const providerWithRequest = provider as {
-        request?: (args: unknown) => Promise<unknown>;
-      };
-
-      if (typeof providerWithRequest.request !== "function") {
+      const provider = (await wallet.getEthereumProvider()) as RpcProvider;
+      if (typeof provider.request !== "function") {
         throw new Error("Connected wallet does not support signing.");
       }
 
       let signature: string | null = null;
       try {
-        const result = await providerWithRequest.request({
+        const result = await provider.request({
           method: "personal_sign",
           params: [startData.message, walletAddress],
         });
         signature = typeof result === "string" ? result : null;
       } catch {
-        const result = await providerWithRequest.request({
+        const result = await provider.request({
           method: "eth_sign",
           params: [walletAddress, startData.message],
         });
@@ -206,7 +195,6 @@ export function MoneriumSiwe() {
 
       if (!signature) throw new Error("Wallet did not return a signature.");
 
-      // ── 4. Complete on backend ───────────────────────────────────────
       setStep("completing");
       setStatusText("Completing sign-in…");
 
@@ -233,7 +221,6 @@ export function MoneriumSiwe() {
 
       const completeData = (await completeRes.json()).data as CompleteData;
 
-      // ── 5. Return to app ─────────────────────────────────────────────
       setStep("done");
       setStatusText("Returning to app…");
 
@@ -251,19 +238,37 @@ export function MoneriumSiwe() {
       console.error("[MoneriumSiwe]", msg);
       fail(msg);
     }
-  }, [userId, walletAddress, appRedirectUri, orderId, fail, web3Auth, connect]);
+  }, [
+    appRedirectUri,
+    createWallet,
+    fail,
+    orderId,
+    persistedParams?.appRedirectUri,
+    persistedParams?.orderId,
+    persistedParams?.userId,
+    persistedParams?.walletAddress,
+    rawAppRedirectUri,
+    rawOrderId,
+    rawUserId,
+    rawWalletAddress,
+    userId,
+    walletAddress,
+    wallets,
+  ]);
 
   useEffect(() => {
-    if (initError) {
-      fail(
-        initError instanceof Error ? initError.message : String(initError),
-      );
+    if (!ready) return;
+    if (!authenticated) {
+      if (loginStartedRef.current) return;
+      loginStartedRef.current = true;
+      setStatusText("Connect wallet…");
+      login();
       return;
     }
-    if (!isInitialized || !web3Auth || startedRef.current) return;
-    startedRef.current = true;
+    if (!walletsReady || signStartedRef.current) return;
+    signStartedRef.current = true;
     void run();
-  }, [fail, initError, isInitialized, run, web3Auth]);
+  }, [authenticated, login, ready, run, walletsReady]);
 
   return (
     <div

@@ -1,4 +1,5 @@
 import { PrivyProvider } from "@privy-io/react-auth";
+import type { ReactNode } from "react";
 import { PrivyAuth } from "./PrivyAuth";
 import { privyAppId, privyConfig } from "../../privyConfig";
 import { sb } from "../../theme";
@@ -36,7 +37,9 @@ function PrivySetupMissing() {
           height={32}
           style={{ borderRadius: 8 }}
         />
-        <h1 style={{ fontSize: 22, margin: "16px 0 8px" }}>Privy is not configured</h1>
+        <h1 style={{ fontSize: 22, margin: "16px 0 8px" }}>
+          Privy is not configured
+        </h1>
         <p style={{ margin: 0, color: sb.onSurfaceVariant, lineHeight: 1.5 }}>
           Create an app at dashboard.privy.io, enable Google, allowlist this
           origin, then set VITE_PRIVY_APP_ID on the wallet-client build.
@@ -46,14 +49,28 @@ function PrivySetupMissing() {
   );
 }
 
-export function PrivyAuthRoot() {
+export function PrivyRoot({ children }: { children: ReactNode }) {
   if (!privyAppId) {
     return <PrivySetupMissing />;
   }
 
   return (
-    <PrivyProvider appId={privyAppId} config={privyConfig}>
-      <PrivyAuth />
+    <PrivyProvider
+      appId={privyAppId}
+      config={{
+        ...privyConfig,
+        customOAuthRedirectUrl: window.location.href,
+      }}
+    >
+      {children}
     </PrivyProvider>
+  );
+}
+
+export function PrivyAuthRoot() {
+  return (
+    <PrivyRoot>
+      <PrivyAuth />
+    </PrivyRoot>
   );
 }

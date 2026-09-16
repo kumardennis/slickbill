@@ -84,7 +84,7 @@ bool processIncomingDeepLinkUri(Uri uri) {
 
   final isMetaMaskCallback =
       (uri.scheme == 'slickbills' || uri.scheme == 'slickbill') &&
-          uri.host == 'metamask-auth';
+          (uri.host == 'metamask-auth' || uri.host == 'privy-auth');
   if (isMetaMaskCallback) {
     print('🦊 MetaMask callback received');
     print(
@@ -141,9 +141,10 @@ bool processIncomingDeepLinkUri(Uri uri) {
       return true;
     }
 
-    final isHomeScreen = uri.pathSegments.isNotEmpty &&
-        uri.pathSegments.first == 'home-screen';
+    final isHomeScreen =
+        uri.pathSegments.isNotEmpty && uri.pathSegments.first == 'home-screen';
     final isMetaMaskFlow = uri.queryParameters['metamask'] == '1' ||
+        uri.queryParameters['privy'] == '1' ||
         (isHomeScreen && uri.queryParameters.containsKey('address'));
     if (isMetaMaskFlow) {
       MetamaskWalletService.onAuthCallbackUri(uri);
@@ -181,6 +182,7 @@ bool processIncomingDeepLinkUri(Uri uri) {
     }
 
     final isMetaMaskFlow = uri.queryParameters['metamask'] == '1' ||
+        uri.queryParameters['privy'] == '1' ||
         uri.queryParameters.containsKey('address') ||
         uri.queryParameters.containsKey('success');
 
