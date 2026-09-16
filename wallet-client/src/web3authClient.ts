@@ -1,6 +1,5 @@
 import type { Web3Auth } from "@web3auth/modal";
 import {
-  inspectWeb3AuthSession,
   isWeb3AuthConnected,
   waitForWalletAddress,
 } from "./web3authProvider";
@@ -16,48 +15,31 @@ export async function waitForSocialWallet(
 export async function recoverConnectedWallet(
   web3Auth: Web3Auth,
   expectedAddress?: string | null,
-  onLog?: (line: string) => void,
 ): Promise<{ provider: unknown; address: string } | null> {
-  const log = (line: string) => onLog?.(line);
   if (!isWeb3AuthConnected(web3Auth)) {
-    log("recover: not connected");
     return null;
   }
 
-  log("recover: waiting for ethereumProvider");
   try {
-    const ready = await waitForWalletAddress(
+    return await waitForWalletAddress(
       web3Auth,
       web3Auth.connection,
       expectedAddress,
       20,
     );
-    log(`recover: address ${ready.address}`);
-    return ready;
-  } catch (err) {
-    log(
-      `recover wait failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+  } catch {
+    // Provider may need an Ethereum chain switch before accounts resolve.
   }
 
   try {
-    log("recover: switchChain 0x1");
     await web3Auth.switchChain({ chainId: "0x1" });
-    const afterSwitch = await waitForWalletAddress(
+    return await waitForWalletAddress(
       web3Auth,
       web3Auth.connection,
       expectedAddress,
       12,
     );
-    log(`recover after switch: address ${afterSwitch.address}`);
-    return afterSwitch;
-  } catch (err) {
-    log(
-      `recover switch failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+  } catch {
+    return null;
   }
-
-  const snapshot = await inspectWeb3AuthSession(web3Auth);
-  snapshot.forEach(log);
-  return null;
 }

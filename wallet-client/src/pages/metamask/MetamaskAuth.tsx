@@ -3,11 +3,11 @@ import { useWeb3Auth, useWeb3AuthConnect } from "@web3auth/modal/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import logo from "../../assets/logo_icon.png";
 import { sb } from "../../theme";
+import { appEnv } from "../../config";
 import {
   recoverConnectedWallet,
   waitForSocialWallet,
 } from "../../web3authClient";
-import { inspectWeb3AuthSession } from "../../web3authProvider";
 
 type InitState = "idle" | "initializing" | "ready" | "error";
 type AuthState = "idle" | "authenticating" | "authenticated" | "error";
@@ -31,7 +31,6 @@ const sessionStorageKeys = {
   iban: "sb_pay_iban",
   ref: "sb_pay_ref",
   kind: "sb_pay_kind",
-  debugLog: "sb_wallet_debug_log",
 } as const;
 
 type RpcProvider = {
@@ -112,30 +111,6 @@ function formatAmount(raw: string | null): string | null {
   return `€${n.toFixed(2)}`;
 }
 
-function readPersistedDebugLog(): string[] {
-  try {
-    const raw = window.sessionStorage.getItem(sessionStorageKeys.debugLog);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed)
-      ? parsed.filter((line): line is string => typeof line === "string")
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function persistDebugLog(lines: string[]) {
-  try {
-    window.sessionStorage.setItem(
-      sessionStorageKeys.debugLog,
-      JSON.stringify(lines.slice(-80)),
-    );
-  } catch {
-    // Ignore storage failures.
-  }
-}
-
 function isUserCancel(message: string): boolean {
   return /user rejected|user denied|user closed|modal closed|closed before|cancelled|canceled/i.test(
     message,
@@ -182,8 +157,6 @@ export function MetamaskAuth() {
     isInitialized,
     isInitializing,
     isConnected,
-    connection,
-    status,
     initError,
   } = useWeb3Auth();
   const {
@@ -195,15 +168,11 @@ export function MetamaskAuth() {
   const [authState, setAuthState] = useState<AuthState>("idle");
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [debugLogs, setDebugLogs] = useState<string[]>(() =>
-    readPersistedDebugLog(),
-  );
   const [isSignFlow] = useState(() => readFlowMode() === "sign");
   const [paymentPreview] = useState<PaymentPreview>(() => readPaymentPreview());
   const web3AuthRef = useRef<Web3Auth | null>(null);
   const sessionReadyRef = useRef(false);
   const recoverStartedRef = useRef(false);
-  const initLoggedRef = useRef(false);
   const connectInFlightRef = useRef(false);
   const completionInFlightRef = useRef(false);
   const callbackSentRef = useRef(false);
@@ -217,15 +186,6 @@ export function MetamaskAuth() {
     ((provider: unknown) => Promise<void>) | null
   >(null);
 
-  const appendLog = useCallback((line: string) => {
-    const stamped = `${new Date().toISOString().slice(11, 19)} ${line}`;
-    setDebugLogs((prev) => {
-      const next = [...prev, stamped].slice(-80);
-      persistDebugLog(next);
-      return next;
-    });
-  }, []);
-
   const amountLabel = formatAmount(paymentPreview.amount);
   const hasPaymentDetails = Boolean(
     amountLabel || paymentPreview.payee || paymentPreview.iban,
@@ -235,7 +195,10 @@ export function MetamaskAuth() {
     if (!isSignFlow) {
       return {
         title: "Connect wallet",
-        subtitle: "Choose how you want to sign in to SlickBills.",
+        subtitle:
+          appEnv === "production"
+            ? "Choose Rabby, MetaMask, WalletConnect, or another wallet."
+            : "Choose how you want to sign in to SlickBills.",
         cta: "Connect wallet",
         trust: "Your keys stay in your wallet. SlickBills never stores them.",
       };
@@ -395,19 +358,11 @@ export function MetamaskAuth() {
       completionInFlightRef.current = true;
 
       try {
-        appendLog("complete: inspecting session");
-        const snapshot = await inspectWeb3AuthSession(
-          web3AuthRef.current,
-          provider,
-        );
-        snapshot.forEach(appendLog);
-
         const { provider: readyProvider, address } = await waitForSocialWallet(
           web3AuthRef.current,
           provider,
           expectedAddressRef.current,
         );
-        appendLog(`complete: wallet address ${address}`);
         setWalletAddress(address);
         const providerWithRequest = readyProvider as RpcProvider;
 
@@ -457,7 +412,6 @@ export function MetamaskAuth() {
         setWalletAddress(address);
         setAuthState("authenticated");
         authCompletedRef.current = true;
-        appendLog("complete: showing address, returning in 8s");
 
         const payload = {
           type: "SB_METAMASK_AUTH",
@@ -483,10 +437,6 @@ export function MetamaskAuth() {
           // Ignore CustomEvent failures in older environments.
         }
 
-        await new Promise((resolve) => {
-          window.setTimeout(resolve, 8000);
-        });
-
         returnToCallback({
           success: "1",
           provider: "metamask",
@@ -501,7 +451,6 @@ export function MetamaskAuth() {
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        appendLog(`complete error: ${message}`);
         setErrorMessage(
           isUserCancel(message)
             ? "Confirmation was cancelled. You can try again."
@@ -513,7 +462,7 @@ export function MetamaskAuth() {
         completionInFlightRef.current = false;
       }
     },
-    [appendLog, returnToCallback],
+    [returnToCallback],
   );
 
   completeWithProviderRef.current = completeWithProvider;
@@ -527,45 +476,31 @@ export function MetamaskAuth() {
     setErrorMessage(null);
 
     try {
-      appendLog("connect: start");
       const recovered = await recoverConnectedWallet(
         auth,
         expectedAddressRef.current,
-        appendLog,
       );
       if (recovered) {
-        appendLog(`connect: recovered ${recovered.address}`);
         await completeWithProvider(recovered.provider);
         return;
       }
 
-      appendLog("connect: opening modal");
       const result = await connect();
-      appendLog(
-        `connect: modal result connector=${
-          (result as { connectorName?: string } | null)?.connectorName ?? "none"
-        }`,
-      );
-      (await inspectWeb3AuthSession(auth, result)).forEach(appendLog);
       await completeWithProvider(result);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const cancelled = isUserCancel(message);
-      appendLog(`connect error: ${message}`);
       setErrorMessage(
         cancelled
           ? "Confirmation was cancelled. You can try again."
           : message,
       );
       setAuthState("error");
-      if (!cancelled && flowMode.current !== "sign") {
-        appendLog("connect: staying on this page so logs remain visible");
-      }
       console.error("[MetaMaskWeb3Auth] login failed", err);
     } finally {
       connectInFlightRef.current = false;
     }
-  }, [appendLog, completeWithProvider, connect]);
+  }, [completeWithProvider, connect]);
 
   useEffect(() => {
     web3AuthRef.current = web3Auth;
@@ -645,7 +580,6 @@ export function MetamaskAuth() {
       setInitState("error");
       setAuthState("error");
       setErrorMessage(message);
-      appendLog(`init error: ${message}`);
       return;
     }
     if (!isInitialized || !web3Auth) {
@@ -653,26 +587,7 @@ export function MetamaskAuth() {
     }
 
     setInitState("ready");
-    if (initLoggedRef.current) {
-      return;
-    }
-    initLoggedRef.current = true;
-    appendLog(
-      `init: ready status=${status ?? "?"} connected=${String(isConnected)}`,
-    );
-    void inspectWeb3AuthSession(web3Auth, connection).then((lines) => {
-      lines.forEach(appendLog);
-    });
-  }, [
-    appendLog,
-    connection,
-    initError,
-    isConnected,
-    isInitialized,
-    isInitializing,
-    status,
-    web3Auth,
-  ]);
+  }, [initError, isInitialized, isInitializing, web3Auth]);
 
   useEffect(() => {
     if (!isInitialized || !isConnected || !web3Auth || recoverStartedRef.current) {
@@ -680,29 +595,22 @@ export function MetamaskAuth() {
     }
     recoverStartedRef.current = true;
     setAuthState("authenticating");
-    appendLog("init: session already connected, recovering");
-    void recoverConnectedWallet(
-      web3Auth,
-      expectedAddressRef.current,
-      appendLog,
-    ).then(async (recovered) => {
-      if (recovered && completeWithProviderRef.current) {
-        appendLog(`init: recovered ${recovered.address}`);
-        await completeWithProviderRef.current(recovered.provider);
-        return;
-      }
-      setErrorMessage(
-        "Signed in, but no wallet address came back. Logs are below.",
-      );
-      appendLog("init: connected but no address");
-      setAuthState("idle");
-    });
-  }, [appendLog, isConnected, isInitialized, web3Auth]);
+    void recoverConnectedWallet(web3Auth, expectedAddressRef.current).then(
+      async (recovered) => {
+        if (recovered && completeWithProviderRef.current) {
+          await completeWithProviderRef.current(recovered.provider);
+          return;
+        }
+        setErrorMessage("Signed in, but no wallet address came back.");
+        setAuthState("idle");
+      },
+    );
+  }, [isConnected, isInitialized, web3Auth]);
 
   useEffect(() => {
     if (!connectError) return;
-    appendLog(`connect hook error: ${connectError.message}`);
-  }, [appendLog, connectError]);
+    setErrorMessage(connectError.message);
+  }, [connectError]);
 
   useEffect(() => {
     window.getMetaMaskInitStateOutOfWeb = () => initState;
@@ -942,28 +850,6 @@ export function MetamaskAuth() {
           >
             {connectLoading ? "Opening confirmation…" : copy.cta}
           </button>
-        ) : null}
-
-        {debugLogs.length > 0 ? (
-          <pre
-            style={{
-              marginTop: 16,
-              marginBottom: 0,
-              maxHeight: 220,
-              overflow: "auto",
-              padding: 12,
-              borderRadius: 12,
-              border: `1px solid ${sb.outlineVariant}`,
-              background: "#0b2545",
-              color: "#d7f3ff",
-              fontSize: 11,
-              lineHeight: 1.45,
-              whiteSpace: "pre-wrap",
-              wordBreak: "break-word",
-            }}
-          >
-            {debugLogs.join("\n")}
-          </pre>
         ) : null}
 
         {!busy || authState === "authenticated" ? (

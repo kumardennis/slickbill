@@ -1,6 +1,6 @@
 import { authConnector, WALLET_CONNECTORS } from "@web3auth/modal";
 import type { Web3AuthContextConfig } from "@web3auth/modal/react";
-import { resolveWeb3AuthNetwork } from "./config";
+import { appEnv, resolveWeb3AuthNetwork } from "./config";
 import { web3AuthSocialLoginMethods } from "./web3authSocialLogin";
 
 /** Google returns to the origin. Dashboard whitelist is origin, not /wallet/metamask-auth. */
@@ -17,11 +17,13 @@ export function isWeb3AuthRedirectReturn(): boolean {
 
 const clientId = (import.meta.env.VITE_WEB3AUTH_CLIENT_ID as string | undefined)?.trim() ?? "";
 
+/** Mainnet AUTH Google/Facebook 403s on Growth. Staging Devnet social stays on the modal. */
+const showSocialOnModal = appEnv !== "production";
+
 export const web3AuthContextConfig: Web3AuthContextConfig = {
   web3AuthOptions: {
     clientId,
     web3AuthNetwork: resolveWeb3AuthNetwork(),
-    enableLogging: true,
     defaultChainId: "0x1",
     uiConfig: {
       uxMode: "redirect",
@@ -40,7 +42,7 @@ export const web3AuthContextConfig: Web3AuthContextConfig = {
       connectors: {
         [WALLET_CONNECTORS.AUTH]: {
           label: "Web3Auth",
-          showOnModal: true,
+          showOnModal: showSocialOnModal,
           loginMethods: web3AuthSocialLoginMethods(),
         },
         [WALLET_CONNECTORS.METAMASK]: {
