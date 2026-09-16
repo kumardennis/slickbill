@@ -22,6 +22,11 @@ type RpcProvider = {
   request?: (args: { method: string; params?: unknown }) => Promise<unknown>;
 };
 
+type SignableWallet = {
+  address: string;
+  getEthereumProvider: () => Promise<unknown>;
+};
+
 export function MoneriumSiwe() {
   const { ready, authenticated } = usePrivy();
   const { login } = useLogin();
@@ -158,7 +163,7 @@ export function MoneriumSiwe() {
       setStatusText("Please sign the message in your wallet…");
 
       const wanted = walletAddress.toLowerCase();
-      let wallet =
+      let wallet: SignableWallet | null =
         wallets.find((item) => item.address.toLowerCase() === wanted) ?? null;
       if (!wallet) {
         const created = await createWallet().catch(() => null);
