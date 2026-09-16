@@ -654,6 +654,16 @@ const toMoneriumApiChain = (chain: string): string => {
   return production[key] ?? key;
 };
 
+const toMoneriumNetwork = (apiChain: string): string | undefined => {
+  if (!apiChain || isMoneriumSandboxHost) return undefined;
+  return "mainnet";
+};
+
+const toMoneriumChainFields = (apiChain: string) => {
+  const network = toMoneriumNetwork(apiChain);
+  return network ? { chain: apiChain, network } : { chain: apiChain };
+};
+
 console.log("Monerium API host", {
   base: moneriumBaseUrl,
   configuredChain: configuredMoneriumWalletChain || null,
@@ -1022,19 +1032,26 @@ const moneriumApiRequest = async (params: {
 
   if (!response.ok) {
     const upstreamMessage = summarizeMoneriumErrorData(data);
+    const unsupportedChain = /unsupported chain/i.test(upstreamMessage ?? "");
     console.error("❌ Monerium API upstream error", {
       userId: params.userId,
       path: params.path,
       status: response.status,
       upstreamMessage,
+      moneriumBaseUrl,
+      configuredChain: configuredMoneriumWalletChain || null,
       upstreamData: data,
     });
     throw makeError(
-      "MONERIUM_API_REQUEST_FAILED",
-      upstreamMessage
-        ? `Monerium API request failed: ${upstreamMessage}`
-        : "Monerium API request failed.",
-      { path: params.path, status: response.status, data },
+      unsupportedChain
+        ? "MONERIUM_CHAIN_UNSUPPORTED"
+        : "MONERIUM_API_REQUEST_FAILED",
+      unsupportedChain
+        ? `Monerium rejected chain "${configuredMoneriumWalletChain || "ethereum"}". Enable Ethereum on the production app at monerium.app → Developers (not sandbox.monerium.dev).`
+        : upstreamMessage
+          ? `Monerium API request failed: ${upstreamMessage}`
+          : "Monerium API request failed.",
+      { path: params.path, status: response.status, data, moneriumBaseUrl },
       response.status,
     );
   }
@@ -2699,7 +2716,7 @@ app.post("/monerium/wallet/link", async (req: any, res: any) => {
         ? { profile: profile.trim() }
         : {}),
       address,
-      chain: resolvedChain,
+      ...toMoneriumChainFields(resolvedChain),
       message,
       signature,
     };
@@ -2721,6 +2738,7 @@ app.post("/monerium/wallet/link", async (req: any, res: any) => {
       userId,
       address,
       chain: (payload as any).chain,
+      network: (payload as any).network,
       hasProfile: Boolean((payload as any).profile),
       hasMessage: Boolean(message),
       hasSignature: Boolean(signature),
@@ -3117,7 +3135,7 @@ app.post("/monerium/ibans/request", async (req: any, res: any) => {
       path: moneriumIbansPath,
       body: {
         address,
-        chain: resolvedChain,
+        ...toMoneriumChainFields(resolvedChain),
       },
       tokenOverride: {
         accessToken: overrideAccessToken,
@@ -3435,6 +3453,10 @@ app.post("/monerium/orders/send", async (req: any, res: any) => {
         );
     }
     orderPayload.chain = resolvedChain;
+    const orderNetwork = toMoneriumNetwork(resolvedChain);
+    if (orderNetwork) {
+      orderPayload.network = orderNetwork;
+    }
 
     await registerMoneriumWallet({
       privateUserId: userId,
@@ -3678,6 +3700,10 @@ app.post("/monerium/orders/withdraw", async (req: any, res: any) => {
         );
     }
     orderPayload.chain = resolvedChain;
+    const orderNetwork = toMoneriumNetwork(resolvedChain);
+    if (orderNetwork) {
+      orderPayload.network = orderNetwork;
+    }
 
     if (!orderPayload.amount) {
       return res
