@@ -37,6 +37,7 @@ export function MoneriumSiwe() {
   const [statusText, setStatusText] = useState("Connecting wallet…");
 
   const loginStartedRef = useRef(false);
+  const createAttemptedRef = useRef(false);
   const signStartedRef = useRef(false);
 
   const params = new URLSearchParams(window.location.search);
@@ -108,7 +109,7 @@ export function MoneriumSiwe() {
     [appRedirectUri],
   );
 
-  const run = useCallback(async () => {
+  const run = useCallback(async (wallet: SignableWallet) => {
     try {
       const paramsToPersist = {
         userId: rawUserId || persistedParams?.userId?.trim() || "",
@@ -161,22 +162,6 @@ export function MoneriumSiwe() {
 
       setStep("signing");
       setStatusText("Please sign the message in your wallet…");
-
-      const wanted = walletAddress.toLowerCase();
-      let wallet: SignableWallet | null =
-        wallets.find((item) => item.address.toLowerCase() === wanted) ?? null;
-      if (!wallet) {
-        const created = await createWallet().catch(() => null);
-        if (created && created.address.toLowerCase() === wanted) {
-          wallet = created;
-        }
-      }
-
-      if (!wallet || typeof wallet.getEthereumProvider !== "function") {
-        throw new Error(
-          "Connected wallet does not match the address used to link Monerium.",
-        );
-      }
 
       const provider = (await wallet.getEthereumProvider()) as RpcProvider;
       if (typeof provider.request !== "function") {
@@ -245,7 +230,6 @@ export function MoneriumSiwe() {
     }
   }, [
     appRedirectUri,
-    createWallet,
     fail,
     orderId,
     persistedParams?.appRedirectUri,
@@ -258,7 +242,6 @@ export function MoneriumSiwe() {
     rawWalletAddress,
     userId,
     walletAddress,
-    wallets,
   ]);
 
   useEffect(() => {
@@ -271,9 +254,42 @@ export function MoneriumSiwe() {
       return;
     }
     if (!walletsReady || signStartedRef.current) return;
+
+    const wanted = walletAddress.toLowerCase();
+    const matching = wallets.find(
+      (item) => item.address.toLowerCase() === wanted,
+    );
+    if (!matching || typeof matching.getEthereumProvider !== "function") {
+      if (createAttemptedRef.current) return;
+      createAttemptedRef.current = true;
+      void (async () => {
+        try {
+          const created = await createWallet();
+          if (!created || created.address.toLowerCase() !== wanted) {
+            fail(
+              "Connected wallet does not match the address used to link Monerium.",
+            );
+          }
+        } catch (err) {
+          fail(err instanceof Error ? err.message : String(err));
+        }
+      })();
+      return;
+    }
+
     signStartedRef.current = true;
-    void run();
-  }, [authenticated, login, ready, run, walletsReady]);
+    void run(matching);
+  }, [
+    authenticated,
+    createWallet,
+    fail,
+    login,
+    ready,
+    run,
+    walletAddress,
+    wallets,
+    walletsReady,
+  ]);
 
   return (
     <div
