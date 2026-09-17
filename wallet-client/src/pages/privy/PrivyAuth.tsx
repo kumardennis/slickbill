@@ -31,12 +31,101 @@ type RpcProvider = {
   request?: (args: { method: string; params?: unknown }) => Promise<unknown>;
 };
 
+type PaymentKind = "pay" | "withdraw" | "link";
+
+type PaymentPreview = {
+  amount: string | null;
+  payee: string | null;
+  iban: string | null;
+  ref: string | null;
+  kind: PaymentKind;
+};
+
 const sessionKeys = {
   callbackUri: "sb_privy_callback_uri",
   flowMode: "sb_privy_flow_mode",
   signMessage: "sb_privy_sign_message",
   expectedAddress: "sb_privy_expected_address",
+  amount: "sb_pay_amount",
+  payee: "sb_pay_payee",
+  iban: "sb_pay_iban",
+  ref: "sb_pay_ref",
+  kind: "sb_pay_kind",
 } as const;
+
+function readQueryOrSession(key: string, sessionKey: string): string | null {
+  const params = new URLSearchParams(window.location.search);
+  const fromQuery = params.get(key)?.trim();
+  if (fromQuery) return fromQuery;
+  return window.sessionStorage.getItem(sessionKey)?.trim() || null;
+}
+
+function readPaymentPreview(): PaymentPreview {
+  const kindRaw = (
+    readQueryOrSession("kind", sessionKeys.kind) || ""
+  ).toLowerCase();
+  const kind: PaymentKind =
+    kindRaw === "withdraw" ? "withdraw" : kindRaw === "pay" ? "pay" : "link";
+
+  return {
+    amount: readQueryOrSession("amount", sessionKeys.amount),
+    payee: readQueryOrSession("payee", sessionKeys.payee),
+    iban: readQueryOrSession("iban", sessionKeys.iban),
+    ref: readQueryOrSession("ref", sessionKeys.ref),
+    kind,
+  };
+}
+
+function persistPaymentPreview(preview: PaymentPreview) {
+  const entries: Array<[string, string | null]> = [
+    [sessionKeys.amount, preview.amount],
+    [sessionKeys.payee, preview.payee],
+    [sessionKeys.iban, preview.iban],
+    [sessionKeys.ref, preview.ref],
+    [sessionKeys.kind, preview.kind],
+  ];
+  for (const [key, value] of entries) {
+    if (value) window.sessionStorage.setItem(key, value);
+  }
+}
+
+function formatAmount(raw: string | null): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (/^[€$£]/.test(trimmed) || /^EUR\s/i.test(trimmed)) return trimmed;
+  const n = Number(trimmed.replace(",", "."));
+  if (!Number.isFinite(n)) return trimmed;
+  return `€${n.toFixed(2)}`;
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "space-between",
+        gap: 16,
+        padding: "10px 0",
+        borderTop: `1px solid ${sb.outlineVariant}`,
+        fontSize: 14,
+        lineHeight: 1.4,
+      }}
+    >
+      <span style={{ color: sb.onSurfaceVariant }}>{label}</span>
+      <span
+        style={{
+          color: sb.onSurface,
+          fontWeight: 600,
+          textAlign: "right",
+          wordBreak: "break-word",
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
 
 function isUserCancel(message: string): boolean {
   return /user rejected|user denied|user closed|cancelled|canceled/i.test(
@@ -146,6 +235,7 @@ export function PrivyAuth() {
   const [storedLastUsed, setStoredLastUsed] = useState<LastUsedAccount | null>(
     readLastUsedAccount,
   );
+  const [paymentPreview] = useState<PaymentPreview>(() => readPaymentPreview());
   const completingRef = useRef(false);
   const createAttemptedRef = useRef(false);
   const callbackUri = useRef<string | null>(null);
@@ -231,6 +321,7 @@ export function PrivyAuth() {
         expectedAddressRef.current,
       );
     }
+    persistPaymentPreview(readPaymentPreview());
   }, []);
 
   const resolveAddress = useCallback((): string | null => {
@@ -455,12 +546,82 @@ export function PrivyAuth() {
     walletsReady,
   ]);
 
-  const shouldAutoComplete = flowMode === "sign" || autoAfterLogin;
+  const amountLabel = formatAmount(paymentPreview.amount);
+  const hasPaymentDetails = Boolean(
+    amountLabel || paymentPreview.payee || paymentPreview.iban,
+  );
+
+  const copy = useMemo(() => {
+    if (flowMode !== "sign") {
+      return {
+        title: "Connect wallet",
+        subtitle:
+          "Continue with the last Google account, or choose a different Google account or wallet.",
+        cta: lastUsed
+          ? `Continue as ${lastUsed.email || lastUsed.name || (lastUsed.address ? shortenAddress(lastUsed.address) : "this account")}`
+          : "Choose Google account or wallet",
+        trust: "Your keys stay in your wallet. SlickBills never stores them.",
+      };
+    }
+    if (paymentPreview.kind === "withdraw") {
+      return {
+        title: "Confirm withdrawal",
+        subtitle: "Review the bank details, then confirm to send euros.",
+        cta: "Confirm withdrawal",
+        trust:
+          "This authorizes a SEPA transfer to your saved bank account. SlickBills never holds your money.",
+      };
+    }
+    if (hasPaymentDetails) {
+      return {
+        title: "Confirm payment",
+        subtitle: "Review the details, then confirm to send euros.",
+        cta: "Confirm payment",
+        trust:
+          "This authorizes a SEPA euro transfer from your Monerium account. SlickBills never holds your money.",
+      };
+    }
+    return {
+      title: "Confirm wallet",
+      subtitle: "Confirm you own this wallet to continue.",
+      cta: "Confirm wallet",
+      trust:
+        "This proves you own the wallet linked to your Monerium euro account.",
+    };
+  }, [flowMode, hasPaymentDetails, lastUsed, paymentPreview.kind]);
+
+  const shouldAutoComplete = autoAfterLogin;
+
+  useEffect(() => {
+    document.title = `${copy.title} · SlickBills`;
+  }, [copy.title]);
 
   useEffect(() => {
     if (!shouldAutoComplete) return;
     void proceedWithWallet();
   }, [proceedWithWallet, shouldAutoComplete]);
+
+  const handleConfirmPayment = async () => {
+    setErrorMessage(null);
+    setBusy(true);
+    markLoginStarted();
+    setAutoAfterLogin(true);
+    if (authenticated) {
+      await proceedWithWallet();
+      return;
+    }
+    try {
+      await initOAuth({ provider: "google" });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!isUserCancel(message)) {
+        setErrorMessage(message);
+      }
+      clearLoginStarted();
+      setAutoAfterLogin(false);
+      setBusy(false);
+    }
+  };
 
   const handleContinueLastUsed = async () => {
     setErrorMessage(null);
@@ -504,6 +665,8 @@ export function PrivyAuth() {
     }
   };
 
+  const showPayCta = ready && flowMode === "sign" && !walletAddress;
+
   const showChoice =
     ready &&
     !walletAddress &&
@@ -514,9 +677,11 @@ export function PrivyAuth() {
     ? "Preparing a secure connection…"
     : walletAddress
       ? "Confirmed. Returning to SlickBills…"
-      : busy && !showChoice
+      : busy && !showChoice && !showPayCta
         ? "Continue in the Google or wallet window…"
-        : null;
+        : busy && showPayCta
+          ? "Opening confirmation…"
+          : null;
 
   return (
     <div
@@ -574,7 +739,7 @@ export function PrivyAuth() {
             color: sb.onSurface,
           }}
         >
-          Connect wallet
+          {copy.title}
         </h1>
         <p
           style={{
@@ -585,9 +750,46 @@ export function PrivyAuth() {
             color: sb.onSurfaceVariant,
           }}
         >
-          Continue with the last Google account, or choose a different Google
-          account or wallet.
+          {copy.subtitle}
         </p>
+
+        {hasPaymentDetails ? (
+          <div
+            style={{
+              marginTop: 20,
+              padding: "16px 16px 6px",
+              borderRadius: 14,
+              border: `1px solid ${sb.outlineVariant}`,
+              background: sb.surface,
+            }}
+          >
+            {amountLabel ? (
+              <div
+                style={{
+                  fontSize: 32,
+                  fontWeight: 700,
+                  letterSpacing: -0.6,
+                  color: sb.deepNavy,
+                  paddingBottom: 12,
+                }}
+              >
+                {amountLabel}
+              </div>
+            ) : null}
+            {paymentPreview.payee ? (
+              <DetailRow
+                label={paymentPreview.kind === "withdraw" ? "To account" : "To"}
+                value={paymentPreview.payee}
+              />
+            ) : null}
+            {paymentPreview.iban ? (
+              <DetailRow label="IBAN" value={paymentPreview.iban} />
+            ) : null}
+            {paymentPreview.ref ? (
+              <DetailRow label="Reference" value={paymentPreview.ref} />
+            ) : null}
+          </div>
+        ) : null}
 
         {statusCopy ? (
           <div
@@ -642,6 +844,22 @@ export function PrivyAuth() {
           >
             {errorMessage}
           </div>
+        ) : null}
+
+        {showPayCta ? (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              void handleConfirmPayment();
+            }}
+            style={{
+              ...primaryButtonStyle,
+              opacity: busy ? 0.7 : 1,
+            }}
+          >
+            {busy ? "Opening confirmation…" : copy.cta}
+          </button>
         ) : null}
 
         {showChoice && lastUsed ? (
@@ -723,6 +941,21 @@ export function PrivyAuth() {
               ? "Use another Google account or wallet"
               : "Choose Google account or wallet"}
           </button>
+        ) : null}
+
+        {!busy || walletAddress ? (
+          <p
+            style={{
+              marginTop: 16,
+              marginBottom: 0,
+              fontSize: 12,
+              lineHeight: 1.5,
+              color: sb.outline,
+              textAlign: "center",
+            }}
+          >
+            {copy.trust}
+          </p>
         ) : null}
       </div>
     </div>
