@@ -48,7 +48,7 @@ import {
   listProcessingInvoicesForPayer,
 } from "./lib/moneriumSettle.js";
 import { addAddressesToAlchemyWebhook } from "./lib/alchemyAddresses.js";
-import { registerMoneriumWallet } from "./lib/registerMoneriumWallet.js";
+import { registerMoneriumWallet, syncMoneriumIncomingNotifications } from "./lib/registerMoneriumWallet.js";
 import { notifyUserViaSupabase, notifyMoneriumFundsArrived, resolveAppUserIdFromPrivateUserId } from "./lib/notifyUser.js";
 import {
   claimNotifiedOrder,
@@ -3264,12 +3264,15 @@ app.get("/monerium/balances", async (req: any, res: any) => {
       count: Array.isArray(balances) ? balances.length : undefined,
     });
 
+    const incomingNotify = await syncMoneriumIncomingNotifications(userId);
+
     return res.status(200).json({
       ok: true,
       data,
       address,
       chain,
       count: Array.isArray(balances) ? balances.length : undefined,
+      incomingNotify,
     });
   } catch (error) {
     console.error("❌ Monerium balances fetch failed:", error);
@@ -3884,6 +3887,8 @@ app.get("/monerium/orders", async (req: any, res: any) => {
       },
     });
 
+    const incomingNotify = await syncMoneriumIncomingNotifications(userId);
+
     const count = Array.isArray(data)
       ? data.length
       : data && typeof data === "object"
@@ -3903,6 +3908,7 @@ app.get("/monerium/orders", async (req: any, res: any) => {
       ok: true,
       data,
       count,
+      incomingNotify,
       // Helpful for txHash monitoring flow: consume first match directly.
       firstOrder: Array.isArray(data) && data.length > 0 ? data[0] : null,
     });

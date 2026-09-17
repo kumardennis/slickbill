@@ -743,6 +743,10 @@ class MoneriumService {
     _log(
         'getBalances(): sessionReady=${_hasUsableAccessToken(session)} for userId=$userId');
 
+    final localRefresh = session?['refreshToken']?.toString().trim() ?? '';
+    final localAccess = session?['accessToken']?.toString().trim() ?? '';
+    final localExpires = session?['expiresAt'];
+
     return _getJson(
       '/monerium/balances',
       query: {
@@ -750,6 +754,9 @@ class MoneriumService {
         'address': address,
         if (resolvedChain.isNotEmpty) 'chain': resolvedChain,
         if (resolvedCurrency.isNotEmpty) 'currency': resolvedCurrency,
+        if (localAccess.isNotEmpty) 'moneriumAccessToken': localAccess,
+        if (localRefresh.isNotEmpty) 'moneriumRefreshToken': localRefresh,
+        if (localExpires != null) 'moneriumExpiresAt': '$localExpires',
       },
     );
   }

@@ -7,11 +7,9 @@ import {
 } from "./moneriumTokens.js";
 import { getSupabaseAdmin } from "./supabaseAdmin.js";
 import {
-  backfillRecentIncomingIssues,
   ensureMoneriumOrderWebhook,
+  backfillRecentIncomingIssues,
 } from "./moneriumOrderWebhook.js";
-
-const backfilledUsers = new Set<string>();
 
 const normalizeWallet = (value?: string | null): string | null => {
   if (!value || typeof value !== "string") return null;
@@ -90,36 +88,48 @@ export const registerMoneriumWallet = async (params: {
     persistedToken: Boolean(token),
   });
 
-  if (token?.accessToken) {
-    try {
-      const webhook = await ensureMoneriumOrderWebhook({
-        privateUserId: userId,
-        accessToken: token.accessToken,
-        tokenType: token.tokenType,
-      });
-      let backfill: { notified: number; skipped?: boolean } = { notified: 0 };
-      if (!backfilledUsers.has(userId)) {
-        backfill = await backfillRecentIncomingIssues({
-          privateUserId: userId,
-          accessToken: token.accessToken,
-          tokenType: token.tokenType,
-        });
-        backfilledUsers.add(userId);
-      } else {
-        backfill = { notified: 0, skipped: true };
-      }
-      console.log("ℹ️ Monerium order webhook", {
-        privateUserId: userId,
-        webhook,
-        backfill,
-      });
-    } catch (error) {
-      console.warn("⚠️ Monerium order webhook ensure failed", {
-        privateUserId: userId,
-        message: error instanceof Error ? error.message : String(error),
-      });
-    }
+  return { ok: true, wallet, alchemy };
+};
+
+export const syncMoneriumIncomingNotifications = async (
+  privateUserId: string,
+): Promise<{
+  ok: boolean;
+  webhook?: { ok: boolean; created?: boolean; detail?: string };
+  backfill?: { notified: number; listed?: number; listOk?: boolean };
+  detail?: string;
+}> => {
+  const userId = privateUserId.trim();
+  if (!userId) return { ok: false, detail: "missing_user" };
+
+  const token = await loadMoneriumToken(userId);
+  if (!token?.accessToken) {
+    return { ok: false, detail: "missing_token" };
   }
 
-  return { ok: true, wallet, alchemy };
+  try {
+    const webhook = await ensureMoneriumOrderWebhook({
+      privateUserId: userId,
+      accessToken: token.accessToken,
+      tokenType: token.tokenType,
+    });
+    const backfill = await backfillRecentIncomingIssues({
+      privateUserId: userId,
+      accessToken: token.accessToken,
+      tokenType: token.tokenType,
+    });
+    console.log("ℹ️ Monerium incoming notify sync", {
+      privateUserId: userId,
+      webhook,
+      backfill,
+    });
+    return { ok: true, webhook, backfill };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.warn("⚠️ Monerium incoming notify sync failed", {
+      privateUserId: userId,
+      message: detail,
+    });
+    return { ok: false, detail };
+  }
 };

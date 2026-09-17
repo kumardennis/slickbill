@@ -22,7 +22,8 @@ export const moneriumWebhookSecret = (): string => {
   if (explicit) return explicit;
   const seed =
     process.env.MONERIUM_STATE_SECRET?.trim() || "slickbills-monerium-webhook";
-  return `whsec_${Buffer.from(seed, "utf8").toString("base64")}`;
+  const bytes = crypto.createHash("sha256").update(seed).digest();
+  return `whsec_${bytes.toString("base64")}`;
 };
 
 export const moneriumWebhookUrl = (): string | null => {
@@ -50,7 +51,11 @@ export const verifyMoneriumWebhookSignature = (params: {
     .update(`${id}.${timestamp}.${params.rawBody}`)
     .digest("base64");
   const expectedHeader = `v1,${expected}`;
-  const candidates = signature.split(/\s+/).map((part) => part.trim());
+  const candidates = signature.split(/[\s,]+/).map((part) => {
+    const trimmed = part.trim();
+    if (!trimmed || trimmed === "v1") return "";
+    return trimmed.startsWith("v1") ? trimmed : `v1,${trimmed}`;
+  }).filter(Boolean);
   return candidates.some((part) => timingSafeEqualString(part, expectedHeader));
 };
 
@@ -198,16 +203,26 @@ export const ensureMoneriumOrderWebhook = async (params: {
 export const listRecentProcessedIssues = async (params: {
   accessToken: string;
   tokenType?: string | null;
-}): Promise<ReturnType<typeof summarizeMoneriumOrder>[]> => {
+}): Promise<{
+  ok: boolean;
+  status: number;
+  orders: ReturnType<typeof summarizeMoneriumOrder>[];
+}> => {
   const listed = await moneriumFetch({
     accessToken: params.accessToken,
     tokenType: params.tokenType ?? undefined,
     method: "GET",
     path: "/orders",
   });
-  if (!listed.ok) return [];
+  if (!listed.ok) {
+    console.warn("⚠️ Monerium issue order list failed", {
+      status: listed.status,
+      data: listed.data,
+    });
+    return { ok: false, status: listed.status, orders: [] };
+  }
   const cutoff = Date.now() - 48 * 60 * 60 * 1000;
-  return readMoneriumOrdersArray(listed.data)
+  const orders = readMoneriumOrdersArray(listed.data)
     .map(summarizeMoneriumOrder)
     .filter((order) => {
       if ((order.kind ?? "").toLowerCase() !== "issue") return false;
@@ -219,13 +234,20 @@ export const listRecentProcessedIssues = async (params: {
         raw.meta && typeof raw.meta === "object"
           ? (raw.meta as Record<string, unknown>)
           : {};
-      const stamped = [raw.updatedAt, raw.createdAt, raw.date, meta.processedAt]
+      const stamped = [
+        raw.updatedAt,
+        raw.createdAt,
+        raw.date,
+        meta.processedAt,
+        meta.placedAt,
+      ]
         .map((value) => (typeof value === "string" ? Date.parse(value) : NaN))
         .find((value) => Number.isFinite(value));
       if (stamped != null && stamped < cutoff) return false;
       return true;
     })
     .slice(0, 20);
+  return { ok: true, status: listed.status, orders };
 };
 
 export const notifyProcessedIssueIfNeeded = async (params: {
@@ -268,19 +290,19 @@ export const backfillRecentIncomingIssues = async (params: {
   privateUserId: string;
   accessToken: string;
   tokenType?: string | null;
-}): Promise<{ notified: number }> => {
-  const orders = await listRecentProcessedIssues({
+}): Promise<{ notified: number; listed: number; listOk: boolean }> => {
+  const listed = await listRecentProcessedIssues({
     accessToken: params.accessToken,
     tokenType: params.tokenType,
   });
   let notified = 0;
-  for (const order of orders) {
+  for (const order of listed.orders) {
     const result = await notifyProcessedIssueIfNeeded({
       privateUserId: params.privateUserId,
       order,
     });
     if (result.notified) notified += 1;
   }
-  return { notified };
+  return { notified, listed: listed.orders.length, listOk: listed.ok };
 };
 
