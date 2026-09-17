@@ -48,13 +48,9 @@ import {
   listProcessingInvoicesForPayer,
 } from "./lib/moneriumSettle.js";
 import { addAddressesToAlchemyWebhook } from "./lib/alchemyAddresses.js";
-import { registerMoneriumWallet, ensureMoneriumIncomingWebhook } from "./lib/registerMoneriumWallet.js";
+import { registerMoneriumWallet } from "./lib/registerMoneriumWallet.js";
 import { notifyUserViaSupabase, notifyMoneriumFundsArrived, resolveAppUserIdFromPrivateUserId } from "./lib/notifyUser.js";
-import {
-  claimNotifiedOrder,
-  notifyProcessedIssueIfNeeded,
-  verifyMoneriumWebhookSignature,
-} from "./lib/moneriumOrderWebhook.js";
+import { claimNotifiedOrder } from "./lib/moneriumOrderWebhook.js";
 import { stripInvalidMoneriumReference } from "./lib/moneriumRemittance.js";
 
 console.log("🔍 Environment variables:");
@@ -69,6 +65,10 @@ console.log(
 console.log(
   "CDP_WALLET_SECRET:",
   process.env.CDP_WALLET_SECRET ? "✅ Set" : "❌ Missing",
+);
+console.log(
+  "ALCHEMY_WEBHOOK_SIGNING_KEY:",
+  process.env.ALCHEMY_WEBHOOK_SIGNING_KEY ? "✅ Set" : "❌ Missing",
 );
 
 let cdpClient: CdpClient | null = null;
@@ -3264,8 +3264,6 @@ app.get("/monerium/balances", async (req: any, res: any) => {
       count: Array.isArray(balances) ? balances.length : undefined,
     });
 
-    await ensureMoneriumIncomingWebhook(userId);
-
     return res.status(200).json({
       ok: true,
       data,
@@ -4233,7 +4231,7 @@ const notifyMoneriumAccountTransfer = async (params: {
   txHash: string;
   amountHint?: string | null;
 }) => {
-  const isIncoming = params.kind === "mint";
+  const isIncoming = params.kind === "mint" || params.kind === "transfer";
   const isOutgoing = params.kind === "burn";
   if (isIncoming) {
     const claimKey = params.txHash ? `tx:${params.txHash}` : "";
@@ -4375,125 +4373,18 @@ app.post("/monerium/settle/by-txhash", async (req: any, res: any) => {
 });
 
 /**
- * Monerium order webhooks — incoming SEPA issue (add money) and redeem updates.
- * POST /monerium/webhooks
+ * Unused. Add-money notify is Alchemy POST /monerium/chain/transfers only.
+ * Always 200 so leftover Monerium subscriptions cannot fail the listener.
  */
-app.post("/monerium/webhooks", async (req: any, res: any) => {
-  try {
-    const rawBody: string =
-      typeof req.rawBody === "string"
-        ? req.rawBody
-        : typeof req.body === "string"
-          ? req.body
-          : JSON.stringify(req.body ?? {});
-    const valid = verifyMoneriumWebhookSignature({
-      rawBody,
-      webhookId:
-        typeof req.headers["webhook-id"] === "string"
-          ? req.headers["webhook-id"]
-          : undefined,
-      webhookTimestamp:
-        typeof req.headers["webhook-timestamp"] === "string"
-          ? req.headers["webhook-timestamp"]
-          : undefined,
-      signature:
-        typeof req.headers["webhook-signature"] === "string"
-          ? req.headers["webhook-signature"]
-          : undefined,
-    });
-    if (!valid) {
-      return res
-        .status(401)
-        .json(
-          makeError(
-            "MONERIUM_WEBHOOK_INVALID",
-            "Invalid Monerium webhook signature.",
-          ),
-        );
-    }
-
-    const payload =
-      typeof req.body === "string"
-        ? (() => {
-            try {
-              return JSON.parse(req.body);
-            } catch {
-              return null;
-            }
-          })()
-        : req.body;
-    const type =
-      payload && typeof payload === "object"
-        ? String((payload as Record<string, unknown>).type ?? "")
-        : "";
-    const data =
-      payload && typeof payload === "object"
-        ? ((payload as Record<string, unknown>).data ?? payload)
-        : null;
-
-    if (
-      (type === "order.updated" || type === "order.created") &&
-      data
-    ) {
-      const order = summarizeMoneriumOrder(data);
-      const wallet = order.address?.trim() ?? "";
-      let privateUserId = "";
-      if (wallet) {
-        const byWallet = await loadMoneriumTokenByWallet(wallet);
-        privateUserId = byWallet?.privateUserId ?? "";
-      }
-      const kind = (order.kind ?? "").toLowerCase();
-      if (privateUserId && kind === "issue") {
-        await notifyProcessedIssueIfNeeded({ privateUserId, order });
-      }
-      if (
-        privateUserId &&
-        kind === "redeem" &&
-        (order.state ?? "").toLowerCase() === "processed" &&
-        order.txHashes[0]
-      ) {
-        await resolveOrdersForTransfer({
-          txHash: order.txHashes[0],
-          walletAddress: wallet,
-          userId: privateUserId,
-          kind: "burn",
-        });
-      }
-    }
-
-    return res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error("❌ Monerium order webhook failed:", error);
-    return res
-      .status(500)
-      .json(
-        makeError(
-          "MONERIUM_WEBHOOK_FAILED",
-          error instanceof Error ? error.message : "Unknown error",
-          error,
-          500,
-        ),
-      );
-  }
+app.post("/monerium/webhooks", async (_req: any, res: any) => {
+  return res.status(200).json({ ok: true, ignored: true });
 });
 
 /**
- * Alchemy Address Activity webhook — mint/burn on EURe → lookup Monerium orders → settle invoices.
+ * Alchemy Address Activity — txHash hit → FCM. Always 2xx so Alchemy does not pause.
  */
 app.post("/monerium/chain/transfers", async (req: any, res: any) => {
   try {
-    if (!alchemyWebhookSigningKey) {
-      console.warn("⚠️ ALCHEMY_WEBHOOK_SIGNING_KEY not set");
-      return res
-        .status(503)
-        .json(
-          makeError(
-            "ALCHEMY_SIGNING_KEY_MISSING",
-            "ALCHEMY_WEBHOOK_SIGNING_KEY is not configured.",
-          ),
-        );
-    }
-
     const signature =
       typeof req.headers["x-alchemy-signature"] === "string"
         ? req.headers["x-alchemy-signature"]
@@ -4510,11 +4401,11 @@ app.post("/monerium/chain/transfers", async (req: any, res: any) => {
       signingKey: alchemyWebhookSigningKey,
     });
     if (!valid) {
-      return res
-        .status(401)
-        .json(
-          makeError("ALCHEMY_SIGNATURE_INVALID", "Invalid Alchemy signature."),
-        );
+      console.warn("⚠️ Alchemy webhook signature invalid or key missing", {
+        hasSigningKey: Boolean(alchemyWebhookSigningKey),
+        hasSignature: Boolean(signature),
+      });
+      return res.status(200).json({ ok: false, reason: "invalid_signature" });
     }
 
     const payload =
@@ -4529,7 +4420,6 @@ app.post("/monerium/chain/transfers", async (req: any, res: any) => {
         : req.body;
 
     const payloadSummary = summarizeAlchemyPayload(payload);
-    // Include normal transfers too — Address Activity often is not mint/burn-shaped.
     const transfers = extractMintBurnTransfers(
       payload,
       moneriumEureTokenAddress || null,
@@ -4549,62 +4439,46 @@ app.post("/monerium/chain/transfers", async (req: any, res: any) => {
     const results = [];
     for (const transfer of transfers) {
       try {
-        const resolved = await resolveOrdersForTransfer({
-          txHash: transfer.txHash,
-          walletAddress: transfer.walletAddress,
-          kind: transfer.kind,
-          amountHint: transfer.value,
-        });
-
-        const settleList = Array.isArray(resolved.settle)
-          ? resolved.settle
-          : [];
-        // Skip generic money toast only when an invoice was actually settled (or already PAID).
-        const skipAccountToast = settleList.some(
-          (s) =>
-            s.notified ||
-            (s.matched &&
-              s.alreadyPaid &&
-              (s.path === "private" || s.path === "public")),
-        );
-
-        let notification: unknown = null;
-        if (!skipAccountToast) {
-          if (resolved.ok && resolved.privateUserId) {
-            notification = await notifyMoneriumAccountTransfer({
-              privateUserId: resolved.privateUserId,
-              kind: transfer.kind,
-              txHash: transfer.txHash,
-              amountHint: transfer.value,
-            });
-          } else if (transfer.walletAddress) {
-            const byWallet = await loadMoneriumTokenByWallet(
-              transfer.walletAddress,
-            );
-            if (byWallet) {
-              notification = await notifyMoneriumAccountTransfer({
-                privateUserId: byWallet.privateUserId,
-                kind: transfer.kind,
-                txHash: transfer.txHash,
-                amountHint: transfer.value,
-              });
-            }
-          }
-        } else {
-          notification = {
-            skipped: true,
-            reason: "invoice_settled_or_already_paid",
-            settle: settleList,
-          };
+        if (transfer.kind === "burn") {
+          results.push({
+            transfer,
+            notification: { skipped: true, reason: "burn" },
+          });
+          continue;
         }
 
-        results.push({
-          transfer,
-          resolved,
-          notification,
+        const byWallet = await loadMoneriumTokenByWallet(
+          transfer.walletAddress,
+        );
+        if (!byWallet) {
+          console.warn("⚠️ Alchemy transfer wallet not in monerium_tokens", {
+            wallet: transfer.walletAddress,
+            txHash: transfer.txHash,
+          });
+          results.push({
+            transfer,
+            notification: { skipped: true, reason: "unknown_wallet" },
+          });
+          continue;
+        }
+
+        const notification = await notifyMoneriumAccountTransfer({
+          privateUserId: byWallet.privateUserId,
+          kind: transfer.kind,
+          txHash: transfer.txHash,
+          amountHint: transfer.value,
         });
+        results.push({ transfer, notification });
+
+        // Invoice matching — off until add-money FCM is reliable.
+        // await resolveOrdersForTransfer({
+        //   txHash: transfer.txHash,
+        //   walletAddress: transfer.walletAddress,
+        //   kind: transfer.kind,
+        //   amountHint: transfer.value,
+        // });
       } catch (err) {
-        console.error("❌ Failed resolving transfer order", {
+        console.error("❌ Alchemy transfer notify failed", {
           txHash: transfer.txHash,
           wallet: transfer.walletAddress,
           error: err instanceof Error ? err.message : err,
@@ -4625,16 +4499,10 @@ app.post("/monerium/chain/transfers", async (req: any, res: any) => {
     });
   } catch (error) {
     console.error("❌ Alchemy chain transfers webhook failed:", error);
-    return res
-      .status(500)
-      .json(
-        makeError(
-          "ALCHEMY_WEBHOOK_FAILED",
-          error instanceof Error ? error.message : "Unknown error",
-          error,
-          500,
-        ),
-      );
+    return res.status(200).json({
+      ok: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
   }
 });
 
