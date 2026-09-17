@@ -6,10 +6,7 @@ import {
   type StoredMoneriumToken,
 } from "./moneriumTokens.js";
 import { getSupabaseAdmin } from "./supabaseAdmin.js";
-import {
-  ensureMoneriumOrderWebhook,
-  backfillRecentIncomingIssues,
-} from "./moneriumOrderWebhook.js";
+import { ensureMoneriumOrderWebhook } from "./moneriumOrderWebhook.js";
 
 const normalizeWallet = (value?: string | null): string | null => {
   if (!value || typeof value !== "string") return null;
@@ -91,12 +88,11 @@ export const registerMoneriumWallet = async (params: {
   return { ok: true, wallet, alchemy };
 };
 
-export const syncMoneriumIncomingNotifications = async (
+export const ensureMoneriumIncomingWebhook = async (
   privateUserId: string,
 ): Promise<{
   ok: boolean;
   webhook?: { ok: boolean; created?: boolean; detail?: string };
-  backfill?: { notified: number; listed?: number; listOk?: boolean };
   detail?: string;
 }> => {
   const userId = privateUserId.trim();
@@ -113,20 +109,14 @@ export const syncMoneriumIncomingNotifications = async (
       accessToken: token.accessToken,
       tokenType: token.tokenType,
     });
-    const backfill = await backfillRecentIncomingIssues({
-      privateUserId: userId,
-      accessToken: token.accessToken,
-      tokenType: token.tokenType,
-    });
-    console.log("ℹ️ Monerium incoming notify sync", {
+    console.log("ℹ️ Monerium incoming webhook", {
       privateUserId: userId,
       webhook,
-      backfill,
     });
-    return { ok: true, webhook, backfill };
+    return { ok: webhook.ok, webhook, detail: webhook.detail };
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error);
-    console.warn("⚠️ Monerium incoming notify sync failed", {
+    console.warn("⚠️ Monerium incoming webhook ensure failed", {
       privateUserId: userId,
       message: detail,
     });

@@ -2,8 +2,6 @@ import crypto from "node:crypto";
 import { getSupabaseAdmin } from "./supabaseAdmin.js";
 import {
   parseSbInvoiceIdFromOrder,
-  readMoneriumOrdersArray,
-  summarizeMoneriumOrder,
   type MoneriumOrderSummary,
 } from "./moneriumOrderSummary.js";
 import { notifyMoneriumFundsArrived } from "./notifyUser.js";
@@ -200,56 +198,6 @@ export const ensureMoneriumOrderWebhook = async (params: {
   return { ok: true, created: true };
 };
 
-export const listRecentProcessedIssues = async (params: {
-  accessToken: string;
-  tokenType?: string | null;
-}): Promise<{
-  ok: boolean;
-  status: number;
-  orders: ReturnType<typeof summarizeMoneriumOrder>[];
-}> => {
-  const listed = await moneriumFetch({
-    accessToken: params.accessToken,
-    tokenType: params.tokenType ?? undefined,
-    method: "GET",
-    path: "/orders",
-  });
-  if (!listed.ok) {
-    console.warn("⚠️ Monerium issue order list failed", {
-      status: listed.status,
-      data: listed.data,
-    });
-    return { ok: false, status: listed.status, orders: [] };
-  }
-  const cutoff = Date.now() - 48 * 60 * 60 * 1000;
-  const orders = readMoneriumOrdersArray(listed.data)
-    .map(summarizeMoneriumOrder)
-    .filter((order) => {
-      if ((order.kind ?? "").toLowerCase() !== "issue") return false;
-      if ((order.state ?? "").toLowerCase() !== "processed") return false;
-      const raw = order.raw && typeof order.raw === "object"
-        ? (order.raw as Record<string, unknown>)
-        : {};
-      const meta =
-        raw.meta && typeof raw.meta === "object"
-          ? (raw.meta as Record<string, unknown>)
-          : {};
-      const stamped = [
-        raw.updatedAt,
-        raw.createdAt,
-        raw.date,
-        meta.processedAt,
-        meta.placedAt,
-      ]
-        .map((value) => (typeof value === "string" ? Date.parse(value) : NaN))
-        .find((value) => Number.isFinite(value));
-      if (stamped != null && stamped < cutoff) return false;
-      return true;
-    })
-    .slice(0, 20);
-  return { ok: true, status: listed.status, orders };
-};
-
 export const notifyProcessedIssueIfNeeded = async (params: {
   privateUserId: string;
   order: MoneriumOrderSummary;
@@ -284,25 +232,5 @@ export const notifyProcessedIssueIfNeeded = async (params: {
     result,
   });
   return { notified: result.ok, detail: result.detail };
-};
-
-export const backfillRecentIncomingIssues = async (params: {
-  privateUserId: string;
-  accessToken: string;
-  tokenType?: string | null;
-}): Promise<{ notified: number; listed: number; listOk: boolean }> => {
-  const listed = await listRecentProcessedIssues({
-    accessToken: params.accessToken,
-    tokenType: params.tokenType,
-  });
-  let notified = 0;
-  for (const order of listed.orders) {
-    const result = await notifyProcessedIssueIfNeeded({
-      privateUserId: params.privateUserId,
-      order,
-    });
-    if (result.notified) notified += 1;
-  }
-  return { notified, listed: listed.orders.length, listOk: listed.ok };
 };
 
