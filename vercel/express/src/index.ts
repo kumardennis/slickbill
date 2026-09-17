@@ -49,7 +49,12 @@ import {
 } from "./lib/moneriumSettle.js";
 import { addAddressesToAlchemyWebhook } from "./lib/alchemyAddresses.js";
 import { registerMoneriumWallet } from "./lib/registerMoneriumWallet.js";
-import { notifyUserViaSupabase } from "./lib/notifyUser.js";
+import { notifyUserViaSupabase, notifyMoneriumFundsArrived, resolveAppUserIdFromPrivateUserId } from "./lib/notifyUser.js";
+import {
+  claimNotifiedOrder,
+  notifyProcessedIssueIfNeeded,
+  verifyMoneriumWebhookSignature,
+} from "./lib/moneriumOrderWebhook.js";
 import { stripInvalidMoneriumReference } from "./lib/moneriumRemittance.js";
 
 console.log("🔍 Environment variables:");
@@ -4220,33 +4225,40 @@ const resolveOrdersForTransfer = async (params: {
   };
 };
 
-const resolveAppUserIdFromPrivateUserId = async (
-  privateUserId: string,
-): Promise<number | null> => {
-  const supabase = getSupabaseAdmin();
-  if (!supabase || !privateUserId.trim()) return null;
-
-  const asNumber = Number(privateUserId);
-  const table = supabase.from("private_users") as any;
-  const { data, error } = Number.isFinite(asNumber)
-    ? await table.select("userId").eq("id", asNumber).maybeSingle()
-    : await table.select("userId").eq("id", privateUserId).maybeSingle();
-
-  if (error || !data || data.userId == null) {
-    if (error) {
-      console.error("❌ private_users lookup failed", error.message);
-    }
-    return null;
-  }
-  return Number(data.userId);
-};
-
 const notifyMoneriumAccountTransfer = async (params: {
   privateUserId: string;
   kind: "mint" | "burn" | "transfer";
   txHash: string;
   amountHint?: string | null;
 }) => {
+  const isIncoming = params.kind === "mint";
+  const isOutgoing = params.kind === "burn";
+  if (isIncoming) {
+    const claimKey = params.txHash ? `tx:${params.txHash}` : "";
+    if (claimKey) {
+      const claimed = await claimNotifiedOrder(
+        claimKey,
+        params.privateUserId,
+        "mint",
+      );
+      if (!claimed) {
+        return { ok: true as const, detail: "already_notified" };
+      }
+    }
+    const result = await notifyMoneriumFundsArrived({
+      privateUserId: params.privateUserId,
+      txHash: params.txHash,
+      amountHint: params.amountHint,
+    });
+    console.log("ℹ️ Monerium transfer notification", {
+      privateUserId: params.privateUserId,
+      kind: params.kind,
+      txHash: params.txHash,
+      result,
+    });
+    return result;
+  }
+
   const appUserId = await resolveAppUserIdFromPrivateUserId(
     params.privateUserId,
   );
@@ -4254,18 +4266,12 @@ const notifyMoneriumAccountTransfer = async (params: {
     return { ok: false as const, detail: "app_user_not_found" };
   }
 
-  const isIncoming = params.kind === "mint";
-  const isOutgoing = params.kind === "burn";
-  const title = isIncoming
-    ? "You got money in Slickbills"
-    : isOutgoing
-      ? "Money sent from Slickbills"
-      : "Slickbills account activity";
-  const body = isIncoming
-    ? "You got money in Slickbills."
-    : isOutgoing
-      ? "Money was sent from your Slickbills account."
-      : "There was activity on your Slickbills account.";
+  const title = isOutgoing
+    ? "Money sent from Slickbills"
+    : "Slickbills account activity";
+  const body = isOutgoing
+    ? "Money was sent from your Slickbills account."
+    : "There was activity on your Slickbills account.";
 
   const result = await notifyUserViaSupabase({
     userId: appUserId,
@@ -4367,6 +4373,109 @@ app.post("/monerium/settle/by-txhash", async (req: any, res: any) => {
 });
 
 /**
+ * Monerium order webhooks — incoming SEPA issue (add money) and redeem updates.
+ * POST /monerium/webhooks
+ */
+app.post("/monerium/webhooks", async (req: any, res: any) => {
+  try {
+    const rawBody: string =
+      typeof req.rawBody === "string"
+        ? req.rawBody
+        : typeof req.body === "string"
+          ? req.body
+          : JSON.stringify(req.body ?? {});
+    const valid = verifyMoneriumWebhookSignature({
+      rawBody,
+      webhookId:
+        typeof req.headers["webhook-id"] === "string"
+          ? req.headers["webhook-id"]
+          : undefined,
+      webhookTimestamp:
+        typeof req.headers["webhook-timestamp"] === "string"
+          ? req.headers["webhook-timestamp"]
+          : undefined,
+      signature:
+        typeof req.headers["webhook-signature"] === "string"
+          ? req.headers["webhook-signature"]
+          : undefined,
+    });
+    if (!valid) {
+      return res
+        .status(401)
+        .json(
+          makeError(
+            "MONERIUM_WEBHOOK_INVALID",
+            "Invalid Monerium webhook signature.",
+          ),
+        );
+    }
+
+    const payload =
+      typeof req.body === "string"
+        ? (() => {
+            try {
+              return JSON.parse(req.body);
+            } catch {
+              return null;
+            }
+          })()
+        : req.body;
+    const type =
+      payload && typeof payload === "object"
+        ? String((payload as Record<string, unknown>).type ?? "")
+        : "";
+    const data =
+      payload && typeof payload === "object"
+        ? ((payload as Record<string, unknown>).data ?? payload)
+        : null;
+
+    if (
+      (type === "order.updated" || type === "order.created") &&
+      data
+    ) {
+      const order = summarizeMoneriumOrder(data);
+      const wallet = order.address?.trim() ?? "";
+      let privateUserId = "";
+      if (wallet) {
+        const byWallet = await loadMoneriumTokenByWallet(wallet);
+        privateUserId = byWallet?.privateUserId ?? "";
+      }
+      const kind = (order.kind ?? "").toLowerCase();
+      if (privateUserId && kind === "issue") {
+        await notifyProcessedIssueIfNeeded({ privateUserId, order });
+      }
+      if (
+        privateUserId &&
+        kind === "redeem" &&
+        (order.state ?? "").toLowerCase() === "processed" &&
+        order.txHashes[0]
+      ) {
+        await resolveOrdersForTransfer({
+          txHash: order.txHashes[0],
+          walletAddress: wallet,
+          userId: privateUserId,
+          kind: "burn",
+        });
+      }
+    }
+
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error("❌ Monerium order webhook failed:", error);
+    return res
+      .status(500)
+      .json(
+        makeError(
+          "MONERIUM_WEBHOOK_FAILED",
+          error instanceof Error ? error.message : "Unknown error",
+          error,
+          500,
+        ),
+      );
+  }
+});
+
+/**
  * Alchemy Address Activity webhook — mint/burn on EURe → lookup Monerium orders → settle invoices.
  */
 app.post("/monerium/chain/transfers", async (req: any, res: any) => {
@@ -4464,6 +4573,7 @@ app.post("/monerium/chain/transfers", async (req: any, res: any) => {
               privateUserId: resolved.privateUserId,
               kind: transfer.kind,
               txHash: transfer.txHash,
+              amountHint: transfer.value,
             });
           } else if (transfer.walletAddress) {
             const byWallet = await loadMoneriumTokenByWallet(
@@ -4474,6 +4584,7 @@ app.post("/monerium/chain/transfers", async (req: any, res: any) => {
                 privateUserId: byWallet.privateUserId,
                 kind: transfer.kind,
                 txHash: transfer.txHash,
+                amountHint: transfer.value,
               });
             }
           }

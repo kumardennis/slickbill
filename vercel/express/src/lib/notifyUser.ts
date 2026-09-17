@@ -51,6 +51,60 @@ const isSendSuccess = (payload: unknown): boolean => {
   return row.isRequestSuccessfull === true || row.isRequestSuccessful === true;
 };
 
+export const resolveAppUserIdFromPrivateUserId = async (
+  privateUserId: string,
+): Promise<number | null> => {
+  const supabase = getSupabaseAdmin();
+  if (!supabase || !privateUserId.trim()) return null;
+
+  const asNumber = Number(privateUserId);
+  const table = supabase.from("private_users") as any;
+  const { data, error } = Number.isFinite(asNumber)
+    ? await table.select("userId").eq("id", asNumber).maybeSingle()
+    : await table.select("userId").eq("id", privateUserId).maybeSingle();
+
+  if (error || !data || data.userId == null) return null;
+  const appUserId = Number(data.userId);
+  return Number.isFinite(appUserId) && appUserId > 0 ? appUserId : null;
+};
+
+const formatEuroHint = (amountHint?: string | null): string | null => {
+  if (amountHint == null || String(amountHint).trim() === "") return null;
+  const n = Number(amountHint);
+  if (!Number.isFinite(n)) return null;
+  return `€${n.toFixed(2)}`;
+};
+
+export const notifyMoneriumFundsArrived = async (params: {
+  privateUserId: string;
+  txHash?: string | null;
+  amountHint?: string | null;
+  orderId?: string | null;
+}): Promise<{ ok: boolean; detail?: string; appUserId?: number }> => {
+  const appUserId = await resolveAppUserIdFromPrivateUserId(
+    params.privateUserId,
+  );
+  if (!appUserId) {
+    return { ok: false, detail: "app_user_not_found" };
+  }
+  const amount = formatEuroHint(params.amountHint);
+  const result = await notifyUserViaSupabase({
+    userId: appUserId,
+    type: "MONERIUM_ACCOUNT_TRANSFER",
+    title: "You got money in Slickbills",
+    body: amount
+      ? `${amount} arrived in SlickBills.`
+      : "You got money in SlickBills.",
+    data: {
+      invoiceId: "0",
+      txHash: params.txHash ?? "",
+      kind: "mint",
+      orderId: params.orderId ?? "",
+    },
+  });
+  return { ...result, appUserId };
+};
+
 /**
  * Send push via existing Supabase notifications edge function (service role).
  */

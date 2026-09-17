@@ -6,6 +6,12 @@ import {
   type StoredMoneriumToken,
 } from "./moneriumTokens.js";
 import { getSupabaseAdmin } from "./supabaseAdmin.js";
+import {
+  backfillRecentIncomingIssues,
+  ensureMoneriumOrderWebhook,
+} from "./moneriumOrderWebhook.js";
+
+const backfilledUsers = new Set<string>();
 
 const normalizeWallet = (value?: string | null): string | null => {
   if (!value || typeof value !== "string") return null;
@@ -83,6 +89,37 @@ export const registerMoneriumWallet = async (params: {
     alchemy,
     persistedToken: Boolean(token),
   });
+
+  if (token?.accessToken) {
+    try {
+      const webhook = await ensureMoneriumOrderWebhook({
+        privateUserId: userId,
+        accessToken: token.accessToken,
+        tokenType: token.tokenType,
+      });
+      let backfill: { notified: number; skipped?: boolean } = { notified: 0 };
+      if (!backfilledUsers.has(userId)) {
+        backfill = await backfillRecentIncomingIssues({
+          privateUserId: userId,
+          accessToken: token.accessToken,
+          tokenType: token.tokenType,
+        });
+        backfilledUsers.add(userId);
+      } else {
+        backfill = { notified: 0, skipped: true };
+      }
+      console.log("ℹ️ Monerium order webhook", {
+        privateUserId: userId,
+        webhook,
+        backfill,
+      });
+    } catch (error) {
+      console.warn("⚠️ Monerium order webhook ensure failed", {
+        privateUserId: userId,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   return { ok: true, wallet, alchemy };
 };
