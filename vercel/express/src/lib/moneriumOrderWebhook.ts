@@ -31,8 +31,8 @@ export const moneriumWebhookUrl = (): string | null => {
   return `${origin.replace(/\/$/, "")}/monerium/webhooks`;
 };
 
-const hmacKey = (secret: string): Buffer =>
-  Buffer.from(secret.replace(/^whsec_/, ""), "base64");
+const hmacKey = (secret: string): Uint8Array =>
+  new Uint8Array(Buffer.from(secret.replace(/^whsec_/, ""), "base64"));
 
 export const verifyMoneriumWebhookSignature = (params: {
   rawBody: string;
@@ -55,8 +55,8 @@ export const verifyMoneriumWebhookSignature = (params: {
 };
 
 const timingSafeEqualString = (a: string, b: string): boolean => {
-  const left = Buffer.from(a);
-  const right = Buffer.from(b);
+  const left = new Uint8Array(Buffer.from(a));
+  const right = new Uint8Array(Buffer.from(b));
   if (left.length !== right.length) return false;
   return crypto.timingSafeEqual(left, right);
 };
