@@ -24,7 +24,14 @@ function toBase64Url(bytes: Uint8Array): string {
 }
 
 async function importPrivateKey(privateKeyPem: string): Promise<CryptoKey> {
-  const normalized = privateKeyPem.replace(/\\n/g, "\n").trim();
+  let normalized = privateKeyPem.trim();
+  if (
+    (normalized.startsWith('"') && normalized.endsWith('"')) ||
+    (normalized.startsWith("'") && normalized.endsWith("'"))
+  ) {
+    normalized = normalized.slice(1, -1);
+  }
+  normalized = normalized.replace(/\\n/g, "\n").trim();
   const pemBody = normalized
     .replace("-----BEGIN PRIVATE KEY-----", "")
     .replace("-----END PRIVATE KEY-----", "")
@@ -133,6 +140,9 @@ export async function sendFcmPush({
           data: dataPayload,
           android: {
             priority: "HIGH",
+            notification: {
+              channel_id: "slickbills_default",
+            },
           },
           apns: {
             headers: {
@@ -152,5 +162,39 @@ export async function sendFcmPush({
   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(`FCM send failed: ${errorText}`);
+  }
+}
+
+export function fcmUserFacingError(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error);
+  const lower = text.toLowerCase();
+  if (
+    lower.includes("invalid_grant") ||
+    lower.includes("account not found") ||
+    lower.includes("failed to get google access token")
+  ) {
+    return "Push credentials on this server are invalid. Check FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY.";
+  }
+  if (
+    lower.includes("unregistered") ||
+    lower.includes("not_found") ||
+    lower.includes("requested entity was not found")
+  ) {
+    return "Receiver's notification token is no longer valid. They need to open the app again.";
+  }
+  if (lower.includes("missing required env var")) {
+    return "Push is not configured on this server (missing FIREBASE_* secrets).";
+  }
+  return text;
+}
+
+export async function sendFcmPushBestEffort(args: SendFcmPushArgs) {
+  try {
+    await sendFcmPush(args);
+  } catch (error) {
+    console.error(
+      "FCM send skipped:",
+      error instanceof Error ? error.message : error,
+    );
   }
 }

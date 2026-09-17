@@ -1,4 +1,4 @@
-import { sendFcmPush } from "./fcm.ts";
+import { sendFcmPushBestEffort } from "./fcm.ts";
 
 export const MANUAL_REMIND_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 export const AUTO_REMIND_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000;
@@ -139,7 +139,7 @@ export async function deliverInvoiceReminder(
   }
 
   const copy = reminderCopy(invoice);
-  await sendFcmPush({
+  await sendFcmPushBestEffort({
     token: fcmToken,
     title: copy.title,
     body: copy.body,

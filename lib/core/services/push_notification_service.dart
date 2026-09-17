@@ -73,6 +73,13 @@ class PushNotificationService {
             Map<String, dynamic>.from(initialMessage.data);
       }
 
+      await FirebaseMessaging.instance
+          .setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
       _isInitialized = true;
       print('✅ Firebase Messaging initialized');
     } catch (e) {

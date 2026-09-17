@@ -607,7 +607,6 @@ class WalletInfo extends HookWidget {
           await MoneriumService.connect(
             userId: userId,
             email: email,
-            walletAddress: walletAddress,
           );
         }
 

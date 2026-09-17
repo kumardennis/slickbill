@@ -1,7 +1,11 @@
 package com.slickbills.app
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
+import android.os.Bundle
 import android.util.Log
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -23,6 +27,24 @@ class MainActivity: FlutterFragmentActivity() {
             Log.e("MainActivity", "Error reading file bytes: ${e.message}")
             null
         }
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        createDefaultNotificationChannel()
+    }
+
+    private fun createDefaultNotificationChannel() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+        val channel = NotificationChannel(
+            "slickbills_default",
+            "SlickBills",
+            NotificationManager.IMPORTANCE_HIGH,
+        )
+        channel.description = "Bills and payments"
+        channel.enableVibration(true)
+        getSystemService(NotificationManager::class.java)
+            ?.createNotificationChannel(channel)
     }
 
     override fun onNewIntent(intent: Intent) {

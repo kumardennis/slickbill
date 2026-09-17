@@ -2105,11 +2105,10 @@ app.post("/monerium/oauth/start", async (req: any, res: any) => {
       scope: moneriumScope,
       state,
       skip_kyc: "false",
-      prompt: "login",
     };
 
     if (forceLogin === true) {
-      authQuery.prompt = "login select_account";
+      authQuery.prompt = "login";
       authQuery.max_age = "0";
     }
 
@@ -2329,56 +2328,18 @@ app.post("/monerium/oauth/refresh", async (req: any, res: any) => {
         ? moneriumRefreshToken.trim()
         : "";
 
-    if (stored?.refreshToken) {
-      token = await refreshMoneriumToken(userId);
-    } else if (bodyRefresh) {
-      const body = moneriumTokenRequestBody({
-        grant_type: "refresh_token",
-        refresh_token: bodyRefresh,
+    if (bodyRefresh && !stored?.refreshToken) {
+      moneriumTokenStore.set(userId, {
+        accessToken: stored?.accessToken ?? "",
+        refreshToken: bodyRefresh,
+        tokenType: stored?.tokenType ?? "Bearer",
+        scope: stored?.scope,
+        createdAt: stored?.createdAt ?? Date.now(),
+        expiresAt: stored?.expiresAt ?? Date.now(),
       });
+    }
 
-      const response = await fetch(makeMoneriumUrl(moneriumTokenPath), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          Accept: "application/json",
-        },
-        body: body.toString(),
-      });
-
-      const text = await response.text();
-      const json = (() => {
-        try {
-          return JSON.parse(text);
-        } catch {
-          return { raw: text };
-        }
-      })();
-
-      if (!response.ok) {
-        if (isInvalidGrantPayload(json) || response.status === 401) {
-          await clearMoneriumToken(userId);
-          throw makeError(
-            "MONERIUM_REAUTH_REQUIRED",
-            "Monerium refresh token is no longer valid. Connect Monerium again.",
-            json,
-            401,
-          );
-        }
-        throw makeError(
-          "MONERIUM_TOKEN_REFRESH_FAILED",
-          "Failed to refresh Monerium access token.",
-          json,
-          response.status,
-        );
-      }
-
-      token = normalizeTokenResponse(json as MoneriumOAuthTokenResponse);
-      if (!token.refreshToken) {
-        token.refreshToken = bodyRefresh;
-      }
-      await setMoneriumToken(userId, token);
-    } else {
+    if (!stored?.refreshToken && !bodyRefresh) {
       throw makeError(
         "MONERIUM_REFRESH_TOKEN_MISSING",
         "No refresh token available for this user.",
@@ -2386,6 +2347,8 @@ app.post("/monerium/oauth/refresh", async (req: any, res: any) => {
         401,
       );
     }
+
+    token = await refreshMoneriumToken(userId);
 
     await registerMoneriumWallet({
       privateUserId: userId,

@@ -9,7 +9,7 @@ import {
 import { corsHeaders } from "../../_shared/cors.ts";
 import { requireOwnPrivateUser } from "../../_shared/requireOwnPrivateUser.ts";
 import { createSupabaseService } from "../../_shared/supabaseClient.ts";
-import { sendFcmPush } from "../../_shared/fcm.ts";
+import { sendFcmPushBestEffort } from "../../_shared/fcm.ts";
 
 type ReceiverUser = {
   receiverUserId: number;
@@ -160,7 +160,7 @@ export const handler = async (req: Request) => {
 
         const fcmToken = receiverAppUser?.fcm_token as string | null;
         if (fcmToken) {
-          await sendFcmPush({
+          await sendFcmPushBestEffort({
             token: fcmToken,
             title: "New Slickbill!",
             body: senderName

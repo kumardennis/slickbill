@@ -81,12 +81,11 @@ class Profile extends HookWidget {
       await userController.forceLogout();
     }
 
-    // Bank section
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: const CustomAppbar(title: 'Profile', appbarIcon: null),
-      body: SbPageBackground(
-        child: Obx(
+    return SbPageBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        appBar: const CustomAppbar(title: 'Profile', appbarIcon: null),
+        body: Obx(
         () {
           final user = userController.user.value;
           final moneriumUserId =

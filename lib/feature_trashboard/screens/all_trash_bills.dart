@@ -24,14 +24,14 @@ class AllTrashBills extends HookWidget {
       return () => tabController.removeListener(listener);
     }, [tabController]);
 
-    return Scaffold(
+    return SbPageBackground(
+      child: Scaffold(
       backgroundColor: Colors.transparent,
       appBar: CustomAppbar(
         title: 'hd_ObsoleteSlickBills'.tr,
         appbarIcon: null,
       ),
-      body: SbPageBackground(
-        child: Column(
+      body: Column(
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),

@@ -7,24 +7,19 @@ import {
   errorResponseData,
 } from "../../_shared/confirmedRequiredParams.ts";
 import { corsHeaders } from "../../_shared/cors.ts";
-import {
-  createSupabase,
-  createSupabaseService,
-  isServiceRoleRequest,
-} from "../../_shared/supabaseClient.ts";
-import { sendFcmPush } from "../../_shared/fcm.ts";
+import { createSupabaseService } from "../../_shared/supabaseClient.ts";
+import { fcmUserFacingError, sendFcmPush } from "../../_shared/fcm.ts";
 
 export const handler = async (req: Request) => {
-  const supabase = isServiceRoleRequest(req)
-    ? createSupabaseService()
-    : createSupabase(req);
+  const supabase = createSupabaseService();
+  const jsonHeaders = { ...corsHeaders, "Content-Type": "application/json" };
 
   try {
     const { userId, type, invoiceId, title, body, token } = await req.json();
 
     if (!confirmedRequiredParams([userId, type, invoiceId])) {
       return new Response(JSON.stringify(errorResponseData), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: jsonHeaders,
       });
     }
 
@@ -37,7 +32,7 @@ export const handler = async (req: Request) => {
     if (!fcmToken) {
       const appUserId = Number(userId);
       const idFilter = Number.isFinite(appUserId) ? appUserId : userId;
-      const { data: userData, error: userError } = await supabase
+      const { data: userData } = await supabase
         .from("users")
         .select("id, fcm_token")
         .eq("id", idFilter)
@@ -63,18 +58,17 @@ export const handler = async (req: Request) => {
       }
 
       if (!fcmToken) {
-        const responseData = {
-          isRequestSuccessfull: false,
-          data: null,
-          error: userError ?? "User not found or no FCM token",
-        };
-        return new Response(JSON.stringify(responseData), {
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({
+            isRequestSuccessfull: false,
+            data: null,
+            error: "Receiver has no push notifications enabled",
+          }),
+          { headers: jsonHeaders },
+        );
       }
     }
 
-    // Determine title and body based on type
     let finalTitle = title;
     let finalBody = body;
 
@@ -118,32 +112,41 @@ export const handler = async (req: Request) => {
       }
     }
 
-    await sendFcmPush({
-      token: fcmToken,
-      title: finalTitle,
-      body: finalBody,
-      data: { type, invoiceId: String(invoiceId) },
-    });
+    try {
+      await sendFcmPush({
+        token: fcmToken,
+        title: finalTitle,
+        body: finalBody,
+        data: { type, invoiceId: String(invoiceId) },
+      });
+    } catch (err) {
+      console.error("FCM send-notification failed:", err);
+      return new Response(
+        JSON.stringify({
+          isRequestSuccessfull: false,
+          data: null,
+          error: fcmUserFacingError(err),
+        }),
+        { headers: jsonHeaders },
+      );
+    }
 
-    const responseData = {
-      isRequestSuccessfull: true,
-      data: { sent: true, userId, type, invoiceId },
-      error: null,
-    };
-
-    return new Response(JSON.stringify(responseData), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({
+        isRequestSuccessfull: true,
+        data: { sent: true, userId, type, invoiceId },
+        error: null,
+      }),
+      { headers: jsonHeaders },
+    );
   } catch (err) {
-    const responseData = {
-      isRequestSuccessfull: false,
-      data: null,
-      error: err instanceof Error ? err.message : String(err),
-    };
-
-    return new Response(JSON.stringify(responseData), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 500,
-    });
+    return new Response(
+      JSON.stringify({
+        isRequestSuccessfull: false,
+        data: null,
+        error: err instanceof Error ? err.message : String(err),
+      }),
+      { headers: jsonHeaders },
+    );
   }
 };

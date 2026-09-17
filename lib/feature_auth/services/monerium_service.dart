@@ -38,8 +38,6 @@ class MoneriumService {
       'monerium_invoice_order_$invoiceId';
   static const String _configuredWalletChain =
       String.fromEnvironment('MONERIUM_WALLET_CHAIN', defaultValue: '');
-  static String get _walletClientBaseUrl => AppEnv.walletClientUrl;
-  static const String _walletSiwePath = '/wallet/siwe';
   static const String _webConnectPendingAtKey =
       'monerium_web_connect_pending_at';
   static const _webConnectPendingTtl = Duration(minutes: 20);
@@ -123,12 +121,14 @@ class MoneriumService {
       }
 
       try {
+        final localRefresh = session?['refreshToken']?.toString().trim() ?? '';
         _log(
-            '_ensureActiveSession(): refreshing session for userId=$userId (local=${session != null})');
+            '_ensureActiveSession(): refreshing session for userId=$userId (local=${session != null}, hasRefresh=${localRefresh.isNotEmpty})');
         final refreshed = await _postJson(
           '/monerium/oauth/refresh',
           body: {
             'userId': userId,
+            if (localRefresh.isNotEmpty) 'moneriumRefreshToken': localRefresh,
           },
         );
         final saved = await _sessionFromRefreshResponse(
@@ -434,7 +434,7 @@ class MoneriumService {
           final activeSession = await _ensureActiveSession(userId);
           if (_hasUsableAccessToken(activeSession)) {
             _log(
-                'connect() using active Monerium session for userId=$userId (no SIWE/OAuth needed)');
+                'connect() using active Monerium session for userId=$userId (refresh, not SIWE)');
             _lastOAuthStatus = 'success';
             _lastOAuthMessage = null;
             return {
@@ -447,58 +447,8 @@ class MoneriumService {
           await clearStoredSession(userId: userId);
         }
 
-        final normalizedWalletAddress = walletAddress?.trim() ?? '';
-        if (normalizedWalletAddress.isNotEmpty) {
-          final callbackUri = appRedirectUri ?? _callbackUriForPlatform();
-          final siweUri =
-              Uri.parse('$_walletClientBaseUrl$_walletSiwePath').replace(
-            queryParameters: {
-              'userId': userId,
-              'address': normalizedWalletAddress,
-              'app_redirect_uri': callbackUri,
-            },
-          );
-
-          _log('Opening Monerium SIWE flow');
-          openedAuthTab = true;
-          AppLockController.beginExternalAuthSession();
-          final opened = await _openAuthTab(siweUri);
-
-          if (!opened) {
-            throw Exception('Unable to open Monerium SIWE URL.');
-          }
-
-          final callbackResult = await completer.future.timeout(
-            const Duration(minutes: 5),
-            onTimeout: () => throw Exception('Monerium SIWE login timed out.'),
-          );
-
-          final callbackStatus = callbackResult['status']?.toString();
-          if (callbackStatus != 'success') {
-            final message = callbackResult['message']?.toString();
-            throw Exception(message ?? 'Monerium SIWE failed.');
-          }
-
-          final accessToken = callbackResult['accessToken']?.toString();
-          if (accessToken != null && accessToken.isNotEmpty) {
-            await _saveSession({
-              ...callbackResult,
-              'userId': userId,
-              'accessToken': accessToken,
-              if (callbackResult['refreshToken'] != null)
-                'refreshToken': callbackResult['refreshToken'].toString(),
-              if (callbackResult['expiresAt'] != null)
-                'expiresAt': callbackResult['expiresAt'] is int
-                    ? callbackResult['expiresAt']
-                    : int.tryParse(callbackResult['expiresAt'].toString()),
-            });
-          }
-
-          _lastOAuthStatus = 'success';
-          _lastOAuthMessage = null;
-          return callbackResult;
-        }
-
+        // Token refresh is /monerium/oauth/refresh. Browser connect is OAuth
+        // PKCE only — never SIWE. Address ownership is a separate link step.
         final startResponse = await _postJson(
           '/monerium/oauth/start',
           body: {
@@ -642,10 +592,15 @@ class MoneriumService {
 
   static Future<Map<String, dynamic>> refreshToken({
     required String userId,
-  }) {
+  }) async {
+    final session = await _loadSession(userId);
+    final localRefresh = session?['refreshToken']?.toString().trim() ?? '';
     return _postJson(
       '/monerium/oauth/refresh',
-      body: {'userId': userId},
+      body: {
+        'userId': userId,
+        if (localRefresh.isNotEmpty) 'moneriumRefreshToken': localRefresh,
+      },
     );
   }
 
