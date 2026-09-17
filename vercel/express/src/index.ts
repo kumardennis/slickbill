@@ -50,6 +50,7 @@ import {
 import { addAddressesToAlchemyWebhook } from "./lib/alchemyAddresses.js";
 import { registerMoneriumWallet } from "./lib/registerMoneriumWallet.js";
 import { notifyUserViaSupabase } from "./lib/notifyUser.js";
+import { stripInvalidMoneriumReference } from "./lib/moneriumRemittance.js";
 
 console.log("🔍 Environment variables:");
 console.log(
@@ -3436,20 +3437,12 @@ app.post("/monerium/orders/send", async (req: any, res: any) => {
         : "";
     // In-platform: machine invoice id only. Do not put the description on the
     // payment memo (that is leaked on bank statements and is not used to match).
+    // Never invent `sb…` as referenceNumber — Monerium sends that field as an
+    // RF creditor reference and Estonian banks reject non-RF values.
     if (invoiceIdRaw && /^\d+$/.test(invoiceIdRaw)) {
       orderPayload.memo = `[sb:${invoiceIdRaw}]`;
-      const existingRef =
-        typeof orderPayload.referenceNumber === "string"
-          ? orderPayload.referenceNumber.trim()
-          : "";
-      if (!existingRef) {
-        const fallbackRef = `sb${invoiceIdRaw}`;
-        orderPayload.referenceNumber =
-          fallbackRef.length > 35 ? fallbackRef.slice(0, 35) : fallbackRef;
-      } else if (existingRef.length > 35) {
-        orderPayload.referenceNumber = existingRef.slice(0, 35);
-      }
     }
+    stripInvalidMoneriumReference(orderPayload);
 
     if (!orderPayload.amount) {
       return res
@@ -3755,20 +3748,11 @@ app.post("/monerium/orders/withdraw", async (req: any, res: any) => {
         );
     }
 
-    // Never treat a cash-out as an invoice payment.
-    delete orderPayload.memo;
+    // Never treat a cash-out as an invoice payment. Memo only — a `wd…`
+    // referenceNumber is not an RF creditor reference and Estonian banks
+    // reject it ("does not meet beneficiary specified format").
+    delete orderPayload.referenceNumber;
     orderPayload.memo = "SlickBills withdraw";
-    const existingRef =
-      typeof orderPayload.referenceNumber === "string"
-        ? orderPayload.referenceNumber.trim()
-        : "";
-    if (!existingRef || existingRef.toLowerCase().startsWith("sb")) {
-      const fallbackRef = `wd${Date.now()}`;
-      orderPayload.referenceNumber =
-        fallbackRef.length > 35 ? fallbackRef.slice(0, 35) : fallbackRef;
-    } else if (existingRef.length > 35) {
-      orderPayload.referenceNumber = existingRef.slice(0, 35);
-    }
 
     await registerMoneriumWallet({
       privateUserId: userId,

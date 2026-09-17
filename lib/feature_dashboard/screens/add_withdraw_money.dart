@@ -351,7 +351,6 @@ class AddWithdrawMoneyScreen extends HookWidget {
             },
             'amount': amountText,
             'memo': 'SlickBills withdraw',
-            'referenceNumber': 'wd${nowUtc.millisecondsSinceEpoch}'.substring(0, 14),
           },
         );
 
