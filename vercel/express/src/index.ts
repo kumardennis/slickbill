@@ -4381,7 +4381,7 @@ app.post("/monerium/webhooks", async (_req: any, res: any) => {
 });
 
 /**
- * Alchemy Address Activity — txHash hit → FCM. Always 2xx so Alchemy does not pause.
+ * Alchemy Address Activity — txHash hit → FCM, then invoice match. Always 2xx.
  */
 app.post("/monerium/chain/transfers", async (req: any, res: any) => {
   try {
@@ -4438,56 +4438,60 @@ app.post("/monerium/chain/transfers", async (req: any, res: any) => {
 
     const results = [];
     for (const transfer of transfers) {
+      let notification: unknown = null;
       try {
         if (transfer.kind === "burn") {
-          results.push({
-            transfer,
-            notification: { skipped: true, reason: "burn" },
-          });
-          continue;
+          notification = { skipped: true, reason: "burn" };
+        } else {
+          const byWallet = await loadMoneriumTokenByWallet(
+            transfer.walletAddress,
+          );
+          if (!byWallet) {
+            console.warn("⚠️ Alchemy transfer wallet not in monerium_tokens", {
+              wallet: transfer.walletAddress,
+              txHash: transfer.txHash,
+            });
+            notification = { skipped: true, reason: "unknown_wallet" };
+          } else {
+            notification = await notifyMoneriumAccountTransfer({
+              privateUserId: byWallet.privateUserId,
+              kind: transfer.kind,
+              txHash: transfer.txHash,
+              amountHint: transfer.value,
+            });
+          }
         }
-
-        const byWallet = await loadMoneriumTokenByWallet(
-          transfer.walletAddress,
-        );
-        if (!byWallet) {
-          console.warn("⚠️ Alchemy transfer wallet not in monerium_tokens", {
-            wallet: transfer.walletAddress,
-            txHash: transfer.txHash,
-          });
-          results.push({
-            transfer,
-            notification: { skipped: true, reason: "unknown_wallet" },
-          });
-          continue;
-        }
-
-        const notification = await notifyMoneriumAccountTransfer({
-          privateUserId: byWallet.privateUserId,
-          kind: transfer.kind,
-          txHash: transfer.txHash,
-          amountHint: transfer.value,
-        });
-        results.push({ transfer, notification });
-
-        // Invoice matching — off until add-money FCM is reliable.
-        // await resolveOrdersForTransfer({
-        //   txHash: transfer.txHash,
-        //   walletAddress: transfer.walletAddress,
-        //   kind: transfer.kind,
-        //   amountHint: transfer.value,
-        // });
       } catch (err) {
         console.error("❌ Alchemy transfer notify failed", {
           txHash: transfer.txHash,
           wallet: transfer.walletAddress,
           error: err instanceof Error ? err.message : err,
         });
-        results.push({
-          transfer,
+        notification = {
           error: err instanceof Error ? err.message : String(err),
-        });
+        };
       }
+
+      let settle: unknown = null;
+      try {
+        settle = await resolveOrdersForTransfer({
+          txHash: transfer.txHash,
+          walletAddress: transfer.walletAddress,
+          kind: transfer.kind,
+          amountHint: transfer.value,
+        });
+      } catch (err) {
+        console.error("❌ Alchemy invoice match failed", {
+          txHash: transfer.txHash,
+          wallet: transfer.walletAddress,
+          error: err instanceof Error ? err.message : err,
+        });
+        settle = {
+          error: err instanceof Error ? err.message : String(err),
+        };
+      }
+
+      results.push({ transfer, notification, settle });
     }
 
     return res.status(200).json({
