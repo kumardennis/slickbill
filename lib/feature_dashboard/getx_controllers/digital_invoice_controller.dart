@@ -229,8 +229,6 @@ class DigitalInvoiceController extends GetxController {
     String? senderIban,
     String? category,
     int? privateGroupId,
-    int? receiverPrivateUserId,
-    int? senderPrivateUserId,
   }) async {
     try {
       isCreatingPublicInvoice.value = true;
@@ -249,8 +247,6 @@ class DigitalInvoiceController extends GetxController {
         senderIban: senderIban,
         category: category,
         privateGroupId: privateGroupId,
-        receiverPrivateUserId: receiverPrivateUserId,
-        senderPrivateUserId: senderPrivateUserId,
       );
 
       publicInvoices.insert(0, invoice);

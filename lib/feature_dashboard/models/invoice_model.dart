@@ -118,6 +118,21 @@ class InvoiceModel {
   /// Memo we put on in-app euro pays so statements can match this bill.
   String get paymentMemo => '[sb:$id]';
 
+  /// Description plus memo — one string to paste into a bank transfer.
+  String get bankTransferDescription {
+    final note = description.trim();
+    if (note.isEmpty) return paymentMemo;
+    if (note.contains(paymentMemo)) return note;
+    return '$note $paymentMemo';
+  }
+
+  /// Legal account holder for the IBAN (not the public business name).
+  String get displayAccountHolderName {
+    final holder = senders?.privateUsers?.bankAccountName.trim() ?? '';
+    if (holder.isNotEmpty) return holder;
+    return senderName.trim();
+  }
+
   String get displaySenderName {
     final snapshotted = senderName.trim();
     if (snapshotted.isNotEmpty) return snapshotted;

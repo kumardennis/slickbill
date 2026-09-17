@@ -180,12 +180,42 @@ class PublicInvoiceHeroCard extends StatelessWidget {
           ),
           if (description != null && description!.trim().isNotEmpty) ...[
             const SizedBox(height: 10),
-            Text(
-              description!,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: SbColors.onSurface,
-                    height: 1.45,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    description!,
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: SbColors.onSurface,
+                          height: 1.45,
+                        ),
                   ),
+                ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () async {
+                    await Clipboard.setData(
+                        ClipboardData(text: description!.trim()));
+                    Get.snackbar(
+                      'Copied',
+                      'Paste this as the description in your bank transfer',
+                      snackPosition: SnackPosition.BOTTOM,
+                      margin: const EdgeInsets.all(16),
+                      duration: const Duration(seconds: 2),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(SbRadii.sm),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      Icons.copy_rounded,
+                      size: 16,
+                      color: SbColors.secondary,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ],
           if (extra != null) extra!,
@@ -233,6 +263,7 @@ class PublicInvoiceDetailRow extends StatelessWidget {
   final String value;
   final bool highlight;
   final bool copyable;
+  final String? hint;
 
   const PublicInvoiceDetailRow({
     super.key,
@@ -240,57 +271,73 @@ class PublicInvoiceDetailRow extends StatelessWidget {
     required this.value,
     this.highlight = false,
     this.copyable = false,
+    this.hint,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SizedBox(
-            width: 92,
-            child: Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: SbColors.onSurfaceVariant,
-                    fontWeight: FontWeight.w500,
-                  ),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: highlight ? SbColors.error : SbColors.onSurface,
-                    fontWeight: FontWeight.w600,
-                  ),
-            ),
-          ),
-          if (copyable) ...[
-            const SizedBox(width: 8),
-            InkWell(
-              onTap: () async {
-                await Clipboard.setData(ClipboardData(text: value));
-                Get.snackbar(
-                  'Copied',
-                  '$label copied',
-                  snackPosition: SnackPosition.BOTTOM,
-                  margin: const EdgeInsets.all(16),
-                  duration: const Duration(seconds: 2),
-                );
-              },
-              borderRadius: BorderRadius.circular(SbRadii.sm),
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(
-                  Icons.copy_rounded,
-                  size: 16,
-                  color: SbColors.secondary,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 92,
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: SbColors.onSurfaceVariant,
+                        fontWeight: FontWeight.w500,
+                      ),
                 ),
               ),
+              Expanded(
+                child: Text(
+                  value,
+                  textAlign: TextAlign.right,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: highlight ? SbColors.error : SbColors.onSurface,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ),
+              if (copyable) ...[
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () async {
+                    await Clipboard.setData(ClipboardData(text: value));
+                    Get.snackbar(
+                      'Copied',
+                      '$label copied',
+                      snackPosition: SnackPosition.BOTTOM,
+                      margin: const EdgeInsets.all(16),
+                      duration: const Duration(seconds: 2),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(SbRadii.sm),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      Icons.copy_rounded,
+                      size: 16,
+                      color: SbColors.secondary,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (hint != null && hint!.trim().isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              hint!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: SbColors.onSurfaceVariant,
+                    height: 1.35,
+                  ),
             ),
           ],
         ],

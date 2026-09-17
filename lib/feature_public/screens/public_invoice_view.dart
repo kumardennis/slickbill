@@ -196,7 +196,7 @@ class PublicInvoiceView extends HookWidget {
                 children: [
                   PublicInvoiceHeroCard(
                     amount: inv.amount,
-                    description: inv.description,
+                    description: inv.bankTransferDescription,
                     statusLabel: statusLabel,
                     statusColor: statusColor,
                     extra: urls.isEmpty
@@ -269,11 +269,12 @@ class PublicInvoiceView extends HookWidget {
                         value: inv.sender?.iban ?? '-',
                         copyable: inv.sender?.iban != null,
                       ),
-                      PublicInvoiceDetailRow(
-                        label: 'Account',
-                        value: inv.sender?.bankAccountName ?? '-',
-                        copyable: inv.sender?.bankAccountName != null,
-                      ),
+                      if (inv.displayAccountHolderName.isNotEmpty)
+                        PublicInvoiceDetailRow(
+                          label: 'Account',
+                          value: inv.displayAccountHolderName,
+                          copyable: true,
+                        ),
                       PublicInvoiceDetailRow(
                         label: 'Category',
                         value: inv.category ?? '-',

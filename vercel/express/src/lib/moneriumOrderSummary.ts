@@ -35,29 +35,104 @@ const firstNonEmptyString = (...values: unknown[]): string | null => {
   return null;
 };
 
-const formatCounterpartName = (details: Record<string, any> | null) => {
-  if (!details) return null;
-  const company =
-    typeof details.companyName === "string" ? details.companyName.trim() : "";
-  if (company) return company;
-  const name = typeof details.name === "string" ? details.name.trim() : "";
-  if (name) return name;
-  const first =
-    typeof details.firstName === "string" ? details.firstName.trim() : "";
-  const last =
-    typeof details.lastName === "string" ? details.lastName.trim() : "";
-  const combined = `${first} ${last}`.trim();
-  return combined || null;
+export const normalizeIban = (value?: string | null): string | null => {
+  if (!value || typeof value !== "string") return null;
+  const cleaned = value.replace(/\s+/g, "").toUpperCase();
+  return cleaned.length >= 15 ? cleaned : null;
 };
+
+const unwrapOrderRecord = (order: unknown): Record<string, any> => {
+  let map = asRecord(order);
+  if (!map) return {};
+  const nestedData = asRecord(map.data);
+  if (nestedData && (nestedData.id || nestedData.counterpart)) {
+    map = nestedData;
+  }
+  const nestedOrder = asRecord(map.order);
+  if (nestedOrder && (nestedOrder.id || nestedOrder.counterpart)) {
+    map = nestedOrder;
+  }
+  return map;
+};
+
+const formatPartyName = (party: Record<string, any> | null): string | null => {
+  if (!party) return null;
+  const details = asRecord(party.details) ?? party;
+  return firstNonEmptyString(
+    details.companyName,
+    details.company,
+    details.name,
+    party.companyName,
+    party.name,
+    `${typeof details.firstName === "string" ? details.firstName : ""} ${
+      typeof details.lastName === "string" ? details.lastName : ""
+    }`.trim(),
+    `${typeof party.firstName === "string" ? party.firstName : ""} ${
+      typeof party.lastName === "string" ? party.lastName : ""
+    }`.trim(),
+  );
+};
+
+const extractCounterpartIban = (map: Record<string, any>): string | null => {
+  const counterpart = asRecord(map.counterpart);
+  const identifier = asRecord(counterpart?.identifier);
+  const payer = asRecord(map.payer) ?? asRecord(map.debtor);
+  const payerId = asRecord(payer?.identifier);
+  const topIdentifier = asRecord(map.identifier);
+  return normalizeIban(
+    firstNonEmptyString(
+      identifier?.iban,
+      identifier?.account,
+      counterpart?.iban,
+      payerId?.iban,
+      payerId?.account,
+      payer?.iban,
+      topIdentifier?.iban,
+      topIdentifier?.account,
+      map.iban,
+      asRecord(map.meta)?.iban,
+    ),
+  );
+};
+
+const extractCounterpartName = (map: Record<string, any>): string | null => {
+  if (typeof map.counterpart === "string") {
+    return firstNonEmptyString(map.counterpart);
+  }
+  const counterpart = asRecord(map.counterpart);
+  const payer = asRecord(map.payer);
+  const debtor = asRecord(map.debtor);
+  const originator = asRecord(map.originator);
+  const sender = asRecord(map.sender);
+  const meta = asRecord(map.meta);
+  return (
+    formatPartyName(counterpart) ||
+    formatPartyName(payer) ||
+    formatPartyName(debtor) ||
+    formatPartyName(originator) ||
+    formatPartyName(sender) ||
+    formatPartyName(meta) ||
+    firstNonEmptyString(
+      map.counterpartName,
+      map.payerName,
+      map.debtorName,
+      map.originatorName,
+      meta?.counterpartName,
+      meta?.payerName,
+      meta?.debtorName,
+    )
+  );
+};
+
+export const orderMissingCounterpart = (
+  order: Pick<MoneriumOrderSummary, "counterpartName" | "counterpartIban">,
+): boolean => !order.counterpartName && !order.counterpartIban;
 
 export const summarizeMoneriumOrder = (
   order: unknown,
 ): MoneriumOrderSummary => {
-  const map = asRecord(order) ?? {};
+  const map = unwrapOrderRecord(order);
   const meta = asRecord(map.meta) ?? {};
-  const counterpart = asRecord(map.counterpart);
-  const identifier = asRecord(counterpart?.identifier);
-  const details = asRecord(counterpart?.details);
 
   const txHashesRaw = meta.txHashes ?? map.txHashes ?? map.txHash;
   const txHashes = Array.isArray(txHashesRaw)
@@ -88,11 +163,10 @@ export const summarizeMoneriumOrder = (
       meta.reference,
     ),
     address: typeof map.address === "string" ? map.address : null,
-    counterpartIban:
-      typeof identifier?.iban === "string" ? identifier.iban : null,
-    counterpartName: formatCounterpartName(details),
+    counterpartIban: extractCounterpartIban(map),
+    counterpartName: extractCounterpartName(map),
     txHashes,
-    raw: order,
+    raw: Object.keys(map).length > 0 ? map : order,
   };
 };
 
@@ -147,10 +221,4 @@ export const amountsEqual2dp = (
   const nb = Number(b);
   if (!Number.isFinite(na) || !Number.isFinite(nb)) return false;
   return Math.round(na * 100) === Math.round(nb * 100);
-};
-
-export const normalizeIban = (value?: string | null): string | null => {
-  if (!value || typeof value !== "string") return null;
-  const cleaned = value.replace(/\s+/g, "").toUpperCase();
-  return cleaned.length >= 15 ? cleaned : null;
 };

@@ -225,10 +225,7 @@ class ReceivedInvoiceSheet extends HookWidget {
     final senderPrivateUsers = sender?.privateUsers;
     final senderDisplayName = displayedInvoice.displaySenderName;
     final senderIban = senderPrivateUsers?.iban ?? '-';
-    final senderAccountHolder =
-        senderPrivateUsers?.bankAccountName.isNotEmpty == true
-            ? senderPrivateUsers!.bankAccountName
-            : displayedInvoice.senderName;
+    final senderAccountHolder = displayedInvoice.displayAccountHolderName;
 
     bool dateIsPassed =
         DateTime.now().isAfter(DateTime.parse(displayedInvoice.deadline));
@@ -605,9 +602,9 @@ class ReceivedInvoiceSheet extends HookWidget {
                       GestureDetector(
                         onTap: () async {
                           await Clipboard.setData(ClipboardData(
-                              text: displayedInvoice.description));
-                          Get.snackbar(
-                              'inf_Copied'.tr, displayedInvoice.description);
+                              text: displayedInvoice.bankTransferDescription));
+                          Get.snackbar('inf_Copied'.tr,
+                              displayedInvoice.bankTransferDescription);
                         },
                         child: FaIcon(
                           FontAwesomeIcons.copy,
@@ -619,7 +616,7 @@ class ReceivedInvoiceSheet extends HookWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    displayedInvoice.description,
+                    displayedInvoice.bankTransferDescription,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Theme.of(context).colorScheme.light,
                           height: 1.5,
@@ -975,46 +972,6 @@ class ReceivedInvoiceSheet extends HookWidget {
                       Get.snackbar(
                           'inf_Copied'.tr, displayedInvoice.referenceNo ?? '');
                     }
-                  },
-                  child: FaIcon(
-                    FontAwesomeIcons.copy,
-                    color: Theme.of(context).colorScheme.gray,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(
-              height: 30,
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(displayedInvoice.paymentMemo,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .displayMedium
-                              ?.copyWith(fontWeight: FontWeight.w600)),
-                      Text('lbl_Memo'.tr,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(
-                                  color: Theme.of(context).colorScheme.gray))
-                    ],
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () async {
-                    await Clipboard.setData(
-                        ClipboardData(text: displayedInvoice.paymentMemo));
-                    Get.snackbar(
-                        'inf_Copied'.tr, displayedInvoice.paymentMemo);
                   },
                   child: FaIcon(
                     FontAwesomeIcons.copy,

@@ -326,7 +326,7 @@ class PublicInvoiceLanding extends HookWidget {
                     children: [
                       PublicInvoiceHeroCard(
                         amount: invoice.amount,
-                        description: invoice.description,
+                        description: invoice.bankTransferDescription,
                         statusLabel: statusLabel,
                         statusColor: statusColor,
                         extra: urls.isEmpty
@@ -384,6 +384,12 @@ class PublicInvoiceLanding extends HookWidget {
                                 alignment: Alignment.centerRight,
                                 child: FromBusinessBadge(),
                               ),
+                            ),
+                          if (invoice.displayAccountHolderName.isNotEmpty)
+                            PublicInvoiceDetailRow(
+                              label: 'Account',
+                              value: invoice.displayAccountHolderName,
+                              copyable: true,
                             ),
                           if (invoice.senderIban != null)
                             PublicInvoiceDetailRow(

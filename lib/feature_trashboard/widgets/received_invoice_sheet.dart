@@ -228,8 +228,7 @@ class ReceivedInvoiceSheet extends HookWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                        invoice.senders?.privateUsers?.bankAccountName ??
-                            invoice.senderName,
+                        invoice.displayAccountHolderName,
                         style: Theme.of(context)
                             .textTheme
                             .displayMedium
@@ -242,8 +241,9 @@ class ReceivedInvoiceSheet extends HookWidget {
                 GestureDetector(
                   onTap: () async {
                     await Clipboard.setData(
-                        ClipboardData(text: invoice.senderName));
-                    Get.snackbar('inf_Copied'.tr, invoice.senderName);
+                        ClipboardData(text: invoice.displayAccountHolderName));
+                    Get.snackbar(
+                        'inf_Copied'.tr, invoice.displayAccountHolderName);
                   },
                   child: FaIcon(
                     FontAwesomeIcons.copy,
@@ -266,7 +266,7 @@ class ReceivedInvoiceSheet extends HookWidget {
                       width: MediaQuery.of(context).size.width - 70,
                       child: Wrap(
                         children: [
-                          Text(invoice.description,
+                          Text(invoice.bankTransferDescription,
                               style: Theme.of(context).textTheme.displayMedium),
                         ],
                       ),
@@ -278,9 +278,10 @@ class ReceivedInvoiceSheet extends HookWidget {
                 ),
                 GestureDetector(
                   onTap: () async {
-                    await Clipboard.setData(
-                        ClipboardData(text: invoice.description));
-                    Get.snackbar('inf_Copied'.tr, invoice.description);
+                    await Clipboard.setData(ClipboardData(
+                        text: invoice.bankTransferDescription));
+                    Get.snackbar(
+                        'inf_Copied'.tr, invoice.bankTransferDescription);
                   },
                   child: FaIcon(
                     FontAwesomeIcons.copy,

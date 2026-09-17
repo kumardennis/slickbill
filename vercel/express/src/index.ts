@@ -39,6 +39,7 @@ import {
   verifyAlchemySignature,
 } from "./lib/alchemyWebhook.js";
 import {
+  orderMissingCounterpart,
   readMoneriumOrdersArray,
   summarizeMoneriumOrder,
 } from "./lib/moneriumOrderSummary.js";
@@ -4166,6 +4167,35 @@ const resolveOrdersForTransfer = async (params: {
   });
 
   let orders = readMoneriumOrdersArray(data).map(summarizeMoneriumOrder);
+
+  for (let i = 0; i < orders.length; i += 1) {
+    const order = orders[i];
+    if (!orderMissingCounterpart(order) || !order.id) continue;
+    try {
+      const byId = await moneriumApiRequest({
+        userId: privateUserId,
+        method: "GET",
+        path: `${moneriumOrdersPath.replace(/\/$/, "")}/${encodeURIComponent(order.id)}`,
+      });
+      const summarized = summarizeMoneriumOrder(byId);
+      const full = summarized.id
+        ? summarized
+        : (readMoneriumOrdersArray(byId)
+            .map(summarizeMoneriumOrder)
+            .find((row) => row.id) ?? summarized);
+      orders[i] = {
+        ...order,
+        counterpartName: full.counterpartName ?? order.counterpartName,
+        counterpartIban: full.counterpartIban ?? order.counterpartIban,
+        raw: full.raw ?? order.raw,
+      };
+    } catch (error) {
+      console.warn("⚠️ Failed to enrich Monerium order counterpart", {
+        orderId: order.id,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
 
   // If Monerium has not indexed the txHash yet, settle via PROCESSING invoices'
   // moneriumOrderId (written at send time).

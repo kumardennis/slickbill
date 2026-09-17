@@ -258,7 +258,6 @@ class SendInvoice extends HookWidget {
           senderName: userController.user.value.requestDisplayName,
           senderIsBusiness: userController.user.value.isBusiness,
           senderIban: userController.user.value.iban,
-          senderPrivateUserId: userController.user.value.privateUserId,
         );
 
         if (publicInvoice != null) {

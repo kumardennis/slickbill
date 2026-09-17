@@ -125,42 +125,34 @@ class DigitalInvoiceRepository {
     String? senderIban,
     String? category,
     int? privateGroupId,
-    int? receiverPrivateUserId,
-    int? senderPrivateUserId,
   }) async {
-    // Generate unique token (using uuid type from your schema)
+    final response = await _client.rpc(
+      'create_public_invoice',
+      params: {
+        'p_status': status,
+        'p_amount': amount,
+        'p_data': data,
+        'p_description': description,
+        'p_sender_name': senderName,
+        'p_sender_is_business': senderIsBusiness,
+        'p_deadline': deadline?.toIso8601String(),
+        'p_invoice_no': invoiceNo,
+        'p_original_invoice_no': originalInvoiceNo,
+        'p_reference_no': referenceNo,
+        'p_sender_iban': senderIban,
+        'p_category': category,
+        'p_private_group_id': privateGroupId,
+        'p_raw_invoice_id': rawInvoiceId,
+      },
+    );
 
-    final invoiceData = {
-      'status': status,
-      'amount': amount,
-      'data': data,
-      'description': description,
-      'rawInvoiceId': rawInvoiceId,
-      'senderName': senderName,
-      'senderIsBusiness': senderIsBusiness,
-      'deadline': deadline?.toIso8601String(),
-      'invoiceNo': invoiceNo,
-      'originalInvoiceNo': originalInvoiceNo,
-      'isSeen': false,
-      'referenceNo': referenceNo,
-      'paidOnDate': null,
-      'senderIban': senderIban,
-      'category': category,
-      'privateGroupId': privateGroupId,
-      'receiverPrivateUserId': receiverPrivateUserId,
-      'senderPrivateUserId': senderPrivateUserId,
-      'viewCount': 0,
-      'claimCount': 0,
-      'externalPaymentCount': 0,
-    };
-
-    final response = await _client
-        .from('public_digital_invoices')
-        .insert(invoiceData)
-        .select()
-        .single();
-
-    return PublicInvoiceModel.fromJson(response);
+    if (response is Map<String, dynamic>) {
+      return PublicInvoiceModel.fromJson(response);
+    }
+    if (response is Map) {
+      return PublicInvoiceModel.fromJson(Map<String, dynamic>.from(response));
+    }
+    throw Exception('Public invoice was created without a response');
   }
 
   /// Get public invoice by token (for guest viewing)
@@ -255,6 +247,15 @@ class DigitalInvoiceRepository {
           .from('public_digital_invoices')
           .select('''
           *,
+          sender:private_users!senderPrivateUserId(
+            id,
+            firstName,
+            lastName,
+            bankAccountName,
+            iban,
+            isBusiness,
+            publicName
+          ),
           claimed_invoices:public_invoice_claims(
             digital_invoice_id,
             claimed_by_user_id,

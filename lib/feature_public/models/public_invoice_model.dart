@@ -189,10 +189,27 @@ class PublicInvoiceModel {
 
   bool get isFromBusiness => senderIsBusiness;
 
+  /// Memo payers should put on a bank transfer so we can match this bill.
+  String get paymentMemo => '[sb:$id]';
+
+  /// Description plus memo — one string to paste into a bank transfer.
+  String get bankTransferDescription {
+    final note = description?.trim() ?? '';
+    if (note.isEmpty) return paymentMemo;
+    if (note.contains(paymentMemo)) return note;
+    return '$note $paymentMemo';
+  }
+
   String get displaySenderName {
     final snapshotted = senderName?.trim() ?? '';
     if (snapshotted.isNotEmpty) return snapshotted;
     return sender?.displayName.trim() ?? '';
+  }
+
+  /// Legal account holder for the IBAN (not the public business name).
+  String get displayAccountHolderName {
+    final holder = sender?.bankAccountName.trim() ?? '';
+    return holder;
   }
 
   /// Last external bank payer from Monerium settle

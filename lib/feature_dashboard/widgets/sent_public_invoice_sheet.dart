@@ -247,8 +247,8 @@ class SentPublicInvoiceSheet extends HookWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(invoice.displaySenderName.isNotEmpty
-                              ? invoice.displaySenderName
+                      Text(invoice.displayAccountHolderName.isNotEmpty
+                              ? invoice.displayAccountHolderName
                               : "-",
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context)
@@ -274,13 +274,13 @@ class SentPublicInvoiceSheet extends HookWidget {
                   onTap: () async {
                     await Clipboard.setData(
                         ClipboardData(
-                            text: invoice.displaySenderName.isNotEmpty
-                                ? invoice.displaySenderName
+                            text: invoice.displayAccountHolderName.isNotEmpty
+                                ? invoice.displayAccountHolderName
                                 : "-"));
                     Get.snackbar(
                         'inf_Copied'.tr,
-                        invoice.displaySenderName.isNotEmpty
-                            ? invoice.displaySenderName
+                        invoice.displayAccountHolderName.isNotEmpty
+                            ? invoice.displayAccountHolderName
                             : "-");
                   },
                   child: FaIcon(
@@ -320,10 +320,10 @@ class SentPublicInvoiceSheet extends HookWidget {
                       ),
                       GestureDetector(
                         onTap: () async {
-                          await Clipboard.setData(
-                              ClipboardData(text: invoice.description ?? "-"));
+                          await Clipboard.setData(ClipboardData(
+                              text: invoice.bankTransferDescription));
                           Get.snackbar(
-                              'inf_Copied'.tr, invoice.description ?? "-");
+                              'inf_Copied'.tr, invoice.bankTransferDescription);
                         },
                         child: FaIcon(
                           FontAwesomeIcons.copy,
@@ -335,7 +335,7 @@ class SentPublicInvoiceSheet extends HookWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    invoice.description ?? "-",
+                    invoice.bankTransferDescription,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Theme.of(context).colorScheme.light,
                           height: 1.5,

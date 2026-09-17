@@ -350,8 +350,7 @@ class SentInvoiceSheet extends HookWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                          invoice.senders?.privateUsers?.bankAccountName ??
-                              invoice.senderName,
+                          invoice.displayAccountHolderName,
                           overflow: TextOverflow.ellipsis,
                           style: Theme.of(context)
                               .textTheme
@@ -369,12 +368,9 @@ class SentInvoiceSheet extends HookWidget {
                 GestureDetector(
                   onTap: () async {
                     await Clipboard.setData(ClipboardData(
-                        text: invoice.senders?.privateUsers?.bankAccountName ??
-                            invoice.senderName));
+                        text: invoice.displayAccountHolderName));
                     Get.snackbar(
-                        'inf_Copied'.tr,
-                        invoice.senders?.privateUsers?.bankAccountName ??
-                            invoice.senderName);
+                        'inf_Copied'.tr, invoice.displayAccountHolderName);
                   },
                   child: FaIcon(
                     FontAwesomeIcons.copy,
@@ -413,8 +409,9 @@ class SentInvoiceSheet extends HookWidget {
                       GestureDetector(
                         onTap: () async {
                           await Clipboard.setData(
-                              ClipboardData(text: invoice.description));
-                          Get.snackbar('inf_Copied'.tr, invoice.description);
+                              ClipboardData(text: invoice.bankTransferDescription));
+                          Get.snackbar(
+                              'inf_Copied'.tr, invoice.bankTransferDescription);
                         },
                         child: FaIcon(
                           FontAwesomeIcons.copy,
@@ -426,7 +423,7 @@ class SentInvoiceSheet extends HookWidget {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    invoice.description,
+                    invoice.bankTransferDescription,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: Theme.of(context).colorScheme.light,
                           height: 1.5,
@@ -780,45 +777,6 @@ class SentInvoiceSheet extends HookWidget {
                           ClipboardData(text: invoice.referenceNo ?? ''));
                       Get.snackbar('inf_Copied'.tr, invoice.referenceNo ?? '');
                     }
-                  },
-                  child: FaIcon(
-                    FontAwesomeIcons.copy,
-                    color: Theme.of(context).colorScheme.gray,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(
-              height: 30,
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(invoice.paymentMemo,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .displayMedium
-                              ?.copyWith(fontWeight: FontWeight.w600)),
-                      Text('lbl_Memo'.tr,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodySmall
-                              ?.copyWith(
-                                  color: Theme.of(context).colorScheme.gray))
-                    ],
-                  ),
-                ),
-                GestureDetector(
-                  onTap: () async {
-                    await Clipboard.setData(
-                        ClipboardData(text: invoice.paymentMemo));
-                    Get.snackbar('inf_Copied'.tr, invoice.paymentMemo);
                   },
                   child: FaIcon(
                     FontAwesomeIcons.copy,
