@@ -133,6 +133,28 @@ class InvoiceModel {
     return senderName.trim();
   }
 
+  /// Monerium IBAN counterpart — must match the account holder, not profile name.
+  Map<String, String> moneriumIbanCounterpartDetails(String countryCode) {
+    final holder = displayAccountHolderName;
+    final isCompany =
+        senderIsBusiness || senders?.privateUsers?.isBusiness == true;
+    if (isCompany && holder.isNotEmpty) {
+      return {
+        'companyName': holder,
+        'country': countryCode,
+      };
+    }
+    final parts = holder
+        .split(RegExp(r'\s+'))
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    return {
+      'firstName': parts.isNotEmpty ? parts.first : 'Invoice',
+      'lastName': parts.length > 1 ? parts.sublist(1).join(' ') : 'Recipient',
+      'country': countryCode,
+    };
+  }
+
   String get displaySenderName {
     final snapshotted = senderName.trim();
     if (snapshotted.isNotEmpty) return snapshotted;

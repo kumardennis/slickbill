@@ -327,9 +327,6 @@ class ReceivedBills extends HookWidget {
 
         onPhase?.call('updatingStatus');
 
-        final recipientName =
-            '${invoice.senders?.privateUsers?.firstName ?? ''} ${invoice.senders?.privateUsers?.lastName ?? ''}'
-                .trim();
         final normalizedIban =
             destinationIban.replaceAll(RegExp(r'\s+'), '').toUpperCase();
         final countryCode = RegExp(r'^[A-Z]{2}').hasMatch(normalizedIban)
@@ -338,29 +335,6 @@ class ReceivedBills extends HookWidget {
         final nowUtc = DateTime.now().toUtc();
         final timestamp =
             '${nowUtc.year.toString().padLeft(4, '0')}-${nowUtc.month.toString().padLeft(2, '0')}-${nowUtc.day.toString().padLeft(2, '0')}T${nowUtc.hour.toString().padLeft(2, '0')}:${nowUtc.minute.toString().padLeft(2, '0')}:${nowUtc.second.toString().padLeft(2, '0')}Z';
-        final counterpartName = recipientName.isNotEmpty
-            ? recipientName
-            : (invoice.senderName.trim().isNotEmpty
-                ? invoice.senderName.trim()
-                : 'Invoice Recipient');
-
-        final senderFirstName = invoice.senders?.privateUsers?.firstName.trim();
-        final senderLastName = invoice.senders?.privateUsers?.lastName.trim();
-        final nameParts = counterpartName
-            .split(RegExp(r'\s+'))
-            .where((part) => part.isNotEmpty)
-            .toList(growable: false);
-
-        final counterpartFirstName =
-            (senderFirstName != null && senderFirstName.isNotEmpty)
-                ? senderFirstName
-                : (nameParts.isNotEmpty ? nameParts.first : 'Invoice');
-        final counterpartLastName =
-            (senderLastName != null && senderLastName.isNotEmpty)
-                ? senderLastName
-                : (nameParts.length > 1
-                    ? nameParts.sublist(1).join(' ')
-                    : 'Recipient');
         final orderMessage =
             'Send EUR ${invoice.amount.toStringAsFixed(2)} to $normalizedIban at $timestamp';
         final invoiceRef = (invoice.referenceNo ?? '').trim();
@@ -377,11 +351,7 @@ class ReceivedBills extends HookWidget {
               'standard': 'iban',
               'iban': normalizedIban,
             },
-            'details': {
-              'firstName': counterpartFirstName,
-              'lastName': counterpartLastName,
-              'country': countryCode,
-            },
+            'details': invoice.moneriumIbanCounterpartDetails(countryCode),
           },
           'amount': invoice.amount.toStringAsFixed(2),
           'memo': '[sb:${invoice.id}]',
