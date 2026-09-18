@@ -32,6 +32,7 @@ class AppEnv {
 
   static String _fromDotenv(String key) {
     if (!kDebugMode) return '';
+    if (!dotenv.isInitialized) return '';
     return dotenv.env[key]?.trim() ?? '';
   }
 

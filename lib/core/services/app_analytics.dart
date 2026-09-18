@@ -4,22 +4,25 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:slickbill/config/app_env.dart';
 
-/// Staging-only product events. No IBAN, names, or amounts.
-/// Production builds keep collection off even if this code ships.
+/// Product events. No IBAN, names, or amounts.
+/// Filter reports by user property `app_env` (`dev` vs `production`).
 class AppAnalytics {
   AppAnalytics._();
 
   static FirebaseAnalytics? get _fa {
-    if (!AppEnv.isDev) return null;
     if (Firebase.apps.isEmpty) return null;
     return FirebaseAnalytics.instance;
   }
 
   static Future<void> init() async {
     if (Firebase.apps.isEmpty) return;
-    final enabled = AppEnv.isDev;
-    await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(enabled);
-    if (!enabled) return;
+    await FirebaseAnalytics.instance.setAnalyticsCollectionEnabled(true);
+    await FirebaseAnalytics.instance.setConsent(
+      analyticsStorageConsentGranted: true,
+      adStorageConsentGranted: false,
+      adPersonalizationSignalsConsentGranted: false,
+      adUserDataConsentGranted: false,
+    );
     await FirebaseAnalytics.instance.setUserProperty(
       name: 'app_env',
       value: AppEnv.name,

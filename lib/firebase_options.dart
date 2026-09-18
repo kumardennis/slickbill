@@ -34,7 +34,7 @@ class DefaultFirebaseOptions {
 
   static FirebaseOptions? get currentPlatformOrNull {
     if (kIsWeb) {
-      return null;
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -51,6 +51,16 @@ class DefaultFirebaseOptions {
         return null;
     }
   }
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyDeni9uamuoX6D0faksgLukR1f_UIBpgTc',
+    appId: '1:285202567016:web:9de50251fb6d493e0d10dd',
+    messagingSenderId: '285202567016',
+    projectId: 'slickbills',
+    authDomain: 'slickbills.firebaseapp.com',
+    storageBucket: 'slickbills.firebasestorage.app',
+    measurementId: 'G-MRTD4TME20',
+  );
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyDUk_Hr6sYUyijGxSiQhB8w8l-CibHYHVg',
