@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:slickbill/core/services/app_analytics.dart';
 import 'package:slickbill/core/services/push_notification_service.dart';
 import 'package:slickbill/feature_auth/repos/user_repo.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
@@ -85,6 +86,13 @@ class UserController extends GetxController {
     saveUserData();
 
     if (updatedUser.id > 0) {
+      final privateUserId = updatedUser.validPrivateUserId ?? 0;
+      if (privateUserId > 0) {
+        AppAnalytics.identify(
+          privateUserId: privateUserId,
+          isBusiness: updatedUser.isBusiness,
+        );
+      }
       unawaited(PushNotificationService.loginUser());
     }
   }
@@ -369,6 +377,7 @@ class UserController extends GetxController {
                 : user.value.bankAccountName,
       );
       await saveUserData();
+      AppAnalytics.bankDetailsSaved();
       return true;
     } catch (e) {
       print('Error updating primary iban column: $e');
@@ -429,6 +438,7 @@ class UserController extends GetxController {
                 user.value.bankAccountName),
       );
       await saveUserData();
+      AppAnalytics.bankDetailsSaved();
       return true;
     } catch (e) {
       print('Error upserting ibans json: $e');
@@ -527,6 +537,7 @@ class UserController extends GetxController {
   }
 
   Future<void> forceLogout() async {
+    AppAnalytics.reset();
     await _awaitSafely(
       PushNotificationService.logoutUser(),
       label: 'push logout',

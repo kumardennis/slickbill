@@ -13,6 +13,7 @@ import 'package:loader_overlay/loader_overlay.dart';
 import 'package:slickbill/_NFCHandler.dart';
 import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/config/env_config.dart';
+import 'package:slickbill/core/services/app_analytics.dart';
 import 'package:slickbill/core/services/push_notification_service.dart';
 import 'package:slickbill/feature_auth/screens/home_screen.dart';
 import 'package:slickbill/feature_auth/screens/sign_up.dart';
@@ -56,6 +57,7 @@ Future<void> main() async {
       options: firebaseOptions,
     );
     print('✅ Firebase initialized');
+    await AppAnalytics.init();
   } else {
     print(
         '⚠️ Firebase skipped on this platform because no options are configured');

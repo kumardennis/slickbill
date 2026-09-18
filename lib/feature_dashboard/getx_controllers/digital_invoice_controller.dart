@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:slickbill/core/services/app_analytics.dart';
 import 'package:slickbill/core/services/view_tracking_service.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_list_query.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
@@ -251,6 +252,7 @@ class DigitalInvoiceController extends GetxController {
 
       publicInvoices.insert(0, invoice);
       Get.snackbar('Success', 'Public invoice created!');
+      AppAnalytics.invoiceCreated(kind: 'public');
       return invoice;
     } catch (e) {
       Get.snackbar('Error', 'Failed to create public invoice: $e');
@@ -341,6 +343,8 @@ class DigitalInvoiceController extends GetxController {
         publicInvoice: publicInvoice,
         invoice: invoice,
       );
+
+      AppAnalytics.publicInvoiceClaimed();
 
       // No "Invoice added" toast — caller / FCM owns claim UX.
 

@@ -14,6 +14,7 @@ import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
 import 'package:slickbill/feature_dashboard/widgets/received_invoice_sheet.dart';
 import 'package:slickbill/feature_auth/services/monerium_service.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/payment_setup_controller.dart';
+import 'package:slickbill/core/services/app_analytics.dart';
 import 'package:slickbill/core/services/invoice_toast_coordinator.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/services/metamask_wallet_service.dart';
@@ -184,6 +185,7 @@ class ReceivedInvoice extends HookWidget {
       InvoiceModel invoice, {
       void Function(String phase)? onPhase,
     }) async {
+      AppAnalytics.payStarted();
       final user = userController.user.value;
       final moneriumUserId = PaymentSetupController.resolveMoneriumUserId(user);
       final email = user.email.trim();
@@ -196,6 +198,7 @@ class ReceivedInvoice extends HookWidget {
           colorText: Colors.white,
           duration: const Duration(seconds: 3),
         );
+        AppAnalytics.payFailed(reason: 'missing_wallet');
         return;
       }
 
@@ -209,6 +212,7 @@ class ReceivedInvoice extends HookWidget {
           colorText: Colors.white,
           duration: const Duration(seconds: 3),
         );
+        AppAnalytics.payFailed(reason: 'missing_iban');
         return;
       }
 
@@ -220,6 +224,7 @@ class ReceivedInvoice extends HookWidget {
           colorText: Colors.white,
           duration: const Duration(seconds: 3),
         );
+        AppAnalytics.payFailed(reason: 'missing_email');
         return;
       }
 
@@ -252,6 +257,7 @@ class ReceivedInvoice extends HookWidget {
             colorText: Colors.black,
             duration: const Duration(seconds: 4),
           );
+          AppAnalytics.payFailed(reason: 'connect_failed');
           return;
         }
 
@@ -270,6 +276,7 @@ class ReceivedInvoice extends HookWidget {
             colorText: Colors.white,
             duration: const Duration(seconds: 4),
           );
+          AppAnalytics.payFailed(reason: 'no_balance');
           return;
         }
 
@@ -350,6 +357,7 @@ class ReceivedInvoice extends HookWidget {
         }
 
         paymentInitiatedToastShown = true;
+        AppAnalytics.paySucceeded();
         if (latestStatus == 'PAID') {
           InvoiceToastCoordinator.notifyPayerPaidInApp(
             invoiceId: '${invoice.id}',
@@ -381,6 +389,7 @@ class ReceivedInvoice extends HookWidget {
           return;
         }
         if (MetamaskWalletService.isCancelled(error)) {
+          AppAnalytics.payFailed(reason: 'cancelled');
           return;
         }
         unawaited(SbFeedback.error());
@@ -391,6 +400,7 @@ class ReceivedInvoice extends HookWidget {
           colorText: Colors.white,
           duration: const Duration(seconds: 4),
         );
+        AppAnalytics.payFailed(reason: 'error');
       }
       } finally {
         AppLockController.endExternalAuthSession();

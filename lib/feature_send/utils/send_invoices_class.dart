@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:slickbill/core/services/app_analytics.dart';
 import 'package:slickbill/feature_auth/getx_controllers/current_bank_controller.dart';
 import 'package:slickbill/feature_send/models/users_by_username_model.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -106,6 +107,7 @@ class SendInvoicesClass {
 
       if (data['isRequestSuccessfull'] == true) {
         Get.snackbar('Success', 'inf_AddedToSlickBill'.tr);
+        AppAnalytics.invoiceCreated(kind: 'private');
         return true;
       } else {
         Get.snackbar('Oops..', data['error'].toString());
@@ -152,6 +154,7 @@ class SendInvoicesClass {
 
       if (data['isRequestSuccessfull'] == true) {
         Get.snackbar('Success', 'inf_AddedToSlickBill'.tr);
+        AppAnalytics.invoiceCreated(kind: 'private');
       } else {
         debugPrint(data['error'].toString());
         Get.snackbar('Oops..', data['error'].toString());
@@ -238,6 +241,7 @@ class SendInvoicesClass {
 
       if (data['isRequestSuccessfull'] == true) {
         // No local success toast — FCM "X sent you a slickbill" owns that UX.
+        AppAnalytics.invoiceCreated(kind: 'private');
         return _createdInvoiceId(data) ?? '';
       } else {
         debugPrint(data['error'].toString());
@@ -288,6 +292,7 @@ class SendInvoicesClass {
 
       if (data['isRequestSuccessfull'] == true) {
         Get.snackbar('Success', 'inf_AddedToSlickBill'.tr);
+        AppAnalytics.invoiceCreated(kind: 'private');
         return true;
       } else {
         Get.snackbar('Oops..', data['error'].toString());

@@ -6,6 +6,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:get/get.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:slickbill/config/app_env.dart';
+import 'package:slickbill/core/services/app_analytics.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/services/facebook_auth_service.dart';
 import 'package:slickbill/feature_auth/services/google_auth_service.dart';
@@ -286,6 +287,7 @@ class SupabaseAuthManger {
 
       if (data['isRequestSuccessfull'] == true) {
         print('✅ User created successfully');
+        AppAnalytics.signupCompleted(method: 'email');
         Get.snackbar(
           'Success',
           'Account created! Please check your email to verify.',
@@ -367,6 +369,12 @@ class SupabaseAuthManger {
 
       print(
           'createUserForAuthUser: created users + private_users for authUserId=${authUser.id}');
+      final provider = authUser.identities?.isNotEmpty == true
+          ? authUser.identities!.first.provider
+          : (authUser.appMetadata['provider']?.toString() ?? 'oauth');
+      AppAnalytics.signupCompleted(
+        method: provider.isNotEmpty ? provider : 'oauth',
+      );
     } catch (e) {
       print('Error in createUserForAuthUser: $e');
       rethrow;

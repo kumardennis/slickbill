@@ -11,6 +11,7 @@ import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
 import 'package:slickbill/shared_screens/received_invoice.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
+import 'package:slickbill/core/services/app_analytics.dart';
 import 'package:slickbill/core/services/invoice_toast_coordinator.dart';
 import 'package:slickbill/services/sb_feedback.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -92,6 +93,7 @@ class PushNotificationService {
     if (data == null) return false;
 
     _pendingNotificationData = null;
+    AppAnalytics.pushOpened(type: data['type']?.toString());
     unawaited(_handleNotificationClick(data));
     return true;
   }
@@ -296,6 +298,7 @@ class PushNotificationService {
 
   static void _handleRemoteMessageTap(RemoteMessage message) {
     if (message.data.isEmpty) return;
+    AppAnalytics.pushOpened(type: message.data['type']?.toString());
     unawaited(
         _handleNotificationClick(Map<String, dynamic>.from(message.data)));
   }

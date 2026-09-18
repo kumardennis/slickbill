@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:get/get.dart';
+import 'package:slickbill/core/services/app_analytics.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/models/user_model.dart';
 import 'package:slickbill/feature_auth/services/monerium_service.dart';
@@ -140,9 +141,13 @@ class PaymentSetupController extends GetxController {
   }
 
   Future<void> markMoneriumConnected() async {
+    final wasConnected = hasMoneriumSession.value;
     hasMoneriumSession.value = true;
     if (step.value == PaymentSetupStep.connectWallet) {
       step.value = PaymentSetupStep.connectMonerium;
+    }
+    if (!wasConnected) {
+      AppAnalytics.moneriumConnected();
     }
     await refresh();
   }

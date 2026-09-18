@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
+import 'package:slickbill/core/services/app_analytics.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/utils/supabase_auth_manger.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
@@ -135,6 +136,10 @@ class PublicInvoiceLanding extends HookWidget {
           if (!context.mounted) return;
 
           invoice.value = loadedInvoice;
+
+          if (loadedInvoice != null) {
+            AppAnalytics.publicInvoiceOpened();
+          }
 
           await invoiceController.trackPublicInvoiceView(normalizedToken);
 
