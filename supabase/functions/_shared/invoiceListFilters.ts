@@ -8,7 +8,15 @@ export type InvoiceListFilterBody = {
   invoiceId?: number;
   /** Skip date window entirely (status filter only, or no status = everything). */
   allTime?: boolean;
+  includeStats?: boolean;
+  /** Ignored by invoices Edge. Client search uses RPC instead. */
+  search?: string;
 };
+
+export function sanitizedInvoiceSearch(raw?: string): string {
+  if (!raw) return "";
+  return raw.trim().replace(/[%_,]+/g, " ").replace(/\s+/g, " ").trim();
+}
 
 function monthDateOrFilter(
   createdFrom: string,
@@ -35,8 +43,8 @@ export function applyInvoiceListFilters(
     matchAnyDate,
     openOnly,
     invoiceId,
-    allTime,
   } = body;
+  const allTime = Boolean(body.allTime);
 
   if (invoiceId) {
     query.eq("id", invoiceId);
@@ -57,7 +65,7 @@ export function applyInvoiceListFilters(
     return query;
   }
 
-  if (status === "PAID" && paidOnDateRange?.length === 2) {
+  if (status === "PAID" && paidOnDateRange?.length === 2 && !createdFrom) {
     query
       .eq("status", "PAID")
       .gte("paidOnDate", paidOnDateRange[0])

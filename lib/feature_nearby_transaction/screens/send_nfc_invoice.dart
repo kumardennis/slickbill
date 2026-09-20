@@ -42,13 +42,15 @@ class SendNfcInvoice extends HookWidget {
 
     SendInvoicesClass sendInvoicesClass = SendInvoicesClass();
 
+    final initialTab = (digitalInvoiceController.directShareDraft.value != null
+            ? 2
+            : navigationController.exchangeTabIndex.value)
+        .clamp(0, 2);
     final tabController = useTabController(
       initialLength: 3,
-      initialIndex: digitalInvoiceController.directShareDraft.value != null
-          ? 2
-          : navigationController.exchangeTabIndex.value,
+      initialIndex: initialTab,
     );
-    final currentTab = useState(0);
+    final currentTab = useState(initialTab);
 
     var receiverUserId = useState<String>('');
     var receiverUserName = useState<String>('');
@@ -70,6 +72,8 @@ class SendNfcInvoice extends HookWidget {
     var isSendingDirectInvoice = useState<bool>(false);
 
     final directReceivers = useState<List<ReceiverUserModel>>([]);
+    final usernameSearchController = useTextEditingController();
+    final commonAmountController = useTextEditingController();
 
     useEffect(() {
       if (dueDateController.text == '') {
@@ -118,10 +122,9 @@ class SendNfcInvoice extends HookWidget {
 
     FutureOr<List<UsersByUsername>> getOptions(query) async {
       final response = await sendInvoicesClass.getUsersByUsername(query);
-
-      print('getOptions response: $response');
-
-      return response != null ? response.toList() : [];
+      if (response == null) return [];
+      final added = {for (final e in directReceivers.value) e.id};
+      return response.where((user) => !added.contains(user.id)).toList();
     }
 
     changeReceiverAmount(double amount) {
@@ -352,8 +355,12 @@ class SendNfcInvoice extends HookWidget {
 
     useEffect(() {
       final worker = ever<int>(navigationController.exchangeTabIndex, (index) {
-        if (tabController.index != index) {
-          tabController.animateTo(index);
+        final next = index.clamp(0, 2);
+        if (currentTab.value != next) {
+          currentTab.value = next;
+        }
+        if (tabController.index != next) {
+          tabController.animateTo(next);
         }
       });
       return worker.dispose;
@@ -501,6 +508,8 @@ class SendNfcInvoice extends HookWidget {
                   createDirectShareInvoice: createDirectShareInvoice,
                   isSendingDirectInvoice: isSendingDirectInvoice,
                   directReceivers: directReceivers,
+                  usernameSearchController: usernameSearchController,
+                  commonAmountController: commonAmountController,
                 ),
               ],
             ),
@@ -643,12 +652,24 @@ Widget _buildDirectShareTab({
   required TextEditingController dueDateController,
   required TextEditingController referenceNumberController,
   required ValueNotifier<String> category,
+  required TextEditingController usernameSearchController,
+  required TextEditingController commonAmountController,
 }) {
   final canSend = directReceivers.value.isNotEmpty &&
       directReceivers.value.every((e) => e.amount > 0) &&
       !isSendingDirectInvoice.value;
   final total =
       directReceivers.value.fold<double>(0, (sum, e) => sum + e.amount);
+  final showCommonAmount = directReceivers.value.length >= 2;
+
+  void applyCommonAmount(String raw) {
+    final amount = double.tryParse(raw) ?? 0.0;
+    final updated = [...directReceivers.value];
+    for (final receiver in updated) {
+      receiver.amount = amount;
+    }
+    directReceivers.value = updated;
+  }
 
   return SingleChildScrollView(
     child: Padding(
@@ -674,6 +695,7 @@ Widget _buildDirectShareTab({
                 ),
                 const SizedBox(height: 8),
                 TypeAheadField<UsersByUsername>(
+                  controller: usernameSearchController,
                   debounceDuration: const Duration(milliseconds: 280),
                   suggestionsCallback: (pattern) => getOptions(pattern),
                   builder: (context, controller, focusNode) {
@@ -746,6 +768,10 @@ Widget _buildDirectShareTab({
                       return;
                     }
 
+                    final sharedAmount = directReceivers.value.length >= 2
+                        ? (double.tryParse(commonAmountController.text) ?? 0.0)
+                        : 0.0;
+
                     directReceivers.value = [
                       ...directReceivers.value,
                       ReceiverUserModel(
@@ -754,18 +780,36 @@ Widget _buildDirectShareTab({
                         firstName: suggestion.firstName,
                         lastName: suggestion.lastName,
                         username: suggestion.users.username,
-                        amount: 0.0,
+                        amount: sharedAmount,
                       ),
                     ];
+                    usernameSearchController.clear();
                   },
                 ),
                 if (directReceivers.value.isNotEmpty) ...[
                   const SizedBox(height: 12),
+                  if (showCommonAmount) ...[
+                    SbLabeledField(
+                      label: 'lbl_SameAmountEach'.tr,
+                      icon: Icons.groups_rounded,
+                      controller: commonAmountController,
+                      hint: 'hint_AppliesToEveryone'.tr,
+                      prefix: '€ ',
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+                      ],
+                      onChanged: applyCommonAmount,
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   for (var i = 0; i < directReceivers.value.length; i++)
                     Builder(
                       builder: (context) {
                         final receiver = directReceivers.value[i];
                         return CompactReceiverRow(
+                          key: ValueKey(receiver.id),
                           receiverUser: receiver,
                           showDivider: false,
                           onAmountChanged: (int id, double amount) {

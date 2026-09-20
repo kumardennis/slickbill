@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:slickbill/theme/sb_colors.dart';
 
@@ -11,6 +12,9 @@ class SbLabeledField extends StatelessWidget {
   final bool readOnly;
   final VoidCallback? onTap;
   final bool boldValue;
+  final ValueChanged<String>? onChanged;
+  final List<TextInputFormatter>? inputFormatters;
+  final String? prefix;
 
   const SbLabeledField({
     super.key,
@@ -22,6 +26,9 @@ class SbLabeledField extends StatelessWidget {
     this.readOnly = false,
     this.onTap,
     this.boldValue = true,
+    this.onChanged,
+    this.inputFormatters,
+    this.prefix,
   });
 
   @override
@@ -52,6 +59,8 @@ class SbLabeledField extends StatelessWidget {
             keyboardType: keyboardType,
             readOnly: readOnly,
             onTap: onTap,
+            onChanged: onChanged,
+            inputFormatters: inputFormatters,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   fontWeight: boldValue ? FontWeight.w700 : FontWeight.w400,
                   color: SbColors.onSurface,
@@ -59,6 +68,11 @@ class SbLabeledField extends StatelessWidget {
             decoration: InputDecoration(
               isDense: true,
               hintText: hint,
+              prefixText: prefix,
+              prefixStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                    color: SbColors.deepNavy,
+                  ),
               filled: false,
               contentPadding: const EdgeInsets.only(top: 4, bottom: 2),
               border: InputBorder.none,

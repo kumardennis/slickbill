@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
@@ -5,13 +7,14 @@ import 'package:slickbill/feature_dashboard/models/invoice_list_query.dart';
 import 'package:slickbill/shared_widgets/sb_surface_card.dart';
 import 'package:slickbill/theme/sb_colors.dart';
 
-class InvoiceListFilterBar extends StatelessWidget {
+class InvoiceListFilterBar extends StatefulWidget {
   final InvoiceListQuery query;
   final ValueChanged<InvoiceListQuery> onChanged;
   final VoidCallback? onExport;
   final bool exportEnabled;
   final bool showMonthHeader;
   final bool showPills;
+  final bool showSearch;
 
   const InvoiceListFilterBar({
     super.key,
@@ -21,9 +24,44 @@ class InvoiceListFilterBar extends StatelessWidget {
     this.exportEnabled = true,
     this.showMonthHeader = true,
     this.showPills = true,
+    this.showSearch = true,
   });
 
+  @override
+  State<InvoiceListFilterBar> createState() => _InvoiceListFilterBarState();
+}
+
+class _InvoiceListFilterBarState extends State<InvoiceListFilterBar> {
   static const _monthHistory = 36;
+  static const _debounce = Duration(milliseconds: 300);
+
+  late final TextEditingController _search;
+  Timer? _searchDebounce;
+
+  InvoiceListQuery get query => widget.query;
+
+  @override
+  void initState() {
+    super.initState();
+    _search = TextEditingController(text: query.search);
+  }
+
+  @override
+  void didUpdateWidget(covariant InvoiceListFilterBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (query.search != oldWidget.query.search &&
+        query.search != _search.text) {
+      _search.text = query.search;
+      _search.selection = TextSelection.collapsed(offset: _search.text.length);
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchDebounce?.cancel();
+    _search.dispose();
+    super.dispose();
+  }
 
   List<DateTime> _monthOptions() {
     final now = DateTime.now();
@@ -36,6 +74,15 @@ class InvoiceListFilterBar extends StatelessWidget {
 
   String get _periodLabel =>
       query.ignoresMonth ? 'lbl_AllTime'.tr : query.monthLabel;
+
+  void _onSearchChanged(String value) {
+    _searchDebounce?.cancel();
+    _searchDebounce = Timer(_debounce, () {
+      if (!mounted) return;
+      if (query.search == value) return;
+      widget.onChanged(query.copyWith(search: value));
+    });
+  }
 
   Future<void> _openPeriodPicker(BuildContext context) async {
     final months = _monthOptions();
@@ -75,7 +122,7 @@ class InvoiceListFilterBar extends StatelessWidget {
                         selected: query.ignoresMonth,
                         onTap: () {
                           Navigator.pop(sheetContext);
-                          onChanged(query.copyWith(allTime: true));
+                          widget.onChanged(query.copyWith(allTime: true));
                         },
                       ),
                       ...months.map((month) {
@@ -87,7 +134,7 @@ class InvoiceListFilterBar extends StatelessWidget {
                           selected: selected,
                           onTap: () {
                             Navigator.pop(sheetContext);
-                            onChanged(
+                            widget.onChanged(
                               query.copyWith(month: month, allTime: false),
                             );
                           },
@@ -109,13 +156,13 @@ class InvoiceListFilterBar extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.fromLTRB(
         0,
-        showMonthHeader ? 0 : 8,
+        widget.showMonthHeader ? 0 : 8,
         0,
         4,
       ),
       child: Column(
         children: [
-          if (showMonthHeader)
+          if (widget.showMonthHeader)
             Row(
               children: [
                 Expanded(
@@ -163,16 +210,16 @@ class InvoiceListFilterBar extends StatelessWidget {
                     ),
                   ),
                 ),
-                if (onExport != null) ...[
+                if (widget.onExport != null) ...[
                   const SizedBox(width: 4),
                   IconButton(
                     tooltip: 'btn_ExportCsv'.tr,
                     visualDensity: VisualDensity.compact,
-                    onPressed: exportEnabled ? onExport : null,
+                    onPressed: widget.exportEnabled ? widget.onExport : null,
                     icon: Icon(
                       Icons.download_rounded,
                       size: 18,
-                      color: exportEnabled
+                      color: widget.exportEnabled
                           ? SbColors.secondary
                           : SbColors.outlineVariant,
                     ),
@@ -180,8 +227,8 @@ class InvoiceListFilterBar extends StatelessWidget {
                 ],
               ],
             ),
-          if (showMonthHeader) const SizedBox(height: 12),
-          if (showPills)
+          if (widget.showMonthHeader) const SizedBox(height: 12),
+          if (widget.showPills)
             SizedBox(
               height: 36,
               child: ListView(
@@ -190,34 +237,84 @@ class InvoiceListFilterBar extends StatelessWidget {
                   SbFilterPill(
                     label: 'lbl_AllBills'.tr,
                     selected: query.status == InvoiceStatusFilter.all,
-                    onTap: () => onChanged(
+                    onTap: () => widget.onChanged(
                       query.copyWith(status: InvoiceStatusFilter.all),
                     ),
                   ),
                   SbFilterPill(
                     label: 'lbl_Unpaid'.tr,
                     selected: query.status == InvoiceStatusFilter.unpaid,
-                    onTap: () => onChanged(
+                    onTap: () => widget.onChanged(
                       query.copyWith(status: InvoiceStatusFilter.unpaid),
                     ),
                   ),
                   SbFilterPill(
                     label: 'lbl_Processing'.tr,
                     selected: query.status == InvoiceStatusFilter.processing,
-                    onTap: () => onChanged(
+                    onTap: () => widget.onChanged(
                       query.copyWith(status: InvoiceStatusFilter.processing),
                     ),
                   ),
                   SbFilterPill(
                     label: 'lbl_Paid'.tr,
                     selected: query.status == InvoiceStatusFilter.paid,
-                    onTap: () => onChanged(
+                    onTap: () => widget.onChanged(
                       query.copyWith(status: InvoiceStatusFilter.paid),
                     ),
                   ),
                 ],
               ),
             ),
+          if (widget.showSearch) ...[
+            if (widget.showPills) const SizedBox(height: 10),
+            TextField(
+              controller: _search,
+              onChanged: (value) {
+                setState(() {});
+                _onSearchChanged(value);
+              },
+              textInputAction: TextInputAction.search,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: SbColors.onSurface,
+                  ),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'hint_SearchNameOrDescription'.tr,
+                prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                suffixIcon: _search.text.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: 'btn_Clear'.tr,
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () {
+                          _searchDebounce?.cancel();
+                          _search.clear();
+                          widget.onChanged(query.copyWith(search: ''));
+                          setState(() {});
+                        },
+                        icon: const Icon(Icons.close_rounded, size: 18),
+                      ),
+                filled: true,
+                fillColor: SbColors.surfaceLowest,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(SbRadii.md),
+                  borderSide: const BorderSide(color: SbColors.outlineVariant),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(SbRadii.md),
+                  borderSide: const BorderSide(color: SbColors.outlineVariant),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(SbRadii.md),
+                  borderSide: const BorderSide(color: SbColors.secondary),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );

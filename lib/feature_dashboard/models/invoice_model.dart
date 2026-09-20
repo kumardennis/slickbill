@@ -166,6 +166,23 @@ class InvoiceModel {
     if (business != null && business.isNotEmpty) return business;
     return receivers.privateUsers?.displayName.trim() ?? '';
   }
+
+  List<String?> get receivedSearchFields => [
+        description,
+        displaySenderName,
+        displayAccountHolderName,
+        senders?.privateUsers?.publicName,
+        senders?.privateUsers?.displayName,
+      ];
+
+  List<String?> get sentSearchFields => [
+        description,
+        displayReceiverName,
+        receivers.privateUsers?.bankAccountName,
+        receivers.privateUsers?.publicName,
+        receivers.businessUsers?.fullName,
+        receivers.businessUsers?.publicName,
+      ];
 }
 
 class Receivers {

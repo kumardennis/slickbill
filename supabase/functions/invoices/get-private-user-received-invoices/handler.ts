@@ -9,6 +9,7 @@ import {
 } from "../../_shared/confirmedRequiredParams.ts";
 import { corsHeaders } from "../../_shared/cors.ts";
 import { applyInvoiceListFilters } from "../../_shared/invoiceListFilters.ts";
+import { loadInvoiceListStats } from "../../_shared/invoiceListStats.ts";
 import { createSupabase } from "../../_shared/supabaseClient.ts";
 
 export const handler = async (req: Request) => {
@@ -55,10 +56,25 @@ export const handler = async (req: Request) => {
       });
     }
 
+    let openSum: number | undefined;
+    let paidSum: number | undefined;
+    if (body.includeStats) {
+      const stats = await loadInvoiceListStats(
+        supabase,
+        privateUserId,
+        "received",
+        body,
+      );
+      openSum = stats.openSum;
+      paidSum = stats.paidSum;
+    }
+
     const responseData = {
       isRequestSuccessfull: true,
       data: digitalInvoiceData,
       error: digitalInvoiceError,
+      openSum,
+      paidSum,
     };
 
     return new Response(JSON.stringify(responseData), {

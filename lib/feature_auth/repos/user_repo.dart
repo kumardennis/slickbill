@@ -94,11 +94,6 @@ class UserRepo {
       final trimmedBankName = bankName?.trim();
       final trimmedBankAccountName = bankAccountName?.trim();
 
-      if (includeTopLevelBankName &&
-          bankName != null &&
-          bankName.trim().isNotEmpty) {
-        payload['bankName'] = bankName.trim();
-      }
       if (bankAccountName != null && bankAccountName.trim().isNotEmpty) {
         payload['bankAccountName'] = bankAccountName.trim();
       }
@@ -164,7 +159,8 @@ class UserRepo {
 
   /// Merge and persist IBAN JSON entries while keeping current primary selection.
   /// If no primary exists after merge, the first IBAN is promoted to primary and
-  /// top-level iban / bankName / bankAccountName columns are synced.
+  /// top-level iban / bankAccountName columns are synced. Institution `bankName`
+  /// lives only inside the `ibans` JSON.
   Future<Map<String, dynamic>?> upsertIbansJson({
     required int privateUserId,
     required List<Map<String, dynamic>> ibans,
@@ -172,7 +168,7 @@ class UserRepo {
     try {
       final existing = await _client
           .from('private_users')
-          .select('ibans, iban, bankName, bankAccountName')
+          .select('ibans, iban, bankAccountName')
           .eq('id', privateUserId)
           .maybeSingle();
 
@@ -244,15 +240,11 @@ class UserRepo {
 
       if (primary != null) {
         final primaryIban = primary['iban']?.toString().trim() ?? '';
-        final primaryBankName = primary['bankName']?.toString().trim() ?? '';
         final primaryAccountName =
             primary['bankAccountName']?.toString().trim() ?? '';
 
         if (primaryIban.isNotEmpty) {
           payload['iban'] = primaryIban;
-        }
-        if (primaryBankName.isNotEmpty) {
-          payload['bankName'] = primaryBankName;
         }
         if (primaryAccountName.isNotEmpty) {
           payload['bankAccountName'] = primaryAccountName;

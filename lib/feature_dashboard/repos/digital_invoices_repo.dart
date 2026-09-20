@@ -367,12 +367,15 @@ class DigitalInvoiceRepository {
         return PublicInvoiceModel.fromJson(invoice);
       }).where((invoice) {
         if (query == null) return true;
-        return query.matches(
+        if (!query.matches(
           status: invoice.status,
           createdAt: invoice.createdAt.toIso8601String(),
           paidOnDate: invoice.paidOnDate,
           deadline: invoice.deadline,
-        );
+        )) {
+          return false;
+        }
+        return query.matchesSearch(invoice.searchFields);
       }).toList();
     } catch (e, stackTrace) {
       print('Error fetching public invoices by sender: $e');

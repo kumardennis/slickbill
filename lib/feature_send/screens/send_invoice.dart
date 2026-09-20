@@ -37,10 +37,11 @@ class SendInvoice extends HookWidget {
     final digitalInvoiceController = Get.find<DigitalInvoiceController>();
 
     var receiverUsers = useState<List<ReceiverUserModel>>([]);
-
     var descriptionController = useTextEditingController();
     var dueDateController = useTextEditingController();
     var referenceNumberController = useTextEditingController();
+    final usernameSearchController = useTextEditingController();
+    final commonAmountController = useTextEditingController();
 
     var category = useState<String>(Constants().categories.last);
 
@@ -286,8 +287,9 @@ class SendInvoice extends HookWidget {
 
     FutureOr<List<UsersByUsername>> getOptions(query) async {
       final response = await sendInvoicesClass.getUsersByUsername(query);
-
-      return response != null ? response.toList() : [];
+      if (response == null) return [];
+      final added = {for (final e in receiverUsers.value) e.id};
+      return response.where((user) => !added.contains(user.id)).toList();
     }
 
     changeReceiverAmount(int id, double amount) {
@@ -335,6 +337,7 @@ class SendInvoice extends HookWidget {
                       ),
                       const SizedBox(height: 12),
                       TypeAheadField<UsersByUsername>(
+                        controller: usernameSearchController,
                         debounceDuration: const Duration(milliseconds: 280),
                         builder: (context, controller, focusNode) {
                           return TextField(
@@ -435,13 +438,18 @@ class SendInvoice extends HookWidget {
                             ...receiverUsers.value,
                             ReceiverUserModel(
                               userId: suggestion.users.id,
-                              amount: 0.0,
+                              amount: receiverUsers.value.length >= 2
+                                  ? (double.tryParse(
+                                          commonAmountController.text) ??
+                                      0.0)
+                                  : 0.0,
                               username: suggestion.users.username,
                               firstName: suggestion.firstName,
                               lastName: suggestion.lastName,
                               id: suggestion.id,
                             ),
                           ];
+                          usernameSearchController.clear();
                         },
                       ),
                     ],
@@ -466,11 +474,39 @@ class SendInvoice extends HookWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                   child: Column(
                     children: [
+                      if (receiverUsers.value.length >= 2) ...[
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(4, 8, 4, 8),
+                          child: TextField(
+                            controller: commonAmountController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                                decimal: true),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                  RegExp(r'[0-9.]')),
+                            ],
+                            decoration: InputDecoration(
+                              labelText: 'lbl_SameAmountEach'.tr,
+                              hintText: 'hint_AppliesToEveryone'.tr,
+                              prefixText: '€ ',
+                            ),
+                            onChanged: (raw) {
+                              final amount = double.tryParse(raw) ?? 0.0;
+                              final updated = [...receiverUsers.value];
+                              for (final receiver in updated) {
+                                receiver.amount = amount;
+                              }
+                              receiverUsers.value = updated;
+                            },
+                          ),
+                        ),
+                      ],
                       for (var i = 0; i < receiverUsers.value.length; i++)
                         Builder(
                           builder: (context) {
                             final receiver = receiverUsers.value[i];
                             return CompactReceiverRow(
+                              key: ValueKey(receiver.id),
                               receiverUser: receiver,
                               showDivider: i < receiverUsers.value.length - 1,
                               onAmountChanged: changeReceiverAmount,

@@ -33,8 +33,20 @@ class CompactReceiverRow extends HookWidget {
   @override
   Widget build(BuildContext context) {
     final amountController = useTextEditingController(
-      text: receiverUser.amount > 0 ? receiverUser.amount.toString() : '',
+      text: receiverUser.amount > 0 ? _formatAmount(receiverUser.amount) : '',
     );
+
+    useEffect(() {
+      final shown = double.tryParse(amountController.text) ?? 0.0;
+      if (shown == receiverUser.amount) return null;
+      final next =
+          receiverUser.amount > 0 ? _formatAmount(receiverUser.amount) : '';
+      amountController.value = TextEditingValue(
+        text: next,
+        selection: TextSelection.collapsed(offset: next.length),
+      );
+      return null;
+    }, [receiverUser.amount]);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -152,4 +164,11 @@ class CompactReceiverRow extends HookWidget {
       ),
     );
   }
+}
+
+String _formatAmount(double amount) {
+  if (amount == amount.truncateToDouble()) {
+    return amount.toInt().toString();
+  }
+  return amount.toString();
 }

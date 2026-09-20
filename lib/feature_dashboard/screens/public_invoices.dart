@@ -37,10 +37,12 @@ class PublicInvoices extends HookWidget {
     ));
 
     Future<void> loadPublicInvoices() async {
+      final senderId = userController.user.value.validPrivateUserId;
+      if (senderId == null) return;
       isLoading.value = true;
       try {
         await invoiceController.loadPublicInvoices(
-          userController.user.value.privateUserId!,
+          senderId,
           query: filter.value,
         );
         publicInvoices.value = invoiceController.publicInvoices;
@@ -60,7 +62,7 @@ class PublicInvoices extends HookWidget {
     useEffect(() {
       loadPublicInvoices();
       return null;
-    }, [filter.value.month.year, filter.value.month.month, filter.value.status, filter.value.allTime]);
+    }, [filter.value.month.year, filter.value.month.month, filter.value.status, filter.value.allTime, filter.value.search]);
 
     void toggleExpanded(int invoiceId) {
       final newSet = Set<int>.from(expandedInvoices.value);

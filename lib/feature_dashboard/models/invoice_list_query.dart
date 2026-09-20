@@ -1,4 +1,5 @@
 import 'package:intl/intl.dart';
+import 'package:slickbill/feature_dashboard/utils/invoice_text_search.dart';
 
 enum InvoiceStatusFilter { all, unpaid, processing, paid }
 
@@ -20,12 +21,20 @@ class InvoiceListQuery {
 
   final InvoiceMonthBasis monthBasis;
 
+  /// Counterparty name or description. Non-empty search ignores month.
+  final String search;
+
   InvoiceListQuery({
     required this.month,
     required this.status,
     this.allTime = false,
     this.monthBasis = InvoiceMonthBasis.activity,
+    this.search = '',
   });
+
+  String get sanitizedSearch => sanitizeInvoiceSearch(search);
+
+  bool get hasSearch => sanitizedSearch.isNotEmpty;
 
   DateTime get monthStart => DateTime(month.year, month.month, 1);
 
@@ -36,10 +45,10 @@ class InvoiceListQuery {
     return month.year == now.year && month.month == now.month;
   }
 
-  /// Month filter is on when not in all-time mode.
-  bool get monthFilterActive => !allTime;
+  /// Month filter is on when not in all-time or search mode.
+  bool get monthFilterActive => !ignoresMonth;
 
-  bool get ignoresMonth => allTime;
+  bool get ignoresMonth => allTime || hasSearch;
 
   String get monthLabel => DateFormat.yMMMM().format(monthStart);
 
@@ -58,6 +67,7 @@ class InvoiceListQuery {
   }
 
   String get emptyListLabelKey {
+    if (hasSearch) return 'lbl_NoSearchMatches';
     if (ignoresMonth) {
       switch (status) {
         case InvoiceStatusFilter.unpaid:
@@ -138,6 +148,7 @@ class InvoiceListQuery {
         status: status,
         allTime: false,
         monthBasis: monthBasis,
+        search: search,
       );
 
   InvoiceListQuery? get nextMonth {
@@ -147,6 +158,7 @@ class InvoiceListQuery {
       status: status,
       allTime: false,
       monthBasis: monthBasis,
+      search: search,
     );
   }
 
@@ -161,17 +173,20 @@ class InvoiceListQuery {
     InvoiceStatusFilter? status,
     bool? allTime,
     InvoiceMonthBasis? monthBasis,
+    String? search,
   }) {
     return InvoiceListQuery(
       month: month ?? this.month,
       status: status ?? this.status,
       allTime: allTime ?? this.allTime,
       monthBasis: monthBasis ?? this.monthBasis,
+      search: search ?? this.search,
     );
   }
 
+  /// Body for the invoices Edge folder list. Search never goes here.
   Map<String, dynamic> toRequestBody() {
-    if (ignoresMonth) {
+    if (allTime) {
       switch (status) {
         case InvoiceStatusFilter.all:
           return {'allTime': true};
@@ -184,11 +199,12 @@ class InvoiceListQuery {
       }
     }
 
+    final dates = {
+      'createdFrom': createdFrom,
+      'createdTo': createdTo,
+    };
+
     if (monthBasis == InvoiceMonthBasis.created) {
-      final dates = {
-        'createdFrom': createdFrom,
-        'createdTo': createdTo,
-      };
       switch (status) {
         case InvoiceStatusFilter.all:
           return dates;
@@ -272,6 +288,11 @@ class InvoiceListQuery {
       return inSelectedMonth(createdAt);
     }
     return inSelectedMonth(createdAt) || inSelectedMonth(deadline);
+  }
+
+  bool matchesSearch(Iterable<String?> fields) {
+    if (!hasSearch) return true;
+    return invoiceFieldsMatchSearch(fields, sanitizedSearch);
   }
 }
 

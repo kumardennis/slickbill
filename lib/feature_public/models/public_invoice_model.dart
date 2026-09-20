@@ -212,6 +212,26 @@ class PublicInvoiceModel {
     return holder;
   }
 
+  List<String?> get searchFields {
+    final claimedNames = <String?>[];
+    for (final claim in claimedInvoices ?? const <ClaimedInvoice>[]) {
+      final private = claim.digitalInvoices;
+      if (private != null) {
+        claimedNames.addAll(private.sentSearchFields);
+        claimedNames.addAll(private.receivedSearchFields);
+      }
+    }
+    return [
+      description,
+      displaySenderName,
+      lastExternalPayer?.name,
+      receiver?.displayName,
+      receiver?.publicName,
+      receiver?.bankAccountName,
+      ...claimedNames,
+    ];
+  }
+
   /// Last external bank payer from Monerium settle
   /// (`public_digital_invoices.data.lastExternalPayer`).
   ExternalPayerSnapshot? get lastExternalPayer {

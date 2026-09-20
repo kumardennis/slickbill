@@ -17,30 +17,30 @@ import 'package:slickbill/shared_widgets/sb_segmented_control.dart';
 class AllBills extends HookWidget {
   @override
   Widget build(BuildContext context) {
-    final tabController = useTabController(initialLength: 3);
-    final currentTab = useState(0);
     NavigationController navigationController = Get.find();
     Get.put(UserController());
     Get.put(PaymentSetupController());
+    final currentTab = useState(navigationController.billsTabIndex.value);
+    final visitedTabs = useState(<int>{currentTab.value});
 
-    useEffect(() {
-      void listener() {
-        currentTab.value = tabController.index;
-        navigationController.billsTabIndex.value = tabController.index;
+    void selectTab(int index) {
+      if (currentTab.value != index) {
+        currentTab.value = index;
       }
-
-      tabController.addListener(listener);
-      return () => tabController.removeListener(listener);
-    }, [tabController]);
+      if (!visitedTabs.value.contains(index)) {
+        visitedTabs.value = {...visitedTabs.value, index};
+      }
+      if (navigationController.billsTabIndex.value != index) {
+        navigationController.billsTabIndex.value = index;
+      }
+    }
 
     useEffect(() {
       final worker = ever<int>(navigationController.billsTabIndex, (index) {
-        if (tabController.index != index) {
-          tabController.animateTo(index);
-        }
+        selectTab(index);
       });
       return worker.dispose;
-    }, [tabController]);
+    }, []);
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -65,7 +65,7 @@ class AllBills extends HookWidget {
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
                   child: SbSegmentedControl(
                     index: currentTab.value,
-                    onChanged: (i) => tabController.animateTo(i),
+                    onChanged: selectTab,
                     segments: [
                       SbSegment(label: 'hd_Received'.tr, icon: Icons.south_west),
                       SbSegment(label: 'hd_Sent'.tr, icon: Icons.north_east),
@@ -75,11 +75,35 @@ class AllBills extends HookWidget {
                   ),
                 ),
                 Expanded(
-                  child: TabBarView(controller: tabController, children: [
-                    ReceivedBills(),
-                    SentBills(),
-                    PublicInvoices(),
-                  ]),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (visitedTabs.value.contains(0))
+                        Offstage(
+                          offstage: currentTab.value != 0,
+                          child: TickerMode(
+                            enabled: currentTab.value == 0,
+                            child: const ReceivedBills(),
+                          ),
+                        ),
+                      if (visitedTabs.value.contains(1))
+                        Offstage(
+                          offstage: currentTab.value != 1,
+                          child: TickerMode(
+                            enabled: currentTab.value == 1,
+                            child: SentBills(),
+                          ),
+                        ),
+                      if (visitedTabs.value.contains(2))
+                        Offstage(
+                          offstage: currentTab.value != 2,
+                          child: TickerMode(
+                            enabled: currentTab.value == 2,
+                            child: PublicInvoices(),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ],
             ),

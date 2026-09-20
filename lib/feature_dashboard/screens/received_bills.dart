@@ -9,6 +9,7 @@ import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/digital_invoice_controller.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_list_query.dart';
+import 'package:slickbill/feature_dashboard/models/invoice_list_page.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
 import 'package:slickbill/feature_dashboard/utils/payment_class.dart';
 import 'package:slickbill/feature_dashboard/utils/received_invoices_class.dart';
@@ -59,25 +60,34 @@ class ReceivedBills extends HookWidget {
       monthBasis: InvoiceMonthBasis.created,
     ));
     final fetchRef = useRef<Future<void> Function()>(() async {});
+    final fetchGeneration = useRef(0);
+    final privateUserId = useState(userController.user.value.validPrivateUserId);
 
     Future<void> getInvoices() async {
       if (!context.mounted) return;
+      if (userController.user.value.validPrivateUserId == null) return;
       isLoading.value = true;
       final current = filter.value;
+      final generation = ++fetchGeneration.value;
 
-      final results = await Future.wait([
-        receivedInvoicesClass.getPrivateReceivedInvoices(query: current),
-        receivedInvoicesClass.getOpenInvoicesSum(period: current),
-        receivedInvoicesClass.getPaidInPeriod(current),
-      ]);
-      if (!context.mounted) return;
-
-      final rows = results[0] as List<InvoiceModel>?;
-      if (rows != null) {
-        invoices.value = rows;
+      if (current.hasSearch) {
+        final rows = await receivedInvoicesClass.searchReceivedInvoices(current);
+        if (!context.mounted || generation != fetchGeneration.value) return;
+        if (rows != null) {
+          invoices.value = rows;
+        }
+        isLoading.value = false;
+        hasLoaded.value = true;
+        return;
       }
-      pending.value = results[1] as double? ?? 0.0;
-      paidThisMonth.value = results[2] as double? ?? 0.0;
+
+      final page = await receivedInvoicesClass.loadReceivedFolder(current);
+      if (!context.mounted || generation != fetchGeneration.value) return;
+      if (page != null) {
+        invoices.value = page.invoices;
+        pending.value = page.openSum ?? openInvoiceSum(page.invoices);
+        paidThisMonth.value = page.paidSum ?? paidInvoiceSum(page.invoices);
+      }
       isLoading.value = false;
       hasLoaded.value = true;
     }
@@ -679,16 +689,26 @@ class ReceivedBills extends HookWidget {
     }
 
     useEffect(() {
-      Future.microtask(() async {
-        await getInvoices();
+      final worker = ever(userController.user, (user) {
+        final uid = user.validPrivateUserId;
+        if (privateUserId.value != uid) {
+          privateUserId.value = uid;
+        }
       });
+      return worker.dispose;
+    }, []);
+
+    useEffect(() {
+      if (privateUserId.value == null) return null;
+      unawaited(getInvoices());
       return null;
     }, [
+      privateUserId.value,
       filter.value.month.year,
       filter.value.month.month,
       filter.value.status,
       filter.value.allTime,
-      userController.user.value.privateUserId,
+      filter.value.search,
     ]);
 
     useEffect(() {
@@ -697,8 +717,7 @@ class ReceivedBills extends HookWidget {
         fetchRef.value();
       });
 
-      final receiverPrivateUserId =
-          userController.user.value.validPrivateUserId?.toString();
+      final receiverPrivateUserId = privateUserId.value?.toString();
       if (receiverPrivateUserId == null) {
         return () {
           refreshWorker.dispose();
@@ -726,7 +745,7 @@ class ReceivedBills extends HookWidget {
           await supabase.removeChannel(changes);
         } catch (_) {}
       };
-    }, [userController.user.value.privateUserId]);
+    }, [privateUserId.value]);
 
     final monthName = DateFormat.MMMM().format(filter.value.monthStart);
     final rows = invoices.value ?? <InvoiceModel>[];
@@ -738,6 +757,20 @@ class ReceivedBills extends HookWidget {
 
     return Column(
       children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: InvoiceListFilterBar(
+            query: filter.value,
+            onChanged: (next) => filter.value = next,
+            exportEnabled: rows.isNotEmpty,
+            onExport: () {
+              InvoiceCsvExporter.exportReceived(
+                invoices: rows,
+                query: filter.value,
+              );
+            },
+          ),
+        ),
         if (isLoading.value && hasLoaded.value)
           LinearProgressIndicator(
             minHeight: 2,
@@ -762,18 +795,6 @@ class ReceivedBills extends HookWidget {
                     : Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          InvoiceListFilterBar(
-                            query: filter.value,
-                            onChanged: (next) => filter.value = next,
-                            exportEnabled: rows.isNotEmpty,
-                            showPills: false,
-                            onExport: () {
-                              InvoiceCsvExporter.exportReceived(
-                                invoices: rows,
-                                query: filter.value,
-                              );
-                            },
-                          ),
                           StatisticsCard(
                             pendingAmount: pending.value,
                             paidAmount: paidThisMonth.value,
@@ -796,40 +817,6 @@ class ReceivedBills extends HookWidget {
                                 Get.to(() => const MoneriumStatements()),
                           ),
                           const SizedBox(height: 16),
-                          InvoiceListFilterBar(
-                            query: filter.value,
-                            onChanged: (next) => filter.value = next,
-                            showMonthHeader: false,
-                          ),
-                          const SizedBox(height: 16),
-                          // Row(
-                          //   children: [
-                          //     Text(
-                          //       'lbl_RecentItems'.tr,
-                          //       style: Theme.of(context)
-                          //           .textTheme
-                          //           .labelLarge
-                          //           ?.copyWith(fontSize: 14),
-                          //     ),
-                          //     const Spacer(),
-                          //     GestureDetector(
-                          //       onTap: () => filter.value =
-                          //           filter.value.copyWith(allTime: true),
-                          //       child: Text(
-                          //         'lbl_SeeAll'.tr,
-                          //         style: Theme.of(context)
-                          //             .textTheme
-                          //             .labelMedium
-                          //             ?.copyWith(
-                          //               color: Theme.of(context)
-                          //                   .colorScheme
-                          //                   .secondary,
-                          //             ),
-                          //       ),
-                          //     ),
-                          //   ],
-                          // ),
-                          const SizedBox(height: 8),
                           if (rows.isEmpty)
                             Padding(
                               padding: const EdgeInsets.fromLTRB(0, 24, 0, 0),

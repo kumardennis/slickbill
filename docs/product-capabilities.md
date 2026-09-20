@@ -28,18 +28,13 @@ Internal technical inventory for a business plan. Source of truth is `master` / 
 - Business: public name, CSV export, merchant check-in `/m/:token`.
 - Rewards: personal user **earns** credits when paying a business (accumulate only).
 - Push (FCM) + Firebase Analytics (no IBAN / names / amounts).
+- Search received / sent / public lists by the other party’s name or description (substring + typo-tolerant).
 
-## Payment confirmation file (to build)
+## Payment confirmation file (later phase)
 
-In-app PAID is not enough proof for a customer. Optional **SlickBills payment confirmation** (HTML → PDF) attaches to the bill if they want a file.
+In-app PAID is the live proof. A downloadable HTML→PDF confirmation is **not this slice**: customers already keep bank receipts, and storing files in Supabase Storage adds cost.
 
-- Same bytes for merchant and customer (stored once on the invoice). Not regenerated per device.
-- Snapshot of the agreed bill: parties (account-holder names), € amount, description, date, status, SlickBills id / `[sb:id]`, paid-at if PAID.
-- Label: **Payment confirmation** — not Invoice, Receipt, or VAT document.
-- Footer: this records the request both parties agreed in SlickBills.
-- Either party can download / share / later email the same file.
-- Generate on demand (customer asks), then lock. Do not invent a second “sign here” flow unless we add explicit agree later.
-- **No EdenAI / PDF.co.** Those parse photos; they are not this product and should be removed. Render from invoice JSON (Flutter Syncfusion or server `pdf-lib`) → Supabase Storage, RLS = sender or receiver.
+When we do it: one stored PDF per bill, same bytes for both parties, labeled **Payment confirmation** (not a VAT invoice). No EdenAI / PDF.co.
 
 ## Invoice types
 

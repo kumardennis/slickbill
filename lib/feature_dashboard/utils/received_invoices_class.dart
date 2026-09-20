@@ -3,8 +3,10 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../feature_auth/getx_controllers/user_controller.dart';
+import '../models/invoice_list_page.dart';
 import '../models/invoice_list_query.dart';
 import '../models/invoice_model.dart';
+import 'invoice_search_query.dart';
 
 class ReceivedInvoicesClass {
   final UserController userController = Get.find();
@@ -37,11 +39,63 @@ class ReceivedInvoicesClass {
     bool openOnly = false,
     DateTime? paidInMonth,
   }) async {
+    final page = await _loadReceivedInvoices(
+      id: id,
+      silent: silent,
+      query: query,
+      openOnly: openOnly,
+      paidInMonth: paidInMonth,
+    );
+    return page?.invoices;
+  }
+
+  Future<InvoiceListPage?> loadReceivedFolder(
+    InvoiceListQuery query, {
+    bool silent = false,
+  }) {
+    return _loadReceivedInvoices(
+      query: query,
+      silent: silent,
+      includeStats: true,
+    );
+  }
+
+  Future<List<InvoiceModel>?> searchReceivedInvoices(
+    InvoiceListQuery query, {
+    bool silent = false,
+  }) async {
+    final privateUserId = _privateUserId;
+    if (privateUserId == null) return const [];
+    if (!query.hasSearch) return const [];
+    await userController.ensureFreshSession();
+    try {
+      return await InvoiceSearchQuery.search(
+        side: InvoiceSearchSide.received,
+        query: query,
+        privateUserId: privateUserId,
+      );
+    } catch (err) {
+      print(err);
+      if (!silent) {
+        Get.snackbar('Oops..', _errorText(err));
+      }
+      return null;
+    }
+  }
+
+  Future<InvoiceListPage?> _loadReceivedInvoices({
+    int? id,
+    bool silent = false,
+    InvoiceListQuery? query,
+    bool openOnly = false,
+    DateTime? paidInMonth,
+    bool includeStats = false,
+  }) async {
     print("=====BILS=====");
     print(userController.user.value.privateUserId);
     final privateUserId = _privateUserId;
     if (privateUserId == null) {
-      return const [];
+      return const InvoiceListPage(invoices: []);
     }
     await userController.ensureFreshSession();
     try {
@@ -49,7 +103,9 @@ class ReceivedInvoicesClass {
         "privateUserId": privateUserId,
         if (id != null) "invoiceId": id,
         if (openOnly) "openOnly": true,
+        if (includeStats) "includeStats": true,
         if (query != null) ...query.toRequestBody(),
+        if (includeStats && query != null) "paidOnDateRange": query.paidOnDateRange,
         if (paidInMonth != null) ...{
           "status": "PAID",
           "paidOnDateRange": InvoiceListQuery(
@@ -84,7 +140,11 @@ class ReceivedInvoicesClass {
 
         print(invoices);
 
-        return invoices;
+        return InvoiceListPage(
+          invoices: invoices,
+          openSum: _asDouble(data['openSum']),
+          paidSum: _asDouble(data['paidSum']),
+        );
       } else {
         if (!silent) {
           Get.snackbar('Oops..', _errorText(data['error']));
@@ -95,6 +155,11 @@ class ReceivedInvoicesClass {
       print(err);
       return null;
     }
+  }
+
+  double? _asDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    return null;
   }
 
   Future<double?> getOpenInvoicesSum({InvoiceListQuery? period}) async {

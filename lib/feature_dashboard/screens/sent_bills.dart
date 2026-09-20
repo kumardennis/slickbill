@@ -5,6 +5,7 @@ import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_list_query.dart';
+import 'package:slickbill/feature_dashboard/models/invoice_list_page.dart';
 import 'package:slickbill/feature_dashboard/models/invoice_model.dart';
 import 'package:slickbill/feature_dashboard/utils/sent_invoices_class.dart';
 import 'package:slickbill/feature_dashboard/utils/invoice_csv_exporter.dart';
@@ -38,23 +39,33 @@ class SentBills extends HookWidget {
       monthBasis: InvoiceMonthBasis.created,
     ));
     final fetchRef = useRef<Future<void> Function()>(() async {});
+    final fetchGeneration = useRef(0);
+    final privateUserId = useState(userController.user.value.validPrivateUserId);
 
     Future getInvoices() async {
+      if (userController.user.value.validPrivateUserId == null) return;
       isLoading.value = true;
       final current = filter.value;
+      final generation = ++fetchGeneration.value;
 
-      final results = await Future.wait([
-        sentInvoicesClass.getPrivateSentInvoices(query: current),
-        sentInvoicesClass.getOpenInvoicesSum(period: current),
-        sentInvoicesClass.getPaidInPeriod(current),
-      ]);
-
-      final rows = results[0] as List<InvoiceModel>?;
-      if (rows != null) {
-        invoices.value = rows;
+      if (current.hasSearch) {
+        final rows = await sentInvoicesClass.searchSentInvoices(current);
+        if (generation != fetchGeneration.value) return;
+        if (rows != null) {
+          invoices.value = rows;
+        }
+        isLoading.value = false;
+        hasLoaded.value = true;
+        return;
       }
-      pending.value = results[1] as double? ?? 0.0;
-      receivedThisMonth.value = results[2] as double? ?? 0.0;
+
+      final page = await sentInvoicesClass.loadSentFolder(current);
+      if (generation != fetchGeneration.value) return;
+      if (page != null) {
+        invoices.value = page.invoices;
+        pending.value = page.openSum ?? openInvoiceSum(page.invoices);
+        receivedThisMonth.value = page.paidSum ?? paidInvoiceSum(page.invoices);
+      }
       isLoading.value = false;
       hasLoaded.value = true;
     }
@@ -82,20 +93,35 @@ class SentBills extends HookWidget {
     }
 
     useEffect(() {
+      final worker = ever(userController.user, (user) {
+        final uid = user.validPrivateUserId;
+        if (privateUserId.value != uid) {
+          privateUserId.value = uid;
+        }
+      });
+      return worker.dispose;
+    }, []);
+
+    useEffect(() {
+      if (privateUserId.value == null) return null;
       refreshAllData();
       return null;
-    }, [filter.value.month.year, filter.value.month.month, filter.value.status, filter.value.allTime]);
+    }, [
+      privateUserId.value,
+      filter.value.month.year,
+      filter.value.month.month,
+      filter.value.status,
+      filter.value.allTime,
+      filter.value.search,
+    ]);
 
     useEffect(() {
       final refreshWorker =
           ever<int>(invoiceController.sentListRefreshRequest, (_) {
         fetchRef.value();
       });
-
-      return () {
-        refreshWorker.dispose();
-      };
-    }, [userController.user.value.accessToken]);
+      return refreshWorker.dispose;
+    }, []);
 
     String groupKey(InvoiceModel i) {
       if (i.privateGroupId != null) {
