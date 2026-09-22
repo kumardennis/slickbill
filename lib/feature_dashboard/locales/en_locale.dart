@@ -51,6 +51,9 @@ Map<String, String> dashboardLocales_EN = {
   'lbl_PaidInMonth': 'Paid in @month',
   'inf_StatusUpdated': 'Status updated!',
   'btn_Pay': 'Pay this SlickBill',
+  'lbl_BankQr': 'Bank QR',
+  'inf_BankQrCaption':
+      'Scan in LHV, Swedbank, SEB or Revolut. Leave the reference empty.',
   'btn_CheckingBalance': 'Checking balance…',
   'btn_Unpay': 'Unpay this SlickBill',
   'btn_MarkObsolete': 'Mark as trash',

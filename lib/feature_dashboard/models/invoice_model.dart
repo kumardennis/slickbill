@@ -126,6 +126,15 @@ class InvoiceModel {
     return '$note $paymentMemo';
   }
 
+  /// Destination IBAN snapshotted on the bill, then the sender profile IBAN.
+  String? get bankPayIban {
+    for (final candidate in [senderIban, senders?.privateUsers?.iban]) {
+      final value = candidate?.trim() ?? '';
+      if (value.isNotEmpty && value != '-') return value;
+    }
+    return null;
+  }
+
   /// Legal account holder for the IBAN (not the public business name).
   String get displayAccountHolderName {
     final holder = senders?.privateUsers?.bankAccountName.trim() ?? '';

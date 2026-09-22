@@ -200,6 +200,22 @@ class PublicInvoiceModel {
     return '$note $paymentMemo';
   }
 
+  /// Destination IBAN snapshotted on the bill, then the sender profile IBAN.
+  String? get bankPayIban {
+    for (final candidate in [senderIban, sender?.iban]) {
+      final value = candidate?.trim() ?? '';
+      if (value.isNotEmpty && value != '-') return value;
+    }
+    return null;
+  }
+
+  /// Legal holder first; public/display name only if holder is missing.
+  String get bankPayBeneficiaryName {
+    final holder = displayAccountHolderName.trim();
+    if (holder.isNotEmpty) return holder;
+    return displaySenderName.trim();
+  }
+
   String get displaySenderName {
     final snapshotted = senderName?.trim() ?? '';
     if (snapshotted.isNotEmpty) return snapshotted;

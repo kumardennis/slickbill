@@ -10,6 +10,7 @@ import 'package:slickbill/feature_public/models/public_invoice_model.dart';
 import 'package:slickbill/feature_dashboard/widgets/from_business_badge.dart';
 import 'package:slickbill/feature_public/screens/public_invoice_view.dart';
 import 'package:slickbill/feature_public/widgets/public_invoice_page.dart';
+import 'package:slickbill/shared_widgets/sb_epc_qr_panel.dart';
 import 'package:slickbill/theme/sb_colors.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:universal_html/html.dart' as html;
@@ -424,6 +425,16 @@ class PublicInvoiceLanding extends HookWidget {
                             ),
                         ],
                       ),
+                      if (invoice.status != 'PAID') ...[
+                        const SizedBox(height: 16),
+                        SbEpcQrPanel(
+                          beneficiaryName: invoice.bankPayBeneficiaryName,
+                          iban: invoice.bankPayIban,
+                          amountEur: invoice.amount,
+                          paymentMemo: invoice.paymentMemo,
+                          description: invoice.description,
+                        ),
+                      ],
                       const SizedBox(height: 20),
                       PublicInvoiceActions(
                         children: [
