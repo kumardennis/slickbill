@@ -13,7 +13,6 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../feature_auth/utils/money_formatter.dart';
 import '../../shared_widgets/sb_dark_surface_theme.dart';
-import '../../shared_widgets/sb_epc_qr_panel.dart';
 import '../../shared_widgets/sb_receipt_stamp.dart';
 import '../../shared_widgets/sb_status_mark.dart';
 import 'package:slickbill/theme/sb_colors.dart';
@@ -788,16 +787,6 @@ class ReceivedInvoiceSheet extends HookWidget {
               ),
             ),
             const SizedBox(height: 30),
-            if (normalizedStatus != 'PAID') ...[
-              SbEpcQrPanel(
-                beneficiaryName: senderAccountHolder,
-                iban: displayedInvoice.bankPayIban,
-                amountEur: displayedInvoice.amount,
-                paymentMemo: displayedInvoice.paymentMemo,
-                description: displayedInvoice.description,
-              ),
-              const SizedBox(height: 30),
-            ],
             if (displayedInvoice.txHash != null &&
                 (displayedInvoice.txHash?.isNotEmpty ?? false)) ...[
               const SizedBox(height: 20),
