@@ -445,7 +445,7 @@ class WalletInfo extends HookWidget {
           await MoneriumService.connect(
             userId: userId,
             email: email,
-            forceLogin: forceBrowserReconnect,
+            forceLogin: true,
           );
         }
 
@@ -553,13 +553,23 @@ class WalletInfo extends HookWidget {
           duration: const Duration(seconds: 5),
         );
       } catch (e) {
-        Get.snackbar(
-          'Monerium Error',
-          userFriendlyMoneriumError(e),
-          backgroundColor: Theme.of(context).colorScheme.red,
-          colorText: Colors.white,
-          duration: const Duration(seconds: 3),
-        );
+        if (MoneriumService.isConnectCancelled(e)) {
+          Get.snackbar(
+            'Connect cancelled',
+            'Close the Monerium window and tap Connect Monerium to try again.',
+            backgroundColor: Theme.of(context).colorScheme.blue.withOpacity(0.12),
+            colorText: Theme.of(context).colorScheme.blue,
+            duration: const Duration(seconds: 3),
+          );
+        } else {
+          Get.snackbar(
+            'Monerium Error',
+            userFriendlyMoneriumError(e),
+            backgroundColor: Theme.of(context).colorScheme.red,
+            colorText: Colors.white,
+            duration: const Duration(seconds: 3),
+          );
+        }
       } finally {
         if (isMounted()) {
           isConnectingMonerium.value = false;

@@ -293,6 +293,20 @@ class MoneriumService {
 
   static AppCallbackInAppBrowser? _authBrowser;
 
+  static const _cancelledMessage = 'Monerium connect was cancelled.';
+
+  static bool isConnectCancelled(Object error) {
+    final text = error.toString().toLowerCase();
+    return text.contains('cancelled') || text.contains('canceled');
+  }
+
+  static void _failPendingConnect(Object error) {
+    final completer = _pendingOAuthCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.completeError(error);
+    }
+  }
+
   static Future<void> _closeAuthTab() async {
     try {
       await _authBrowser?.close();
@@ -360,39 +374,19 @@ class MoneriumService {
       );
     }
 
-    // iOS SFSafariViewController (url_launcher custom tab) does not return
-    // custom-scheme callbacks like slickbill://, so the sheet never closes.
-    // Intercept those URLs in WKWebView and dismiss the browser ourselves.
-    if (defaultTargetPlatform == TargetPlatform.iOS) {
-      _authBrowser = AppCallbackInAppBrowser(
-        onCallback: (callbackUri) {
-          onAuthCallbackUri(callbackUri);
-        },
-        onClosedWithoutCallback: () {
-          final completer = _pendingOAuthCompleter;
-          if (completer != null && !completer.isCompleted) {
-            completer.completeError(
-              Exception('Monerium connect was cancelled.'),
-            );
-          }
-        },
-      );
-      await AppCallbackInAppBrowser.open(uri, _authBrowser!);
-      _log('opened Monerium auth in in-app browser');
-      return true;
-    }
-
-    try {
-      final opened = await launchUrl(uri, mode: LaunchMode.inAppBrowserView);
-      if (opened) {
-        _log('opened Monerium auth in custom tab');
-        return true;
-      }
-    } catch (error) {
-      _log('custom tab failed, falling back to browser: $error');
-    }
-
-    return launchUrl(uri, mode: LaunchMode.externalApplication);
+    // Chrome Custom Tabs / SFSafariViewController do not return
+    // slickbill(s):// and do not tell us when the user closes the sheet.
+    _authBrowser = AppCallbackInAppBrowser(
+      onCallback: (callbackUri) {
+        onAuthCallbackUri(callbackUri);
+      },
+      onClosedWithoutCallback: () {
+        _failPendingConnect(Exception(_cancelledMessage));
+      },
+    );
+    await AppCallbackInAppBrowser.open(uri, _authBrowser!);
+    _log('opened Monerium auth in in-app browser');
+    return true;
   }
 
   static String _callbackUriForPlatform() {
@@ -420,8 +414,11 @@ class MoneriumService {
     bool forceLogin = false,
   }) async {
     if (_pendingConnectFuture != null) {
-      _log('connect() auth already in progress; awaiting existing flow');
-      return _pendingConnectFuture!;
+      _log('connect() replacing in-progress Monerium OAuth');
+      _failPendingConnect(Exception(_cancelledMessage));
+      await _closeAuthTab();
+      _pendingOAuthCompleter = null;
+      _pendingConnectFuture = null;
     }
 
     final connectFuture = (() async {
@@ -449,6 +446,7 @@ class MoneriumService {
 
         // Token refresh is /monerium/oauth/refresh. Browser connect is OAuth
         // PKCE only — never SIWE. Address ownership is a separate link step.
+        // Always prompt=login so a stuck "Loading user profile" session is not reused.
         final startResponse = await _postJson(
           '/monerium/oauth/start',
           body: {
@@ -457,7 +455,7 @@ class MoneriumService {
             'redirectUri': redirectUri,
             'appRedirectUri': appRedirectUri ?? _callbackUriForPlatform(),
             'appAutoRedirect': true,
-            'forceLogin': forceLogin,
+            'forceLogin': true,
           },
         );
 
@@ -519,8 +517,8 @@ class MoneriumService {
         }
         if (identical(_pendingOAuthCompleter, completer)) {
           _pendingOAuthCompleter = null;
+          _pendingConnectFuture = null;
         }
-        _pendingConnectFuture = null;
       }
     })();
 
