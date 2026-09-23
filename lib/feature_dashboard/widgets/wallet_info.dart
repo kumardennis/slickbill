@@ -154,33 +154,7 @@ class WalletInfo extends HookWidget {
     }
 
     String? extractMoneriumIbanFromRow(dynamic row) {
-      if (row is String && row.trim().isNotEmpty) {
-        return row.trim();
-      }
-      if (row is! Map) {
-        return null;
-      }
-
-      final map = Map<String, dynamic>.from(row);
-      final candidates = [
-        map['iban'],
-        map['ibanNumber'],
-        map['iban_number'],
-      ];
-
-      for (final candidate in candidates) {
-        if (candidate is String && candidate.trim().isNotEmpty) {
-          return candidate.trim();
-        }
-        if (candidate is Map) {
-          final nested = candidate['iban'] ?? candidate['ibanNumber'];
-          if (nested is String && nested.trim().isNotEmpty) {
-            return nested.trim();
-          }
-        }
-      }
-
-      return null;
+      return MoneriumService.issuedIbanFromRow(row);
     }
 
     String? getMoneriumAccountHolderFromRow(dynamic row) {
@@ -494,7 +468,7 @@ class WalletInfo extends HookWidget {
           moneriumIbans.value = ibans;
         }
 
-        if (ibans.isNotEmpty && linked) {
+        if (MoneriumService.hasIssuedIban(ibans) && linked) {
           await paymentSetupController.markIbanReady();
           Get.snackbar(
             'Payments ready',
@@ -530,7 +504,7 @@ class WalletInfo extends HookWidget {
           isAddressLinked.value = true;
         }
 
-        if (ibans.isNotEmpty) {
+        if (MoneriumService.hasIssuedIban(ibans)) {
           await paymentSetupController.markIbanReady();
           Get.snackbar(
             'Payments ready',
@@ -544,10 +518,10 @@ class WalletInfo extends HookWidget {
 
         final alreadyExists = requestResponse['alreadyExists'] == true;
         Get.snackbar(
-          alreadyExists ? 'IBAN pending' : 'Almost done',
+          'KYC pending',
           alreadyExists
-              ? 'Monerium has an IBAN, but it is not visible yet. Tap Reconnect again in a few seconds.'
-              : 'IBAN requested. If Monerium asked for KYC, finish that, then tap Reconnect again.',
+              ? 'Monerium is still issuing your IBAN. Finish KYC, then tap Reconnect.'
+              : 'IBAN requested. Finish Monerium KYC, then tap Reconnect.',
           backgroundColor: Colors.orange.shade700,
           colorText: Colors.white,
           duration: const Duration(seconds: 5),
@@ -648,7 +622,7 @@ class WalletInfo extends HookWidget {
           );
         }
 
-        final hasIbans = ibans.isNotEmpty;
+        final hasIbans = MoneriumService.hasIssuedIban(ibans);
 
         if (isMounted()) {
           moneriumIbans.value = ibans;
@@ -859,7 +833,7 @@ class WalletInfo extends HookWidget {
             userId: userId,
             linked: true,
           );
-          if (ibans.isNotEmpty) {
+          if (MoneriumService.hasIssuedIban(ibans)) {
             await paymentSetupController.markIbanReady();
           } else {
             await paymentSetupController.refresh();
@@ -868,13 +842,15 @@ class WalletInfo extends HookWidget {
 
         if (!isMounted()) return;
         Get.snackbar(
-          alreadyExists ? 'IBAN Already Exists' : 'IBAN Request Submitted',
-          ibans.isNotEmpty
-              ? 'Slickbills/Monerium iban found'
+          MoneriumService.hasIssuedIban(ibans)
+              ? 'IBAN ready'
+              : (alreadyExists ? 'KYC pending' : 'IBAN Request Submitted'),
+          MoneriumService.hasIssuedIban(ibans)
+              ? 'SlickBills/Monerium IBAN found'
               : (alreadyExists
-                  ? 'Monerium reports an existing IBAN. It may appear after a short refresh delay.'
-                  : 'Your IBAN request was accepted. It may take a few seconds to appear.'),
-          backgroundColor: ibans.isNotEmpty
+                  ? 'Monerium is still issuing your IBAN. Finish KYC, then tap Reconnect.'
+                  : 'Your IBAN request was accepted. Finish KYC, then tap Reconnect.'),
+          backgroundColor: MoneriumService.hasIssuedIban(ibans)
               ? Theme.of(context).colorScheme.green
               : Colors.orange.shade700,
           colorText: Colors.white,
@@ -1070,7 +1046,8 @@ class WalletInfo extends HookWidget {
     }
 
     String extractIbanText(dynamic ibanRow) {
-      return extractMoneriumIbanFromRow(ibanRow) ?? 'Unknown IBAN';
+      return extractMoneriumIbanFromRow(ibanRow) ??
+          'IBAN pending — finish Monerium KYC';
     }
 
     String extractIbanMeta(dynamic ibanRow) {
@@ -1114,8 +1091,9 @@ class WalletInfo extends HookWidget {
     return Obx(() {
       final user = userController.user.value;
       paymentSetupController.step.value;
-      final alreadySetUp = PaymentSetupController.userHasMoneriumIban(user) ||
-          moneriumIbans.value.isNotEmpty;
+      final alreadySetUp =
+          PaymentSetupController.userHasMoneriumIban(user) ||
+              MoneriumService.hasIssuedIban(moneriumIbans.value);
       final needsWallet = metamaskWalletAddress.value?.trim().isEmpty ?? true;
       final showSetupWizard = !alreadySetUp;
       final showWalletSetup = showSetupWizard || needsWallet;

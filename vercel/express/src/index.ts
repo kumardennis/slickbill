@@ -265,7 +265,7 @@ const configuredPublicServerUrl = process.env.PUBLIC_SERVER_URL?.trim() || "";
 const moneriumAppAutoRedirectEnabled =
   process.env.MONERIUM_APP_AUTO_REDIRECT?.trim().toLowerCase() === "true";
 
-const moneriumPkceTtlMs = 10 * 60 * 1000;
+const moneriumPkceTtlMs = 30 * 60 * 1000;
 
 function moneriumTokenRequestBody(
   params: Record<string, string>,

@@ -83,7 +83,7 @@ Future<void> completeWebMoneriumOAuthReturnIfNeeded() async {
 
     if (Get.isRegistered<PaymentSetupController>()) {
       final setup = Get.find<PaymentSetupController>();
-      if (ibans.isNotEmpty) {
+      if (MoneriumService.hasIssuedIban(ibans)) {
         await setup.markIbanReady();
       } else if (linked) {
         await setup.markAddressLinked(userId: userId);
@@ -95,13 +95,13 @@ Future<void> completeWebMoneriumOAuthReturnIfNeeded() async {
     await MoneriumService.clearWebConnectPending();
 
     Get.snackbar(
-      ibans.isNotEmpty
+      MoneriumService.hasIssuedIban(ibans)
           ? 'Payments ready'
-          : (linked ? 'Wallet linked' : 'Monerium connected'),
-      ibans.isNotEmpty
+          : (linked ? 'KYC pending' : 'Monerium connected'),
+      MoneriumService.hasIssuedIban(ibans)
           ? 'Your Monerium IBAN is set up.'
           : (linked
-              ? 'Wallet is linked. If the IBAN is still provisioning, tap Reconnect again.'
+              ? 'Finish Monerium KYC, then tap Reconnect. The IBAN is not issued yet.'
               : 'Sign in succeeded. Complete Monerium KYC, then tap Reconnect again.'),
       snackPosition: SnackPosition.TOP,
       duration: const Duration(seconds: 4),
@@ -176,7 +176,7 @@ Future<void> completeWebWalletReturn(WebWalletCallback? callback) async {
 
     if (Get.isRegistered<PaymentSetupController>()) {
       final setup = Get.find<PaymentSetupController>();
-      if (ibans.isNotEmpty) {
+      if (MoneriumService.hasIssuedIban(ibans)) {
         await setup.markIbanReady();
       } else {
         await setup.markAddressLinked(userId: userId);
@@ -185,16 +185,16 @@ Future<void> completeWebWalletReturn(WebWalletCallback? callback) async {
 
     final accounts = <BankAccount>[];
     for (final row in ibans) {
-      if (row is! Map) continue;
-      final iban = row['iban']?.toString().trim() ??
-          row['ibanNumber']?.toString().trim() ??
-          '';
-      if (iban.isEmpty) continue;
+      final iban = MoneriumService.issuedIbanFromRow(row);
+      if (iban == null) continue;
+      final holder = row is Map
+          ? row['holderName']?.toString()
+          : null;
       accounts.add(
         BankAccount(
           iban: iban,
           bankName: 'Monerium (LHV)',
-          bankAccountName: row['holderName']?.toString(),
+          bankAccountName: holder,
           isPrimary: false,
         ),
       );
@@ -204,10 +204,10 @@ Future<void> completeWebWalletReturn(WebWalletCallback? callback) async {
     }
 
     Get.snackbar(
-      ibans.isNotEmpty ? 'IBAN ready' : 'Wallet linked',
-      ibans.isNotEmpty
+      MoneriumService.hasIssuedIban(ibans) ? 'IBAN ready' : 'KYC pending',
+      MoneriumService.hasIssuedIban(ibans)
           ? 'Your Monerium IBAN is now available in Profile.'
-          : 'Wallet is linked. Open Profile if the IBAN is still provisioning.',
+          : 'Finish Monerium KYC, then tap Reconnect. The IBAN is not issued yet.',
       snackPosition: SnackPosition.TOP,
       duration: const Duration(seconds: 4),
     );

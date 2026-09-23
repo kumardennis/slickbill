@@ -50,7 +50,8 @@ class PaymentSetupController extends GetxController {
 
   static bool userHasMoneriumIban(ClientUserModel user) {
     final primaryBank = user.bankName?.trim().toLowerCase() ?? '';
-    if (primaryBank.contains('monerium')) {
+    if (primaryBank.contains('monerium') &&
+        MoneriumService.isIssuedIban(user.iban)) {
       return true;
     }
 
@@ -60,7 +61,9 @@ class PaymentSetupController extends GetxController {
     }
 
     return accounts.any(
-      (account) => account.bankName.trim().toLowerCase().contains('monerium'),
+      (account) =>
+          account.bankName.trim().toLowerCase().contains('monerium') &&
+          MoneriumService.isIssuedIban(account.iban),
     );
   }
 

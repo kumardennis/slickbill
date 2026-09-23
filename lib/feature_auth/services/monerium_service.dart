@@ -7,6 +7,7 @@ import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/services/app_callback_in_app_browser.dart';
 import 'package:slickbill/feature_auth/services/metamask_wallet_service.dart';
+import 'package:slickbill/shared_utils/epc_qr.dart';
 import 'package:slickbill/shared_widgets/sb_post_message_impl.dart';
 import 'package:slickbill/services/coinbase/coinbase_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -40,7 +41,8 @@ class MoneriumService {
       String.fromEnvironment('MONERIUM_WALLET_CHAIN', defaultValue: '');
   static const String _webConnectPendingAtKey =
       'monerium_web_connect_pending_at';
-  static const _webConnectPendingTtl = Duration(minutes: 20);
+  static const _webConnectPendingTtl = Duration(minutes: 30);
+  static const _oauthWait = Duration(minutes: 30);
 
   static String get _serverBaseUrl => CoinbaseService.baseUrl;
 
@@ -483,7 +485,7 @@ class MoneriumService {
         }
 
         final callbackResult = await completer.future.timeout(
-          const Duration(minutes: 5),
+          _oauthWait,
           onTimeout: () => throw Exception('Monerium OAuth login timed out.'),
         );
 
@@ -1548,6 +1550,58 @@ class MoneriumService {
 
     return const [];
   }
+
+  static String? issuedIban(String? raw) {
+    final trimmed = (raw ?? '').trim();
+    if (trimmed.isEmpty) return null;
+    final lower = trimmed.toLowerCase();
+    if (lower.contains('unknown') ||
+        lower.contains('pending') ||
+        lower == 'n/a' ||
+        lower == 'na' ||
+        lower == '-') {
+      return null;
+    }
+    return EpcQrPayload.normalizeIban(trimmed);
+  }
+
+  static bool isIssuedIban(String? raw) => issuedIban(raw) != null;
+
+  static String? _ibanCandidateFromRow(dynamic row) {
+    if (row is String) return row;
+    if (row is! Map) return null;
+    final map = Map<String, dynamic>.from(row);
+    final candidates = [
+      map['iban'],
+      map['ibanNumber'],
+      map['iban_number'],
+    ];
+    for (final candidate in candidates) {
+      if (candidate is String && candidate.trim().isNotEmpty) {
+        return candidate;
+      }
+      if (candidate is Map) {
+        final nested = candidate['iban'] ?? candidate['ibanNumber'];
+        if (nested is String && nested.trim().isNotEmpty) {
+          return nested;
+        }
+      }
+    }
+    return null;
+  }
+
+  static String? issuedIbanFromRow(dynamic row) {
+    return issuedIban(_ibanCandidateFromRow(row));
+  }
+
+  static List<dynamic> issuedIbanRows(List<dynamic> rows) {
+    return rows
+        .where((row) => issuedIbanFromRow(row) != null)
+        .toList(growable: false);
+  }
+
+  static bool hasIssuedIban(List<dynamic> rows) =>
+      issuedIbanRows(rows).isNotEmpty;
 
   static Future<Map<String, dynamic>> _postJson(
     String path, {
