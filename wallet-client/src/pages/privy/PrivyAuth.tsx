@@ -15,6 +15,7 @@ import {
   useState,
   type CSSProperties,
 } from "react";
+import { expressServerUrl } from "../../config";
 import logo from "../../assets/logo_icon.png";
 import { sb } from "../../theme";
 import {
@@ -51,6 +52,7 @@ const sessionKeys = {
   iban: "sb_pay_iban",
   ref: "sb_pay_ref",
   kind: "sb_pay_kind",
+  userId: "sb_privy_user_id",
 } as const;
 
 function readQueryOrSession(key: string, sessionKey: string): string | null {
@@ -74,6 +76,34 @@ function readPaymentPreview(): PaymentPreview {
     ref: readQueryOrSession("ref", sessionKeys.ref),
     kind,
   };
+}
+
+function clearSignSession() {
+  try {
+    window.sessionStorage.removeItem(sessionKeys.flowMode);
+    window.sessionStorage.removeItem(sessionKeys.signMessage);
+    window.sessionStorage.removeItem(sessionKeys.expectedAddress);
+    window.sessionStorage.removeItem(sessionKeys.kind);
+    window.sessionStorage.removeItem(sessionKeys.userId);
+    window.sessionStorage.removeItem(sessionKeys.amount);
+    window.sessionStorage.removeItem(sessionKeys.payee);
+    window.sessionStorage.removeItem(sessionKeys.iban);
+    window.sessionStorage.removeItem(sessionKeys.ref);
+  } catch {
+    // Ignore sessionStorage errors.
+  }
+}
+
+function resolveFlowMode(params: URLSearchParams): "connect" | "sign" {
+  const modeFromQuery = params.get("mode")?.trim().toLowerCase();
+  const forceLogin = params.get("force_login") === "1";
+  if (forceLogin || modeFromQuery === "connect") {
+    return "connect";
+  }
+  if (modeFromQuery === "sign" || params.get("sign_message")?.trim()) {
+    return "sign";
+  }
+  return "connect";
 }
 
 function persistPaymentPreview(preview: PaymentPreview) {
@@ -193,6 +223,8 @@ const secondaryButtonStyle: CSSProperties = {
 
 export function PrivyAuth() {
   const { ready, authenticated, user } = usePrivy();
+  const forceAccountChoiceRef = useRef(false);
+  const didForceLogoutRef = useRef(false);
   const { login } = useLogin({
     onComplete: ({ wasAlreadyAuthenticated }) => {
       if (wasAlreadyAuthenticated) return;
@@ -231,7 +263,8 @@ export function PrivyAuth() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [autoAfterLogin, setAutoAfterLogin] = useState(loginWasStarted);
+  const [autoAfterLogin, setAutoAfterLogin] = useState(false);
+  const [returnHref, setReturnHref] = useState<string | null>(null);
   const [storedLastUsed, setStoredLastUsed] = useState<LastUsedAccount | null>(
     readLastUsedAccount,
   );
@@ -241,13 +274,7 @@ export function PrivyAuth() {
   const callbackUri = useRef<string | null>(null);
   const [flowMode, setFlowMode] = useState<"connect" | "sign">(() => {
     try {
-      const params = new URLSearchParams(window.location.search);
-      const fromQuery = params.get("mode")?.trim().toLowerCase();
-      const fromSession = window.sessionStorage
-        .getItem(sessionKeys.flowMode)
-        ?.trim()
-        .toLowerCase();
-      return fromQuery === "sign" || fromSession === "sign" ? "sign" : "connect";
+      return resolveFlowMode(new URLSearchParams(window.location.search));
     } catch {
       return "connect";
     }
@@ -265,32 +292,33 @@ export function PrivyAuth() {
       }
     })(),
   );
+  const userIdRef = useRef<string | null>(null);
+  const forceLoginRef = useRef(false);
+  const [forceLogin, setForceLogin] = useState(false);
   const callbackSentRef = useRef(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const callbackFromQuery = params.get("callback_uri")?.trim();
-    const modeFromQuery = params.get("mode")?.trim().toLowerCase();
+    const nextMode = resolveFlowMode(params);
     const signFromQuery = params.get("sign_message")?.trim();
     const addressFromQuery = hexAddress(params.get("address"));
     const callbackFromSession = window.sessionStorage
       .getItem(sessionKeys.callbackUri)
       ?.trim();
-    const modeFromSession = window.sessionStorage
-      .getItem(sessionKeys.flowMode)
-      ?.trim()
-      .toLowerCase();
-    const signFromSession = window.sessionStorage
-      .getItem(sessionKeys.signMessage)
-      ?.trim();
-    const addressFromSession = hexAddress(
-      window.sessionStorage.getItem(sessionKeys.expectedAddress),
-    );
 
-    const nextMode: "connect" | "sign" =
-      modeFromQuery === "sign" || modeFromSession === "sign"
-        ? "sign"
-        : "connect";
+    if (nextMode === "connect") {
+      clearSignSession();
+    }
+
+    const signFromSession =
+      nextMode === "sign"
+        ? window.sessionStorage.getItem(sessionKeys.signMessage)?.trim()
+        : null;
+    const addressFromSession =
+      nextMode === "sign"
+        ? hexAddress(window.sessionStorage.getItem(sessionKeys.expectedAddress))
+        : null;
     flowModeRef.current = nextMode;
     setFlowMode(nextMode);
     signMessageRef.current = signFromQuery || signFromSession || null;
@@ -321,8 +349,70 @@ export function PrivyAuth() {
         expectedAddressRef.current,
       );
     }
-    persistPaymentPreview(readPaymentPreview());
+    if (nextMode === "sign") {
+      persistPaymentPreview(readPaymentPreview());
+    }
+
+    const userIdFromQuery = params.get("user_id")?.trim();
+    const userIdFromSession =
+      nextMode === "sign"
+        ? window.sessionStorage.getItem(sessionKeys.userId)?.trim() || null
+        : null;
+    userIdRef.current = userIdFromQuery || userIdFromSession;
+    if (userIdRef.current) {
+      window.sessionStorage.setItem(sessionKeys.userId, userIdRef.current);
+    }
+
+    const forceLoginParam = params.get("force_login") === "1";
+    forceLoginRef.current = forceLoginParam;
+    setForceLogin(forceLoginParam);
+    window.sessionStorage.removeItem("sb_privy_force_login");
+
+    // Google OAuth returns to this page with Privy session restored. Resume —
+    // do not clear loginStarted or force-logout the fresh session.
+    if (loginWasStarted()) {
+      forceAccountChoiceRef.current = false;
+      setAutoAfterLogin(true);
+      setBusy(true);
+      return;
+    }
+
+    // Fresh connect / reconnect: show account picker; drop leftover Privy session.
+    if (nextMode === "connect" || forceLoginParam) {
+      forceAccountChoiceRef.current = true;
+      clearLoginStarted();
+      setAutoAfterLogin(false);
+      return;
+    }
+
+    // Fresh sign/pay/withdraw (no OAuth return): wait for Confirm tap.
+    forceAccountChoiceRef.current = false;
+    clearLoginStarted();
+    setAutoAfterLogin(false);
   }, []);
+
+  useEffect(() => {
+    if (!ready || didForceLogoutRef.current) return;
+    if (!forceAccountChoiceRef.current) {
+      didForceLogoutRef.current = true;
+      return;
+    }
+
+    // Drop a leftover Privy session from a previous visit only.
+    // Never run this path after an OAuth return (forceAccountChoice is false).
+    didForceLogoutRef.current = true;
+    if (!authenticated) return;
+
+    void (async () => {
+      try {
+        await logout();
+      } catch {
+        // Ignore; the account picker still works.
+      }
+      setAutoAfterLogin(false);
+      setBusy(false);
+    })();
+  }, [authenticated, logout, ready]);
 
   const resolveAddress = useCallback((): string | null => {
     const expected = hexAddress(expectedAddressRef.current);
@@ -370,6 +460,7 @@ export function PrivyAuth() {
   const returnToCallback = useCallback((params: Record<string, string>) => {
     if (callbackSentRef.current) return;
     callbackSentRef.current = true;
+    clearLoginStarted();
 
     const payload: Record<string, unknown> = {
       type: "SB_METAMASK_AUTH",
@@ -398,9 +489,13 @@ export function PrivyAuth() {
       // Ignore if BroadcastChannel is unavailable.
     }
 
-    const base = callbackUri.current;
+    const base =
+      callbackUri.current ||
+      window.sessionStorage.getItem(sessionKeys.callbackUri)?.trim() ||
+      null;
     if (!base) {
       callbackSentRef.current = false;
+      setErrorMessage("Wallet is connected. Return to the SlickBills tab.");
       return;
     }
 
@@ -409,9 +504,12 @@ export function PrivyAuth() {
       Object.entries(params).forEach(([key, value]) => {
         parsed.searchParams.set(key, value);
       });
-      window.location.assign(parsed.toString());
+      const nextUrl = parsed.toString();
+      setReturnHref(nextUrl);
+      window.location.replace(nextUrl);
     } catch {
       callbackSentRef.current = false;
+      setErrorMessage("Wallet is connected. Return to the SlickBills tab.");
     }
   }, []);
 
@@ -465,6 +563,32 @@ export function PrivyAuth() {
             throw new Error("Wallet signature was not returned.");
           }
           signature = signed;
+
+          const userId = userIdRef.current?.trim();
+          if (userId && paymentPreview.kind === "link") {
+            const response = await fetch(
+              `${expressServerUrl}/monerium/wallet/link`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  userId,
+                  address,
+                  message,
+                  signature,
+                }),
+              },
+            );
+            const payload = (await response.json().catch(() => null)) as {
+              error?: { message?: string };
+            } | null;
+            if (!response.ok) {
+              throw new Error(
+                payload?.error?.message ||
+                  `Wallet link failed (${response.status})`,
+              );
+            }
+          }
         }
 
         returnToCallback({
@@ -484,7 +608,7 @@ export function PrivyAuth() {
         setBusy(false);
       }
     },
-    [returnToCallback, user, wallets],
+    [paymentPreview.kind, returnToCallback, user, wallets],
   );
 
   const proceedWithWallet = useCallback(async () => {
@@ -499,10 +623,8 @@ export function PrivyAuth() {
       createAttemptedRef.current = true;
       try {
         const created = await createWallet();
-        const createdAddress = hexAddress(created?.address);
-        if (createdAddress?.toLowerCase() === expected.toLowerCase()) {
-          return;
-        }
+        address =
+          hexAddress(created?.address) ?? resolveAddress();
       } catch {
         address = resolveAddress();
       }
@@ -513,11 +635,18 @@ export function PrivyAuth() {
         setBusy(false);
         return;
       }
+      if (address.toLowerCase() !== expected.toLowerCase()) {
+        setErrorMessage(
+          "Connected wallet does not match the address used in SlickBills. Use the same Google account, then try again.",
+        );
+        setBusy(false);
+        return;
+      }
     } else if (!expected && !address && !createAttemptedRef.current) {
       createAttemptedRef.current = true;
       try {
         const created = await createWallet();
-        address = hexAddress(created?.address);
+        address = hexAddress(created?.address) ?? resolveAddress();
       } catch {
         address = resolveAddress();
       }
@@ -556,7 +685,7 @@ export function PrivyAuth() {
       return {
         title: "Connect wallet",
         subtitle:
-          "Continue with the last Google account, or choose a different Google account or wallet.",
+          "Choose a Google account or wallet. A previous session is not reused.",
         cta: lastUsed
           ? `Continue as ${lastUsed.email || lastUsed.name || (lastUsed.address ? shortenAddress(lastUsed.address) : "this account")}`
           : "Choose Google account or wallet",
@@ -590,6 +719,8 @@ export function PrivyAuth() {
     };
   }, [flowMode, hasPaymentDetails, lastUsed, paymentPreview.kind]);
 
+  // After Google login (same-tab or OAuth return), finish connect OR sign.
+  const autoCompleteAttemptedRef = useRef(false);
   const shouldAutoComplete = autoAfterLogin;
 
   useEffect(() => {
@@ -598,8 +729,24 @@ export function PrivyAuth() {
 
   useEffect(() => {
     if (!shouldAutoComplete) return;
+    if (!ready || !authenticated || !walletsReady) return;
+    if (
+      autoCompleteAttemptedRef.current ||
+      completingRef.current ||
+      callbackSentRef.current
+    ) {
+      return;
+    }
+    autoCompleteAttemptedRef.current = true;
+    setBusy(true);
     void proceedWithWallet();
-  }, [proceedWithWallet, shouldAutoComplete]);
+  }, [
+    authenticated,
+    proceedWithWallet,
+    ready,
+    shouldAutoComplete,
+    walletsReady,
+  ]);
 
   const handleConfirmPayment = async () => {
     setErrorMessage(null);
@@ -648,6 +795,9 @@ export function PrivyAuth() {
   const handleChooseAnother = async () => {
     setErrorMessage(null);
     setBusy(true);
+    // Mark before login so an OAuth round-trip resumes instead of force-logout.
+    markLoginStarted();
+    setAutoAfterLogin(false);
     try {
       if (authenticated) {
         await logout();
@@ -659,29 +809,26 @@ export function PrivyAuth() {
         setErrorMessage(message);
       }
       clearLoginStarted();
-      setAutoAfterLogin(false);
-    } finally {
       setBusy(false);
     }
   };
 
-  const showPayCta = ready && flowMode === "sign" && !walletAddress;
-
+  // Connect: show picker until Google login starts finishing.
   const showChoice =
-    ready &&
-    !walletAddress &&
-    flowMode !== "sign" &&
-    (!authenticated || !autoAfterLogin);
+    ready && !walletAddress && flowMode === "connect" && !autoAfterLogin;
+  // Sign: show Confirm until user taps or OAuth return resumes.
+  const showPayCta =
+    ready && flowMode === "sign" && !walletAddress && !autoAfterLogin;
 
   const statusCopy = !ready
     ? "Preparing a secure connection…"
     : walletAddress
       ? "Confirmed. Returning to SlickBills…"
-      : busy && !showChoice && !showPayCta
-        ? "Continue in the Google or wallet window…"
-        : busy && showPayCta
+      : autoAfterLogin || busy
+        ? flowMode === "sign"
           ? "Opening confirmation…"
-          : null;
+          : "Finishing wallet connect…"
+        : null;
 
   return (
     <div
@@ -829,6 +976,21 @@ export function PrivyAuth() {
           </div>
         ) : null}
 
+        {walletAddress && returnHref ? (
+          <a
+            href={returnHref}
+            style={{
+              ...primaryButtonStyle,
+              display: "block",
+              textAlign: "center",
+              textDecoration: "none",
+              boxSizing: "border-box",
+            }}
+          >
+            Continue to SlickBills
+          </a>
+        ) : null}
+
         {errorMessage ? (
           <div
             style={{
@@ -844,6 +1006,40 @@ export function PrivyAuth() {
           >
             {errorMessage}
           </div>
+        ) : null}
+
+        {errorMessage && (callbackUri.current || returnHref) ? (
+          <a
+            href={(() => {
+              try {
+                const base =
+                  returnHref ||
+                  callbackUri.current ||
+                  window.sessionStorage.getItem(sessionKeys.callbackUri) ||
+                  "";
+                const parsed = new URL(base);
+                parsed.searchParams.set("success", "0");
+                parsed.searchParams.set(
+                  "error",
+                  errorMessage.slice(0, 180),
+                );
+                parsed.searchParams.set("flow", flowMode);
+                return parsed.toString();
+              } catch {
+                return callbackUri.current || returnHref || "#";
+              }
+            })()}
+            style={{
+              ...secondaryButtonStyle,
+              display: "block",
+              textAlign: "center",
+              textDecoration: "none",
+              boxSizing: "border-box",
+              marginTop: 12,
+            }}
+          >
+            Back to SlickBills
+          </a>
         ) : null}
 
         {showPayCta ? (
@@ -862,7 +1058,7 @@ export function PrivyAuth() {
           </button>
         ) : null}
 
-        {showChoice && lastUsed ? (
+        {showChoice && lastUsed && !forceLogin ? (
           <div
             style={{
               marginTop: 18,
@@ -933,11 +1129,13 @@ export function PrivyAuth() {
               void handleChooseAnother();
             }}
             style={{
-              ...(lastUsed ? secondaryButtonStyle : primaryButtonStyle),
+              ...(lastUsed && !forceLogin
+                ? secondaryButtonStyle
+                : primaryButtonStyle),
               opacity: busy ? 0.7 : 1,
             }}
           >
-            {lastUsed
+            {lastUsed && !forceLogin
               ? "Use another Google account or wallet"
               : "Choose Google account or wallet"}
           </button>

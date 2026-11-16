@@ -1,4 +1,5 @@
 import type { Web3Auth } from "@web3auth/modal";
+import { defaultWalletChainId } from "./web3authContext";
 import {
   isWeb3AuthConnected,
   waitForWalletAddress,
@@ -32,7 +33,7 @@ export async function recoverConnectedWallet(
   }
 
   try {
-    await web3Auth.switchChain({ chainId: "0x1" });
+    await web3Auth.switchChain({ chainId: defaultWalletChainId });
     return await waitForWalletAddress(
       web3Auth,
       web3Auth.connection,
