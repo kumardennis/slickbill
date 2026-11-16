@@ -1,6 +1,10 @@
-import { authConnector, WALLET_CONNECTORS } from "@web3auth/modal";
+import {
+  authConnector,
+  CHAIN_NAMESPACES,
+  WALLET_CONNECTORS,
+} from "@web3auth/modal";
 import type { Web3AuthContextConfig } from "@web3auth/modal/react";
-import { appEnv, resolveWeb3AuthNetwork } from "./config";
+import { appEnv, isDev, resolveWeb3AuthNetwork } from "./config";
 import { web3AuthSocialLoginMethods } from "./web3authSocialLogin";
 
 /** Google returns to the origin. Dashboard whitelist is origin, not /wallet/metamask-auth. */
@@ -15,7 +19,37 @@ export function isWeb3AuthRedirectReturn(): boolean {
   return /(?:sessionId|session_id|b64Params|loginParams|id_token)=/i.test(blob);
 }
 
-const clientId = (import.meta.env.VITE_WEB3AUTH_CLIENT_ID as string | undefined)?.trim() ?? "";
+const clientId =
+  (import.meta.env.VITE_WEB3AUTH_CLIENT_ID as string | undefined)?.trim() ?? "";
+
+/** Staging Monerium/Alchemy sandbox → Ethereum Sepolia. Prod → Ethereum mainnet. */
+export const defaultWalletChainId = isDev ? "0xaa36a7" : "0x1";
+
+const sepoliaChain = {
+  chainNamespace: CHAIN_NAMESPACES.EIP155,
+  chainId: "0xaa36a7",
+  rpcTarget: "https://rpc.sepolia.org",
+  displayName: "Ethereum Sepolia",
+  blockExplorerUrl: "https://sepolia.etherscan.io",
+  ticker: "ETH",
+  tickerName: "Ethereum",
+  decimals: 18,
+  logo: "https://cryptologos.cc/logos/ethereum-eth-logo.png",
+};
+
+const ethereumMainnetChain = {
+  chainNamespace: CHAIN_NAMESPACES.EIP155,
+  chainId: "0x1",
+  rpcTarget: "https://rpc.ankr.com/eth",
+  displayName: "Ethereum Mainnet",
+  blockExplorerUrl: "https://etherscan.io",
+  ticker: "ETH",
+  tickerName: "Ethereum",
+  decimals: 18,
+  logo: "https://cryptologos.cc/logos/ethereum-eth-logo.png",
+};
+
+const chains = isDev ? [sepoliaChain] : [ethereumMainnetChain];
 
 /** Mainnet AUTH Google/Facebook 403s on Growth. Staging Devnet social stays on the modal. */
 const showSocialOnModal = appEnv !== "production";
@@ -24,7 +58,8 @@ export const web3AuthContextConfig: Web3AuthContextConfig = {
   web3AuthOptions: {
     clientId,
     web3AuthNetwork: resolveWeb3AuthNetwork(),
-    defaultChainId: "0x1",
+    chains,
+    defaultChainId: defaultWalletChainId,
     uiConfig: {
       uxMode: "redirect",
       appName: "SlickBills",
