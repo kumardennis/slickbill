@@ -38,6 +38,7 @@ class ReceivedInvoicesClass {
     InvoiceListQuery? query,
     bool openOnly = false,
     DateTime? paidInMonth,
+    int? senderPrivateUserId,
   }) async {
     final page = await _loadReceivedInvoices(
       id: id,
@@ -45,6 +46,7 @@ class ReceivedInvoicesClass {
       query: query,
       openOnly: openOnly,
       paidInMonth: paidInMonth,
+      senderPrivateUserId: senderPrivateUserId,
     );
     return page?.invoices;
   }
@@ -83,6 +85,21 @@ class ReceivedInvoicesClass {
     }
   }
 
+  Future<List<InvoiceModel>?> getUnpaidFromSender({
+    required int senderPrivateUserId,
+    bool silent = true,
+  }) {
+    return getPrivateReceivedInvoices(
+      silent: silent,
+      senderPrivateUserId: senderPrivateUserId,
+      query: InvoiceListQuery(
+        month: DateTime.now(),
+        status: InvoiceStatusFilter.unpaid,
+        allTime: true,
+      ),
+    );
+  }
+
   Future<InvoiceListPage?> _loadReceivedInvoices({
     int? id,
     bool silent = false,
@@ -90,6 +107,7 @@ class ReceivedInvoicesClass {
     bool openOnly = false,
     DateTime? paidInMonth,
     bool includeStats = false,
+    int? senderPrivateUserId,
   }) async {
     print("=====BILS=====");
     print(userController.user.value.privateUserId);
@@ -104,6 +122,8 @@ class ReceivedInvoicesClass {
         if (id != null) "invoiceId": id,
         if (openOnly) "openOnly": true,
         if (includeStats) "includeStats": true,
+        if (senderPrivateUserId != null)
+          "senderPrivateUserId": senderPrivateUserId,
         if (query != null) ...query.toRequestBody(),
         if (includeStats && query != null) "paidOnDateRange": query.paidOnDateRange,
         if (paidInMonth != null) ...{
@@ -175,6 +195,21 @@ class ReceivedInvoicesClass {
           return status != 'PAID';
         })
         .fold<double>(0.0, (sum, invoice) => sum + invoice.amount);
+  }
+
+  /// Open amount created in [period]'s month. Uses existing list API (no Edge change).
+  Future<double?> getOpenSumInMonth(InvoiceListQuery period) async {
+    if (period.allTime) return getPendingInvoicesSum();
+    final invoices = await getPrivateReceivedInvoices(
+      query: InvoiceListQuery(
+        month: period.month,
+        status: InvoiceStatusFilter.all,
+        monthBasis: period.monthBasis,
+      ),
+      silent: true,
+    );
+    if (invoices == null) return null;
+    return openInvoiceSum(invoices);
   }
 
   Future<double?> getPaidInPeriod(InvoiceListQuery period) async {

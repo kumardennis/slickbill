@@ -49,12 +49,18 @@ site_url = "http://localhost:3000"
 additional_redirect_urls = [
   "http://localhost:3000",
   "http://localhost:3000/sign-in",
+  "http://localhost:3000/reset-password",
   "http://localhost:3000/**",
   "http://localhost:3002",
   "http://localhost:3002/sign-in",
+  "http://localhost:3002/reset-password",
+  "https://app-staging.slickbills.com",
+  "https://app-staging.slickbills.com/sign-in",
+  "https://app-staging.slickbills.com/reset-password",
   "https://app.slickbills.com",
   "https://app.slickbills.com/sign-in",
   "https://app.slickbills.com/sign-in?verified=1",
+  "https://app.slickbills.com/reset-password",
   "https://app.slickbills.com/**"
 ]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 seconds (one

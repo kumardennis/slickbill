@@ -13,6 +13,7 @@ class InvoiceModel {
     required this.description,
     this.rawInvoiceId,
     required this.senderName,
+    this.senderPrivateUserId,
     required this.senderIban,
     required this.deadline,
     required this.invoiceNo,
@@ -39,6 +40,7 @@ class InvoiceModel {
   late final String description;
   late final int? rawInvoiceId;
   late final String senderName;
+  late final int? senderPrivateUserId;
   late final String? senderIban;
   late final String deadline;
   late final String? paidOnDate;
@@ -68,6 +70,14 @@ class InvoiceModel {
     description = json['description'] ?? "";
     rawInvoiceId = json['rawInvoiceId'];
     senderName = json['senderName'] ?? "";
+    final rawSenderPrivateUserId = json['senderPrivateUserId'];
+    if (rawSenderPrivateUserId is int) {
+      senderPrivateUserId = rawSenderPrivateUserId;
+    } else if (rawSenderPrivateUserId is num) {
+      senderPrivateUserId = rawSenderPrivateUserId.toInt();
+    } else {
+      senderPrivateUserId = int.tryParse('${rawSenderPrivateUserId ?? ''}');
+    }
     senderIban = json['senderIban'];
     deadline = json['deadline'] ?? "";
     paidOnDate = json['paidOnDate'];
@@ -98,6 +108,8 @@ class InvoiceModel {
     _data['description'] = description;
     _data['rawInvoiceId'] = rawInvoiceId;
     _data['senderName'] = senderName;
+    _data['senderPrivateUserId'] = senderPrivateUserId;
+    _data['senderIban'] = senderIban;
     _data['deadline'] = deadline;
     _data['invoiceNo'] = invoiceNo;
     _data['originalInvoiceNo'] = originalInvoiceNo;

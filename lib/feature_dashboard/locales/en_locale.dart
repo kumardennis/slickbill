@@ -51,6 +51,44 @@ Map<String, String> dashboardLocales_EN = {
   'lbl_PaidInMonth': 'Paid in @month',
   'inf_StatusUpdated': 'Status updated!',
   'btn_Pay': 'Pay this SlickBill',
+  'btn_PayOtherUnpaid': 'Pay other unpaid from @name',
+  'hd_PayFromSender': 'Pay @name',
+  'inf_PayFromSenderHint':
+      'Select unpaid bills from @name. One payment covers all selected bills.',
+  'btn_PaySelected': 'Pay @count · @amount',
+  'lbl_SelectAll': 'Select all',
+  'lbl_ThisSender': 'this sender',
+  'err_BatchCannotPayTogether': 'Cannot pay together',
+  'err_BatchSelectAtLeastOne': 'Select at least one bill.',
+  'err_BatchOnlyUnpaid': 'Only unpaid bills can be paid together.',
+  'err_BatchSameSenderIban':
+      'Selected bills must be from the same sender IBAN.',
+  'err_WalletNotConnected': 'Wallet not connected',
+  'err_WalletNotConnectedMsg':
+      'Please connect your MetaMask wallet before paying.',
+  'err_IbanMissing': 'IBAN missing',
+  'err_IbanMissingMsg': 'Recipient IBAN is missing for this invoice.',
+  'err_EmailMissing': 'Email missing',
+  'err_EmailMissingMsg':
+      'Your account email is required to connect Monerium.',
+  'inf_ConnectingMonerium': 'Connecting Monerium',
+  'inf_ConnectingMoneriumMsg': 'Sign in to continue the payment.',
+  'err_MoneriumConnectFailed': 'Monerium connect failed',
+  'err_MoneriumConnectFailedMsg':
+      'Could not connect automatically. Try again, or finish setup in Profile.',
+  'hd_BalanceCheck': 'Balance check',
+  'err_NotEnoughBalance': 'Not enough balance',
+  'err_NotEnoughBalanceMsg': 'Not enough euro balance to pay this bill.',
+  'inf_PaymentInitiatedTitle': 'Payment Initiated',
+  'inf_PaymentInitiatedBatchNoOrder':
+      'Payment was initiated for @count bills. Re-check status shortly.',
+  'inf_PaymentInitiatedSingleNoOrder':
+      'Payment was initiated and marked as waiting. Re-check status shortly.',
+  'inf_PaymentInitiatedBatchWaiting':
+      '@count bills marked as waiting. Use Re-check payment status to fetch latest order state.',
+  'inf_PaymentInitiatedSingleWaiting':
+      'Invoice marked as waiting. Use Re-check payment status to fetch latest order state.',
+  'err_PaymentError': 'Payment Error',
   'lbl_BankQr': 'Bank QR',
   'inf_BankQrCaption':
       'Scan in LHV, Swedbank, SEB or Revolut. Leave the reference empty.',
@@ -74,6 +112,13 @@ Map<String, String> dashboardLocales_EN = {
   'inf_WalletFetched': 'Wallet fetched successfully',
   'lbl_WaitingForPayment': 'To receive',
   'lbl_PendingToPay': 'To Pay',
+  'lbl_ToPayThisMonth': 'This month',
+  'lbl_ToPayInMonth': '@month',
+  'lbl_WaitingThisMonth': 'This month',
+  'lbl_WaitingInMonth': '@month',
+  'lbl_SeeAllUnpaidPrefix': 'See all unpaid —',
+  'lbl_Profile': 'Profile',
+  'lbl_OpenCount': '@count open',
   'inf_PaymentConfirmed': 'Payment confirmed successfully',
   'hd_PublicInvoices': 'Links',
   'lbl_UseAsBusiness': 'Use as business',

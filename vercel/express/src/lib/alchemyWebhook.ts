@@ -37,14 +37,19 @@ export const verifyAlchemySignature = (params: {
 
   const body =
     typeof rawBody === "string" ? rawBody : rawBody.toString("utf8");
-  const digest = crypto
-    .createHmac("sha256", signingKey)
-    .update(body, "utf8")
-    .digest("hex");
+  // Dashboard keys sometimes get pasted with wrapping quotes / whitespace.
+  const key = signingKey.trim().replace(/^['"]|['"]$/g, "");
+  let sig = signature.trim();
+  if (sig.toLowerCase().startsWith("sha256=")) {
+    sig = sig.slice("sha256=".length).trim();
+  }
+  sig = sig.toLowerCase();
+
+  const digest = crypto.createHmac("sha256", key).update(body, "utf8").digest("hex");
 
   try {
     const a = Buffer.from(digest, "utf8");
-    const b = Buffer.from(signature.trim(), "utf8");
+    const b = Buffer.from(sig, "utf8");
     if (a.length !== b.length) return false;
     return crypto.timingSafeEqual(new Uint8Array(a), new Uint8Array(b));
   } catch {

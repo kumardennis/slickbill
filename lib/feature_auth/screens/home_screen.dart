@@ -77,15 +77,20 @@ class HomeScreen extends HookWidget {
       var cancelled = false;
 
       Future<void> bootstrapWebSession() async {
-        if (userController.user.value.id <= 0) {
+        for (var attempt = 0; attempt < 5; attempt++) {
+          if (userController.user.value.id > 0) break;
           await userController.loadUserData();
+          if (cancelled || userController.user.value.id > 0) break;
+          await Future<void>.delayed(const Duration(milliseconds: 400));
         }
         if (cancelled) return;
-        await MetamaskWalletService.consumeWebCallbackIfPresent().then(
-          completeWebWalletReturn,
-        );
+        final callback =
+            await MetamaskWalletService.consumeWebCallbackIfPresent();
+        await completeWebWalletReturn(callback);
         if (cancelled) return;
-        await completeWebMoneriumOAuthReturnIfNeeded();
+        if (callback?.shouldFinishIbanLink != true) {
+          await completeWebMoneriumOAuthReturnIfNeeded();
+        }
         if (cancelled) return;
         await userController.ensureSignedInOrRedirect();
       }

@@ -12,6 +12,17 @@ Map<String, String> authLocales_EN = {
   'lbl_AuthHasAccount': 'Already have an account?',
   'lbl_AuthSignUpAction': 'Sign up',
   'lbl_AuthSignInAction': 'Sign in',
+  'btn_ForgotPassword': 'Forgot password?',
+  'lbl_ForgotPasswordTitle': 'Set a password',
+  'lbl_ForgotPasswordSubtitle':
+      'We will email a link. Works for Google accounts too.',
+  'btn_SendResetLink': 'Send reset link',
+  'lbl_ResetPasswordTitle': 'Choose a password',
+  'lbl_SetPasswordTitle': 'Email sign-in',
+  'lbl_ResetPasswordSubtitle':
+      'After this you can sign in with email and password, or keep using Google.',
+  'btn_SavePassword': 'Save password',
+  'btn_SetPassword': 'Set or change password',
   'lbl_Private': 'Private',
   'lbl_Business': 'Business',
   'lbl_SentAsBusiness': 'Sent as business',

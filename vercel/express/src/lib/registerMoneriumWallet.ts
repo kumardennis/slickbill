@@ -14,7 +14,7 @@ const normalizeWallet = (value?: string | null): string | null => {
   return match ? match[0].toLowerCase() : null;
 };
 
-const lookupWalletFromUsers = async (
+export const lookupWalletFromUsers = async (
   privateUserId: string,
 ): Promise<string | null> => {
   const supabase = getSupabaseAdmin();

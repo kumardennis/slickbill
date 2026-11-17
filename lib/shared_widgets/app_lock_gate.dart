@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
+import 'package:slickbill/feature_auth/utils/auth_callback_uri.dart';
 import 'package:slickbill/services/biometric_auth_service.dart';
 import 'package:slickbill/services/sb_feedback.dart';
 import 'package:slickbill/theme/sb_colors.dart';
@@ -16,10 +17,7 @@ class AppLockGate extends StatelessWidget {
   const AppLockGate({super.key, required this.child});
 
   bool _isAuthRoute() {
-    final route = Get.currentRoute;
-    return route == '/sign-in' ||
-        route == '/sign-up' ||
-        route.startsWith('/sign-in');
+    return AuthCallbackUri.isAuthFlowRoute(Get.currentRoute);
   }
 
   @override

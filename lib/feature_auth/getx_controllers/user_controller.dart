@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:slickbill/core/services/app_analytics.dart';
@@ -9,6 +10,8 @@ import 'package:slickbill/core/services/push_notification_service.dart';
 import 'package:slickbill/feature_auth/repos/user_repo.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/services/google_auth_service.dart';
+import 'package:slickbill/feature_auth/services/monerium_service.dart';
+import 'package:slickbill/feature_auth/utils/auth_callback_uri.dart';
 import 'package:slickbill/feature_auth/utils/supabase_auth_manger.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -60,6 +63,16 @@ class UserController extends GetxController {
   }
 
   void _onAuthStateChange(AuthState data) {
+    if (data.event == AuthChangeEvent.passwordRecovery) {
+      AuthCallbackUri.passwordRecoveryPending = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (Get.currentRoute != '/reset-password') {
+          Get.offAllNamed('/reset-password');
+        }
+      });
+      return;
+    }
+
     final session = data.session;
     if (session == null) return;
     if (data.event == AuthChangeEvent.tokenRefreshed ||
@@ -221,7 +234,8 @@ class UserController extends GetxController {
     if (user.value.id > 0) return true;
 
     final route = Get.currentRoute;
-    if (route == '/sign-in' || route.startsWith('/sign-in')) {
+    if (AuthCallbackUri.isAuthFlowRoute(route) ||
+        AuthCallbackUri.passwordRecoveryPending) {
       return false;
     }
 
@@ -500,6 +514,7 @@ class UserController extends GetxController {
         Get.find<AppLockController>().resetOnLogout();
       }
       await _googleAuthService.signOut();
+      await MoneriumService.clearAllLocalState();
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove('user_data');
       user.value = ClientUserModel(

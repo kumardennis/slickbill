@@ -20,14 +20,25 @@ Future<void> completeWebMoneriumOAuthReturnIfNeeded() async {
 
   if (!Get.isRegistered<UserController>()) return;
   final userController = Get.find<UserController>();
-  if (userController.user.value.id <= 0) {
+  for (var attempt = 0; attempt < 5; attempt++) {
+    if (userController.user.value.id > 0) break;
     await userController.loadUserData();
+    if (userController.user.value.id > 0) break;
+    await Future<void>.delayed(const Duration(milliseconds: 400));
   }
   if (userController.user.value.id <= 0) return;
 
   final user = userController.user.value;
   final userId = PaymentSetupController.resolveMoneriumUserId(user);
   final address = user.metamaskWalletAddress?.trim() ?? '';
+  if (userId.isEmpty) {
+    await MoneriumService.clearWebConnectPending();
+    return;
+  }
+  if (!await MoneriumService.hasWebConnectPending(userId: userId)) {
+    await MoneriumService.clearWebConnectPending();
+    return;
+  }
 
   try {
     final hasSession = await MoneriumService.hasActiveSession(userId: userId);
@@ -52,12 +63,23 @@ Future<void> completeWebMoneriumOAuthReturnIfNeeded() async {
       address: address,
     );
     var linked = linkedResponse['linked'] == true;
+    final existingSignature =
+        Uri.base.queryParameters['signature']?.trim() ?? '';
 
-    if (!linked) {
+    if (!linked && existingSignature.isNotEmpty) {
+      final linkResponse = await MoneriumService.linkWallet(
+        userId: userId,
+        address: address,
+        message: MetamaskWalletService.moneriumOwnershipMessage,
+        signature: existingSignature,
+      );
+      linked = MoneriumService.isWalletLinkSuccessful(linkResponse);
+    } else if (!linked) {
       final signature =
           await MetamaskWalletService.signAddressOwnershipMessage(
         address: address,
         preview: const WalletClientPaymentPreview(kind: 'link'),
+        userId: userId,
       );
       final linkResponse = await MoneriumService.linkWallet(
         userId: userId,
@@ -65,20 +87,37 @@ Future<void> completeWebMoneriumOAuthReturnIfNeeded() async {
         message: MetamaskWalletService.moneriumOwnershipMessage,
         signature: signature,
       );
-      linked = linkResponse['linkedConfirmed'] == true ||
-          linkResponse['linked'] == true;
+      linked = MoneriumService.isWalletLinkSuccessful(linkResponse);
     }
 
-    var ibansResponse = await MoneriumService.getIbans(userId: userId);
-    var ibans = MoneriumService.extractIbansFromResponse(ibansResponse);
+    var ibansResponse = await MoneriumService.getIbans(
+      userId: userId,
+      address: address,
+    );
+    var ibans = MoneriumService.filterIbansForWallet(
+      ibans: MoneriumService.extractIbansFromResponse(ibansResponse),
+      walletAddress: address,
+    );
 
     if (ibans.isEmpty && linked) {
-      await MoneriumService.requestIban(
+      final ensureResponse = await MoneriumService.ensureIbanForWallet(
         userId: userId,
         address: address,
       );
-      ibansResponse = await MoneriumService.getIbans(userId: userId);
-      ibans = MoneriumService.extractIbansFromResponse(ibansResponse);
+      ibansResponse = await MoneriumService.getIbans(
+        userId: userId,
+        address: address,
+      );
+      ibans = MoneriumService.filterIbansForWallet(
+        ibans: MoneriumService.extractIbansFromResponse(ibansResponse),
+        walletAddress: address,
+      );
+      if (ibans.isEmpty) {
+        ibans = MoneriumService.filterIbansForWallet(
+          ibans: MoneriumService.extractIbansFromResponse(ensureResponse),
+          walletAddress: address,
+        );
+      }
     }
 
     if (Get.isRegistered<PaymentSetupController>()) {
@@ -89,6 +128,26 @@ Future<void> completeWebMoneriumOAuthReturnIfNeeded() async {
         await setup.markAddressLinked(userId: userId);
       } else {
         await setup.markMoneriumConnected();
+      }
+    }
+
+    if (MoneriumService.hasIssuedIban(ibans)) {
+      final accounts = <BankAccount>[];
+      for (final row in ibans) {
+        final iban = MoneriumService.issuedIbanFromRow(row);
+        if (iban == null) continue;
+        final holder = row is Map ? row['name']?.toString() : null;
+        accounts.add(
+          BankAccount(
+            iban: iban,
+            bankName: 'Monerium (LHV)',
+            bankAccountName: holder,
+            isPrimary: false,
+          ),
+        );
+      }
+      if (accounts.isNotEmpty) {
+        await userController.upsertIbansJson(accounts);
       }
     }
 
@@ -108,6 +167,7 @@ Future<void> completeWebMoneriumOAuthReturnIfNeeded() async {
     );
   } catch (error) {
     if (MetamaskWalletService.isCancelled(error)) {
+      await MoneriumService.clearWebConnectPending();
       Get.snackbar(
         'Monerium',
         'Sign the wallet ownership message to finish linking.',
@@ -119,13 +179,20 @@ Future<void> completeWebMoneriumOAuthReturnIfNeeded() async {
     await MoneriumService.clearWebConnectPending();
     Get.snackbar(
       'Monerium',
-      error.toString(),
+      _moneriumLinkErrorMessage(error),
       snackPosition: SnackPosition.TOP,
       backgroundColor: Colors.red.shade700,
       colorText: Colors.white,
-      duration: const Duration(seconds: 4),
+      duration: const Duration(seconds: 6),
     );
   }
+}
+
+String _moneriumLinkErrorMessage(Object error) {
+  if (MoneriumService.isAlreadyLinkedElsewhereError(error)) {
+    return 'This wallet is still registered on another Monerium profile. It is not on this login, so it cannot be attached here. Use a different wallet, or unlink it from that other Monerium account.';
+  }
+  return error.toString();
 }
 
 /// After a web wallet redirect, finish pay/withdraw or Monerium IBAN linking.
@@ -153,6 +220,9 @@ Future<void> completeWebWalletReturn(WebWalletCallback? callback) async {
 
   final user = userController.user.value;
   final userId = PaymentSetupController.resolveMoneriumUserId(user);
+  if (userId.isEmpty) return;
+
+  await MoneriumService.clearWebConnectPending();
 
   try {
     await MoneriumService.linkWallet(
@@ -162,16 +232,34 @@ Future<void> completeWebWalletReturn(WebWalletCallback? callback) async {
       signature: signature,
     );
 
-    var ibansResponse = await MoneriumService.getIbans(userId: userId);
-    var ibans = MoneriumService.extractIbansFromResponse(ibansResponse);
+    var ibansResponse = await MoneriumService.getIbans(
+      userId: userId,
+      address: address,
+    );
+    var ibans = MoneriumService.filterIbansForWallet(
+      ibans: MoneriumService.extractIbansFromResponse(ibansResponse),
+      walletAddress: address,
+    );
 
     if (ibans.isEmpty) {
-      await MoneriumService.requestIban(
+      final ensureResponse = await MoneriumService.ensureIbanForWallet(
         userId: userId,
         address: address,
       );
-      ibansResponse = await MoneriumService.getIbans(userId: userId);
-      ibans = MoneriumService.extractIbansFromResponse(ibansResponse);
+      ibansResponse = await MoneriumService.getIbans(
+        userId: userId,
+        address: address,
+      );
+      ibans = MoneriumService.filterIbansForWallet(
+        ibans: MoneriumService.extractIbansFromResponse(ibansResponse),
+        walletAddress: address,
+      );
+      if (ibans.isEmpty) {
+        ibans = MoneriumService.filterIbansForWallet(
+          ibans: MoneriumService.extractIbansFromResponse(ensureResponse),
+          walletAddress: address,
+        );
+      }
     }
 
     if (Get.isRegistered<PaymentSetupController>()) {
@@ -216,11 +304,11 @@ Future<void> completeWebWalletReturn(WebWalletCallback? callback) async {
   } catch (error) {
     Get.snackbar(
       'Monerium',
-      error.toString(),
+      _moneriumLinkErrorMessage(error),
       snackPosition: SnackPosition.TOP,
       backgroundColor: Colors.red.shade700,
       colorText: Colors.white,
-      duration: const Duration(seconds: 4),
+      duration: const Duration(seconds: 6),
     );
   }
 }
@@ -253,11 +341,23 @@ Future<void> _completeWebPaymentReturn(WebWalletCallback callback) async {
 
     final orderId = MoneriumService.extractOrderId(response);
     final txHash = MoneriumService.extractOrderTxHash(response);
-    final invoiceId = int.tryParse(response['invoiceId']?.toString() ?? '');
+    final invoiceIds = <int>{};
+    void addInvoiceId(dynamic raw) {
+      final parsed = int.tryParse(raw?.toString() ?? '');
+      if (parsed != null && parsed > 0) invoiceIds.add(parsed);
+    }
+
+    addInvoiceId(response['invoiceId']);
+    final rawIds = response['invoiceIds'];
+    if (rawIds is List) {
+      for (final id in rawIds) {
+        addInvoiceId(id);
+      }
+    }
 
     if (Get.isRegistered<DigitalInvoiceController>()) {
       final invoices = Get.find<DigitalInvoiceController>();
-      if (invoiceId != null && invoiceId > 0) {
+      for (final invoiceId in invoiceIds) {
         if (orderId != null && orderId.isNotEmpty) {
           await MoneriumService.savePendingOrderForInvoice(
             invoiceId: invoiceId,
@@ -278,6 +378,8 @@ Future<void> _completeWebPaymentReturn(WebWalletCallback callback) async {
             silent: true,
           );
         }
+      }
+      if (invoiceIds.isNotEmpty) {
         invoices.requestReceivedListRefresh();
         invoices.requestSentListRefresh();
       }

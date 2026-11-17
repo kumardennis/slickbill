@@ -11,6 +11,7 @@ import 'package:slickbill/feature_dashboard/utils/sent_invoices_class.dart';
 import 'package:slickbill/feature_dashboard/utils/invoice_csv_exporter.dart';
 import 'package:slickbill/feature_dashboard/widgets/invoice_list_filter_bar.dart';
 import 'package:slickbill/feature_dashboard/widgets/statistics_card.dart';
+import 'package:slickbill/feature_dashboard/screens/profile.dart';
 
 import '../../feature_auth/getx_controllers/user_controller.dart';
 import '../getx_controllers/digital_invoice_controller.dart';
@@ -32,6 +33,7 @@ class SentBills extends HookWidget {
     var hasLoaded = useState<bool>(false);
     var invoices = useState<List<InvoiceModel>?>([]);
     var pending = useState<double?>(0.0);
+    var openCount = useState<int>(0);
     var receivedThisMonth = useState<double?>(0.0);
     final filter = useState(InvoiceListQuery(
       month: currentInvoiceMonth(),
@@ -63,8 +65,20 @@ class SentBills extends HookWidget {
       if (generation != fetchGeneration.value) return;
       if (page != null) {
         invoices.value = page.invoices;
-        pending.value = page.openSum ?? openInvoiceSum(page.invoices);
         receivedThisMonth.value = page.paidSum ?? paidInvoiceSum(page.invoices);
+
+        if (current.allTime) {
+          pending.value = page.openSum ?? openInvoiceSum(page.invoices);
+          openCount.value = openInvoiceCount(page.invoices);
+        } else if (current.status != InvoiceStatusFilter.paid) {
+          pending.value = openInvoiceSum(page.invoices);
+          openCount.value = openInvoiceCount(page.invoices);
+        } else {
+          final monthOpen = await sentInvoicesClass.getOpenSumInMonth(current);
+          if (generation != fetchGeneration.value) return;
+          pending.value = monthOpen ?? 0;
+          openCount.value = 0;
+        }
       }
       isLoading.value = false;
       hasLoaded.value = true;
@@ -132,6 +146,16 @@ class SentBills extends HookWidget {
 
     final monthName = DateFormat.MMMM().format(filter.value.monthStart);
     final rows = invoices.value ?? <InvoiceModel>[];
+    final isAllTime = filter.value.allTime;
+    final pendingLabel = isAllTime
+        ? 'lbl_WaitingForPayment'.tr
+        : (filter.value.periodPendingLabelNeedsMonth
+            ? filter.value.periodWaitingLabelKey
+                .trParams({'month': monthName})
+            : filter.value.periodWaitingLabelKey.tr);
+    final pendingSubtitle = openCount.value > 0
+        ? 'lbl_OpenCount'.trParams({'count': '${openCount.value}'})
+        : null;
 
     return Column(
       children: [
@@ -175,12 +199,26 @@ class SentBills extends HookWidget {
                           StatisticsCard(
                             pendingAmount: pending.value,
                             paidAmount: receivedThisMonth.value,
-                            pendingLabel: 'lbl_WaitingForPayment'.tr,
+                            pendingLabel: pendingLabel,
                             paidLabel: filter.value.overviewLabelNeedsMonth
                                 ? filter.value.receivedOverviewLabelKey
                                     .trParams({'month': monthName})
                                 : filter.value.receivedOverviewLabelKey.tr,
+                            pendingSubtitle: pendingSubtitle,
                           ),
+                          if (!isAllTime) ...[
+                            const SizedBox(height: 10),
+                            OverviewAllUnpaidBanner(
+                              onSelectAllTime: () {
+                                filter.value = filter.value.copyWith(
+                                  allTime: true,
+                                );
+                              },
+                              onOpenProfile: () {
+                                Get.to(() => const Profile());
+                              },
+                            ),
+                          ],
                           const SizedBox(height: 12),
                           if (rows.isEmpty)
                             Padding(
