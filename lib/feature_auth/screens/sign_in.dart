@@ -10,6 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/services/web_tab.dart';
+import 'package:slickbill/feature_auth/utils/auth_callback_uri.dart';
 import 'package:slickbill/feature_auth/utils/supabase_auth_manger.dart';
 import 'package:slickbill/feature_auth/widgets/auth_page_scaffold.dart';
 import 'package:slickbill/feature_auth/widgets/continue_with_google_button.dart';
@@ -40,28 +41,6 @@ class SignIn extends HookWidget {
           Uri.base.queryParameters['invoice_token'];
     }
 
-    bool _isEmailConfirmationCallback(Uri uri) {
-      if (uri.queryParameters['verified'] == '1') {
-        return true;
-      }
-
-      final type = (uri.queryParameters['type'] ?? '').toLowerCase();
-      if (type == 'signup' || type == 'email' || type == 'email_change') {
-        return true;
-      }
-
-      final fragment = uri.fragment;
-      if (fragment.isEmpty) {
-        return false;
-      }
-
-      final fragmentParams = Uri.splitQueryString(fragment);
-      final fragmentType = (fragmentParams['type'] ?? '').toLowerCase();
-      return fragmentType == 'signup' ||
-          fragmentType == 'email' ||
-          fragmentType == 'email_change';
-    }
-
     bool _isEmailNotConfirmedError(Object error) {
       final message = error.toString().toLowerCase();
       return message.contains('email_not_confirmed') ||
@@ -73,6 +52,11 @@ class SignIn extends HookWidget {
     String _signInErrorMessage(Object error) {
       if (_isEmailNotConfirmedError(error)) {
         return 'Please verify your email before signing in. Check your inbox, or resend the verification email below.';
+      }
+      final message = error.toString().toLowerCase();
+      if (message.contains('invalid login credentials') ||
+          message.contains('invalid_credentials')) {
+        return 'Check email and password. If you usually continue with Google, use that button, or tap Forgot password to add a password.';
       }
       return 'Failed to sign in: ${error.toString()}';
     }
@@ -140,6 +124,11 @@ class SignIn extends HookWidget {
 
       Future<void> completeOAuthIfPossible() async {
         if (cancelled || completing) return;
+        if (AuthCallbackUri.passwordRecoveryPending ||
+            AuthCallbackUri.isPasswordRecovery(Uri.base)) {
+          Get.offAllNamed('/reset-password');
+          return;
+        }
         final session = Supabase.instance.client.auth.currentSession;
         if (session == null) return;
 
@@ -165,11 +154,22 @@ class SignIn extends HookWidget {
             fragmentParams.containsKey('code');
         final oauthError = currentUri.queryParameters['error'] ??
             fragmentParams['error'];
-        final isEmailConfirmation = _isEmailConfirmationCallback(currentUri);
+        final isEmailConfirmation =
+            AuthCallbackUri.isEmailConfirmation(currentUri);
+        final isPasswordRecovery =
+            AuthCallbackUri.isPasswordRecovery(currentUri) ||
+                AuthCallbackUri.passwordRecoveryPending;
 
         print('🔍 Has OAuth code: $hasOAuthCode');
         print('🔍 Is email confirmation: $isEmailConfirmation');
+        print('🔍 Is password recovery: $isPasswordRecovery');
         print('🔍 Current URL: ${currentUri.toString()}');
+
+        if (isPasswordRecovery) {
+          AuthCallbackUri.passwordRecoveryPending = true;
+          Get.offAllNamed('/reset-password');
+          return;
+        }
 
         if (isEmailConfirmation) {
           try {
@@ -208,6 +208,7 @@ class SignIn extends HookWidget {
           } catch (error) {
             print('❌ OAuth code exchange: $error');
           }
+          await Future.delayed(const Duration(milliseconds: 80));
         }
 
         await completeOAuthIfPossible();
@@ -230,7 +231,16 @@ class SignIn extends HookWidget {
       }
 
       final sub = Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+        if (data.event == AuthChangeEvent.passwordRecovery) {
+          AuthCallbackUri.passwordRecoveryPending = true;
+          Get.offAllNamed('/reset-password');
+          return;
+        }
         if (data.event != AuthChangeEvent.signedIn) return;
+        if (AuthCallbackUri.passwordRecoveryPending) {
+          Get.offAllNamed('/reset-password');
+          return;
+        }
         if (!slickBillsHasWebOAuthPending() &&
             !Uri.base.queryParameters.containsKey('code')) {
           return;
@@ -434,7 +444,19 @@ class SignIn extends HookWidget {
               autofillHints: const [AutofillHints.password],
               autocorrect: false,
             ),
-            const SizedBox(height: 20),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton(
+                onPressed: () => Get.toNamed('/forgot-password'),
+                child: Text(
+                  'btn_ForgotPassword'.tr,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: SbColors.deepNavy,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ),
+            ),
             AuthPrimaryButton(
               label: 'btn_SignIn'.tr,
               onPressed: signIn,

@@ -17,6 +17,7 @@ import '../../shared_widgets/sb_receipt_stamp.dart';
 import '../../shared_widgets/sb_status_mark.dart';
 import 'package:slickbill/theme/sb_colors.dart';
 import '../models/invoice_model.dart';
+import '../utils/batch_pay_from_sender.dart';
 import 'from_business_badge.dart';
 
 class ReceivedInvoiceSheet extends HookWidget {
@@ -32,6 +33,7 @@ class ReceivedInvoiceSheet extends HookWidget {
   final Future<bool> Function(InvoiceModel invoice, {bool silent})
       manualRecheckMoneriumStatus;
   final Future<InvoiceModel?> Function(int invoiceId)? refreshInvoice;
+  final VoidCallback? onPayOtherUnpaid;
 
   const ReceivedInvoiceSheet(
       {super.key,
@@ -45,7 +47,8 @@ class ReceivedInvoiceSheet extends HookWidget {
       required this.moneriumUserId,
       required this.moneriumWalletAddress,
       required this.manualRecheckMoneriumStatus,
-      this.refreshInvoice});
+      this.refreshInvoice,
+      this.onPayOtherUnpaid});
 
   List<String> _extractUrls(String text) {
     final urlPattern = RegExp(
@@ -1007,7 +1010,7 @@ class ReceivedInvoiceSheet extends HookWidget {
                               );
                               if (!confirmed || !isMounted()) return;
 
-                              AppLockController.beginExternalAuthSession();
+                              // App-lock session is owned by payMoneriumInvoices.
                               paymentPhase.value = 'checkingBalance';
                               try {
                                 await createMoneriumTransaction(
@@ -1030,7 +1033,6 @@ class ReceivedInvoiceSheet extends HookWidget {
                                   }
                                 }
                               } finally {
-                                AppLockController.endExternalAuthSession();
                                 if (isMounted()) {
                                   paymentPhase.value = null;
                                 }
@@ -1063,6 +1065,43 @@ class ReceivedInvoiceSheet extends HookWidget {
                                 ],
                               ),
                             )),
+                        if (onPayOtherUnpaid != null &&
+                            BatchPayFromSender.canOfferPicker(
+                                displayedInvoice)) ...[
+                          const SizedBox(height: 10),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Colors.white,
+                                side: const BorderSide(
+                                  color: SbColors.electricCyan,
+                                  width: 1,
+                                ),
+                                padding: const EdgeInsets.all(15),
+                              ),
+                              onPressed: paymentPhase.value != null
+                                  ? null
+                                  : onPayOtherUnpaid,
+                              child: Text(
+                                'btn_PayOtherUnpaid'.trParams({
+                                  'name': displayedInvoice.displaySenderName
+                                          .trim()
+                                          .isEmpty
+                                      ? 'lbl_ThisSender'.tr
+                                      : displayedInvoice
+                                          .displaySenderName
+                                          .trim(),
+                                }),
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyLarge
+                                    ?.copyWith(color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     )
                   : normalizedStatus != 'PAID'

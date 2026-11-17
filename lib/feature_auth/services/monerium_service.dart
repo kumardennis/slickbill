@@ -41,6 +41,8 @@ class MoneriumService {
       String.fromEnvironment('MONERIUM_WALLET_CHAIN', defaultValue: '');
   static const String _webConnectPendingAtKey =
       'monerium_web_connect_pending_at';
+  static const String _webConnectPendingUserKey =
+      'monerium_web_connect_pending_user';
   static const _webConnectPendingTtl = Duration(minutes: 30);
   static const _oauthWait = Duration(minutes: 30);
 
@@ -111,6 +113,9 @@ class MoneriumService {
 
   static Future<Map<String, dynamic>?> _ensureActiveSession(
       String userId) async {
+    if (userId.trim().isEmpty || userId.trim() == '0') {
+      return null;
+    }
     final inflight = _refreshInFlight[userId];
     if (inflight != null) {
       return inflight;
@@ -223,7 +228,25 @@ class MoneriumService {
 
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_sessionKey(userId));
+    await prefs.remove(_addressLinkedKey(userId));
+    await prefs.remove(_balanceConfirmedKey(userId));
     _log('Cleared stored Monerium session for userId=$userId');
+  }
+
+  static Future<void> clearAllLocalState() async {
+    final prefs = await SharedPreferences.getInstance();
+    final keys = prefs
+        .getKeys()
+        .where((key) => key.startsWith('monerium_'))
+        .toList(growable: false);
+    for (final key in keys) {
+      await prefs.remove(key);
+    }
+    _pendingOAuthCompleter = null;
+    _pendingConnectFuture = null;
+    _lastOAuthStatus = null;
+    _lastOAuthMessage = null;
+    _log('Cleared all local Monerium state (${keys.length} keys)');
   }
 
   static Future<void> setAddressLinked({
@@ -319,28 +342,38 @@ class MoneriumService {
     } catch (_) {}
   }
 
-  static Future<void> markWebConnectPending() async {
+  static Future<void> markWebConnectPending({String? userId}) async {
     if (!kIsWeb) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(
       _webConnectPendingAtKey,
       DateTime.now().millisecondsSinceEpoch,
     );
+    final pendingUserId = userId?.trim() ?? '';
+    if (pendingUserId.isNotEmpty) {
+      await prefs.setString(_webConnectPendingUserKey, pendingUserId);
+    }
   }
 
   static Future<void> clearWebConnectPending() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_webConnectPendingAtKey);
+    await prefs.remove(_webConnectPendingUserKey);
   }
 
-  static Future<bool> hasWebConnectPending() async {
+  static Future<bool> hasWebConnectPending({String? userId}) async {
     if (!kIsWeb) return false;
     final prefs = await SharedPreferences.getInstance();
     final at = prefs.getInt(_webConnectPendingAtKey);
     if (at == null) return false;
     final age = DateTime.now().millisecondsSinceEpoch - at;
     if (age > _webConnectPendingTtl.inMilliseconds) {
-      await prefs.remove(_webConnectPendingAtKey);
+      await clearWebConnectPending();
+      return false;
+    }
+    final expected = prefs.getString(_webConnectPendingUserKey)?.trim() ?? '';
+    final current = userId?.trim() ?? '';
+    if (expected.isNotEmpty && current.isNotEmpty && expected != current) {
       return false;
     }
     return true;
@@ -350,10 +383,16 @@ class MoneriumService {
   static Future<bool> consumeWebOAuthCallbackIfPresent() async {
     if (!kIsWeb) return false;
     final uri = Uri.base;
+    final isWalletCallback = uri.queryParameters['metamask'] == '1' ||
+        uri.queryParameters['privy'] == '1';
+    if (isWalletCallback) {
+      return false;
+    }
+
     final isMonerium = uri.queryParameters['monerium'] == '1' ||
         uri.queryParameters['provider'] == 'monerium';
     if (!isMonerium) {
-      return hasWebConnectPending();
+      return false;
     }
 
     onAuthCallbackUri(uri);
@@ -429,26 +468,12 @@ class MoneriumService {
       var openedAuthTab = false;
 
       try {
-        if (!forceLogin) {
-          final activeSession = await _ensureActiveSession(userId);
-          if (_hasUsableAccessToken(activeSession)) {
-            _log(
-                'connect() using active Monerium session for userId=$userId (refresh, not SIWE)');
-            _lastOAuthStatus = 'success';
-            _lastOAuthMessage = null;
-            return {
-              ...?activeSession,
-              'status': 'success',
-              'userId': userId,
-            };
-          }
-        } else {
-          await clearStoredSession(userId: userId);
-        }
+        // Always browser OAuth with prompt=login. Never reuse a stored token
+        // for Connect / Reconnect — wrong Monerium profile is worse than friction.
+        await clearStoredSession(userId: userId);
 
         // Token refresh is /monerium/oauth/refresh. Browser connect is OAuth
         // PKCE only — never SIWE. Address ownership is a separate link step.
-        // Always prompt=login so a stuck "Loading user profile" session is not reused.
         final startResponse = await _postJson(
           '/monerium/oauth/start',
           body: {
@@ -458,6 +483,10 @@ class MoneriumService {
             'appRedirectUri': appRedirectUri ?? _callbackUriForPlatform(),
             'appAutoRedirect': true,
             'forceLogin': true,
+            if (walletAddress != null && walletAddress.trim().isNotEmpty)
+              'walletAddress': walletAddress.trim(),
+            if (kIsWeb && AppEnv.walletClientUrl.trim().isNotEmpty)
+              'walletClientUrl': AppEnv.walletClientUrl.trim(),
           },
         );
 
@@ -476,7 +505,7 @@ class MoneriumService {
 
         _log('Opening Monerium OAuth');
         openedAuthTab = true;
-        await markWebConnectPending();
+        await markWebConnectPending(userId: userId);
         AppLockController.beginExternalAuthSession();
         final opened = await _openAuthTab(Uri.parse(authUrl));
 
@@ -646,7 +675,6 @@ class MoneriumService {
     required String userId,
     required String address,
     String? chain,
-    String? profile,
     required String message,
     required String signature,
   }) async {
@@ -655,16 +683,11 @@ class MoneriumService {
         'linkWallet(): sessionReady=${_hasUsableAccessToken(session)} for userId=$userId');
     final resolvedChain = (chain != null && chain.trim().isNotEmpty)
         ? chain
-        : _configuredWalletChain;
-    final resolvedProfile = (profile != null && profile.trim().isNotEmpty)
-        ? profile.trim()
-        : session?['moneriumProfile']?.toString().trim();
+        : defaultWalletChain();
     final response = await _postJson(
       '/monerium/wallet/link',
       body: {
         'userId': userId,
-        if (resolvedProfile != null && resolvedProfile.isNotEmpty)
-          'profile': resolvedProfile,
         'address': address,
         if (resolvedChain.trim().isNotEmpty) 'chain': resolvedChain,
         'message': message,
@@ -690,16 +713,32 @@ class MoneriumService {
     return response;
   }
 
+  static bool isAlreadyLinkedElsewhereError(Object error) {
+    final message = error.toString().toLowerCase();
+    return message.contains('already linked to another profile') ||
+        message.contains('already linked to another account') ||
+        message.contains('monerium_wallet_linked_elsewhere');
+  }
+
+  static bool isWalletLinkSuccessful(Map<String, dynamic> response) {
+    return response['linkedConfirmed'] == true ||
+        response['alreadyLinked'] == true ||
+        response['linked'] == true;
+  }
+
   static Future<Map<String, dynamic>> getIbans({
     required String userId,
+    String? address,
   }) async {
     final session = await _ensureActiveSession(userId);
+    final wallet = (address ?? '').trim();
     _log(
-        'getIbans(): sessionReady=${_hasUsableAccessToken(session)} for userId=$userId');
+        'getIbans(): sessionReady=${_hasUsableAccessToken(session)} for userId=$userId address=${wallet.isEmpty ? 'none' : wallet}');
     return _getJson(
       '/monerium/ibans',
       query: {
         'userId': userId,
+        if (wallet.isNotEmpty) 'address': wallet,
       },
     );
   }
@@ -712,13 +751,38 @@ class MoneriumService {
     final session = await _ensureActiveSession(userId);
     final resolvedChain = (chain != null && chain.trim().isNotEmpty)
         ? chain
-        : _configuredWalletChain;
+        : defaultWalletChain();
 
     _log(
         'requestIban(): sessionReady=${_hasUsableAccessToken(session)} for userId=$userId');
 
     return _postJson(
       '/monerium/ibans/request',
+      body: {
+        'userId': userId,
+        'address': address,
+        if (resolvedChain.trim().isNotEmpty) 'chain': resolvedChain,
+      },
+    );
+  }
+
+  /// Link this wallet, then use the profile IBAN (move it if it sits on an
+  /// older address) or request one if the profile has none.
+  static Future<Map<String, dynamic>> ensureIbanForWallet({
+    required String userId,
+    required String address,
+    String? chain,
+  }) async {
+    final session = await _ensureActiveSession(userId);
+    final resolvedChain = (chain != null && chain.trim().isNotEmpty)
+        ? chain
+        : defaultWalletChain();
+
+    _log(
+        'ensureIbanForWallet(): sessionReady=${_hasUsableAccessToken(session)} for userId=$userId');
+
+    return _postJson(
+      '/monerium/ibans/ensure',
       body: {
         'userId': userId,
         'address': address,
@@ -736,7 +800,7 @@ class MoneriumService {
     final session = await _ensureActiveSession(userId);
     final resolvedChain = (chain != null && chain.trim().isNotEmpty)
         ? chain.trim()
-        : _configuredWalletChain;
+        : defaultWalletChain();
     final resolvedCurrency =
         (currency != null && currency.trim().isNotEmpty) ? currency.trim() : '';
 
@@ -768,10 +832,14 @@ class MoneriumService {
         if (chain != null && chain.isNotEmpty) return chain;
       }
     }
+    return defaultWalletChain();
+  }
+
+  static String defaultWalletChain() {
     if (_configuredWalletChain.trim().isNotEmpty) {
       return _configuredWalletChain.trim();
     }
-    return AppEnv.isProduction ? 'ethereum' : 'polygon';
+    return 'ethereum';
   }
 
   static double? extractEurAvailable(dynamic data) {
@@ -821,8 +889,14 @@ class MoneriumService {
     }
 
     try {
-      final ibansResponse = await getIbans(userId: userId);
-      final ibans = extractIbansFromResponse(ibansResponse);
+      final ibansResponse = await getIbans(
+        userId: userId,
+        address: walletAddress,
+      );
+      final ibans = filterIbansForWallet(
+        ibans: extractIbansFromResponse(ibansResponse),
+        walletAddress: walletAddress,
+      );
       if (ibans.isEmpty) {
         return const MoneriumEurBalanceCheck(
           sufficient: false,
@@ -964,6 +1038,44 @@ class MoneriumService {
           'profile': profile.trim(),
       },
     );
+  }
+
+  /// Catch-up settle from orders already loaded on Statements.
+  /// Server does not call Monerium or Alchemy — Supabase match only.
+  /// Client + server debounce; safe to fire-and-forget.
+  static DateTime? _lastStatementsReconcileAt;
+  static const _statementsReconcileDebounce = Duration(seconds: 45);
+
+  static Future<Map<String, dynamic>?> reconcileFromStatements({
+    required String userId,
+    required List<Map<String, dynamic>> orders,
+  }) async {
+    if (userId.isEmpty || userId == '0' || orders.isEmpty) {
+      return null;
+    }
+
+    final now = DateTime.now();
+    final last = _lastStatementsReconcileAt;
+    if (last != null && now.difference(last) < _statementsReconcileDebounce) {
+      _log('reconcileFromStatements(): client debounce, skip');
+      return {'ok': true, 'skipped': true, 'reason': 'client_debounced'};
+    }
+    _lastStatementsReconcileAt = now;
+
+    // Cap body size; server also caps and filters to processed issue orders.
+    final payload = orders.take(40).toList(growable: false);
+    try {
+      return await _postJson(
+        '/monerium/settle/from-statements',
+        body: {
+          'userId': userId,
+          'orders': payload,
+        },
+      );
+    } catch (e) {
+      _log('reconcileFromStatements(): failed: $e');
+      return null;
+    }
   }
 
   static String? extractOrderId(Map<String, dynamic>? payload) {
@@ -1297,23 +1409,46 @@ class MoneriumService {
     };
   }
 
+  static List<String> _invoiceIdList({
+    String? invoiceId,
+    List<String>? invoiceIds,
+  }) {
+    final ids = <String>[];
+    void add(String? raw) {
+      final value = raw?.trim() ?? '';
+      if (value.isNotEmpty && !ids.contains(value)) {
+        ids.add(value);
+      }
+    }
+
+    add(invoiceId);
+    if (invoiceIds != null) {
+      for (final id in invoiceIds) {
+        add(id);
+      }
+    }
+    return ids;
+  }
+
   static Future<Map<String, dynamic>> createSendMoneyOrder({
     required String userId,
     required Map<String, dynamic> order,
     String? invoiceId,
+    List<String>? invoiceIds,
   }) async {
     final session = await _ensureActiveSession(userId);
 
     _log(
         'createSendMoneyOrder(): sessionReady=${_hasUsableAccessToken(session)} for userId=$userId');
 
+    final ids = _invoiceIdList(invoiceId: invoiceId, invoiceIds: invoiceIds);
     return _postJson(
       '/monerium/orders/send',
       body: {
         'userId': userId,
         'order': order,
-        if (invoiceId != null && invoiceId.trim().isNotEmpty)
-          'invoiceId': invoiceId.trim(),
+        if (ids.isNotEmpty) 'invoiceId': ids.first,
+        if (ids.isNotEmpty) 'invoiceIds': ids,
       },
     );
   }
@@ -1323,6 +1458,7 @@ class MoneriumService {
     required String walletAddress,
     required Map<String, dynamic> order,
     String? invoiceId,
+    List<String>? invoiceIds,
   }) async {
     await _ensureActiveSession(userId);
 
@@ -1330,6 +1466,7 @@ class MoneriumService {
         (order['message']?.toString().trim().isNotEmpty ?? false)
             ? order['message'].toString().trim()
             : MetamaskWalletService.moneriumOwnershipMessage;
+    final ids = _invoiceIdList(invoiceId: invoiceId, invoiceIds: invoiceIds);
 
     if (kIsWeb) {
       slickBillsStorePendingWebPayment({
@@ -1338,8 +1475,8 @@ class MoneriumService {
         'walletAddress': walletAddress,
         'message': resolvedMessage,
         'order': order,
-        if (invoiceId != null && invoiceId.trim().isNotEmpty)
-          'invoiceId': invoiceId.trim(),
+        if (ids.isNotEmpty) 'invoiceId': ids.first,
+        if (ids.isNotEmpty) 'invoiceIds': ids,
       });
     }
 
@@ -1357,7 +1494,8 @@ class MoneriumService {
         order: order,
         message: resolvedMessage,
         signature: signature,
-        invoiceId: invoiceId,
+        invoiceId: ids.isNotEmpty ? ids.first : invoiceId,
+        invoiceIds: ids,
       );
     } catch (error) {
       if (kIsWeb && MetamaskWalletService.isCancelled(error)) {
@@ -1438,6 +1576,7 @@ class MoneriumService {
     required String message,
     required String signature,
     String? invoiceId,
+    List<String>? invoiceIds,
     bool claimPending = true,
   }) async {
     if (kIsWeb && claimPending) {
@@ -1465,6 +1604,7 @@ class MoneriumService {
       userId: userId,
       order: signedOrder,
       invoiceId: invoiceId,
+      invoiceIds: invoiceIds,
     );
   }
 
@@ -1486,6 +1626,10 @@ class MoneriumService {
     final message = pending['message']?.toString() ??
         MetamaskWalletService.moneriumOwnershipMessage;
     final invoiceId = pending['invoiceId']?.toString();
+    final pendingInvoiceIds = pending['invoiceIds'];
+    final invoiceIds = pendingInvoiceIds is List
+        ? pendingInvoiceIds.map((id) => id.toString()).toList()
+        : _invoiceIdList(invoiceId: invoiceId);
     final rawOrder = pending['order'];
     final order = rawOrder is Map
         ? Map<String, dynamic>.from(rawOrder)
@@ -1503,8 +1647,16 @@ class MoneriumService {
       message: message,
       signature: signature,
       invoiceId: invoiceId,
+      invoiceIds: invoiceIds,
       claimPending: false,
     );
+    if (invoiceIds.isNotEmpty) {
+      return {
+        ...result,
+        'invoiceId': invoiceIds.first,
+        'invoiceIds': invoiceIds,
+      };
+    }
     if (invoiceId != null && invoiceId.trim().isNotEmpty) {
       return {...result, 'invoiceId': invoiceId.trim()};
     }
@@ -1538,6 +1690,11 @@ class MoneriumService {
   }
 
   static List<dynamic> extractIbansFromResponse(Map<String, dynamic> response) {
+    final scoped = response['ibans'];
+    if (scoped is List) {
+      return List<dynamic>.from(scoped);
+    }
+
     final ibans = extractIbans(response['data']);
     if (ibans.isNotEmpty) {
       return ibans;
@@ -1602,6 +1759,52 @@ class MoneriumService {
 
   static bool hasIssuedIban(List<dynamic> rows) =>
       issuedIbanRows(rows).isNotEmpty;
+
+  static String normalizeEvmAddress(String? address) {
+    return (address ?? '').trim().toLowerCase();
+  }
+
+  static String? addressFromIbanRow(dynamic row) {
+    if (row is! Map) return null;
+    final map = Map<String, dynamic>.from(row);
+    final candidates = [
+      map['address'],
+      map['walletAddress'],
+      map['wallet_address'],
+    ];
+    for (final candidate in candidates) {
+      if (candidate is String && candidate.trim().isNotEmpty) {
+        return candidate.trim();
+      }
+    }
+    final wallet = map['wallet'];
+    if (wallet is Map) {
+      final nested = wallet['address'];
+      if (nested is String && nested.trim().isNotEmpty) {
+        return nested.trim();
+      }
+    }
+    return null;
+  }
+
+  /// Only IBANs issued for this wallet. Unscoped rows are dropped so they
+  /// cannot be copied onto the currently signed-in SlickBills user.
+  static List<dynamic> filterIbansForWallet({
+    required List<dynamic> ibans,
+    required String? walletAddress,
+  }) {
+    final normalizedWallet = normalizeEvmAddress(walletAddress);
+    if (normalizedWallet.isEmpty) {
+      return const [];
+    }
+    return ibans.where((row) {
+      final rowAddress = addressFromIbanRow(row);
+      if (rowAddress == null || rowAddress.isEmpty) {
+        return false;
+      }
+      return normalizeEvmAddress(rowAddress) == normalizedWallet;
+    }).toList(growable: false);
+  }
 
   static Future<Map<String, dynamic>> _postJson(
     String path, {

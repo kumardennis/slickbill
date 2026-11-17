@@ -3,6 +3,7 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/feature_auth/getx_controllers/current_bank_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
+import 'package:slickbill/feature_dashboard/getx_controllers/payment_setup_controller.dart';
 import 'package:slickbill/feature_dashboard/screens/add_ibans.dart';
 import 'package:slickbill/feature_dashboard/widgets/current_bank_selector.dart';
 import 'package:slickbill/feature_dashboard/widgets/monerium_balance_card.dart';
@@ -89,9 +90,7 @@ class Profile extends HookWidget {
         () {
           final user = userController.user.value;
           final moneriumUserId =
-              (user.privateUserId != null && user.privateUserId! > 0)
-                  ? user.privateUserId.toString()
-                  : user.id.toString();
+              PaymentSetupController.resolveMoneriumUserId(user);
 
           return SingleChildScrollView(
             child: SizedBox(
@@ -216,6 +215,37 @@ class Profile extends HookWidget {
                   const SizedBox(height: 20),
                   const CurrentBankSelector(),
                   const SizedBox(height: 20),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: () => Get.toNamed(
+                          '/reset-password',
+                          arguments: {'fromProfile': true},
+                        ),
+                        icon: const Icon(
+                          Icons.password_outlined,
+                          color: SbColors.deepNavy,
+                        ),
+                        label: Text(
+                          'btn_SetPassword'.tr,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                color: SbColors.deepNavy,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(color: SbColors.deepNavy),
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20.0),
                     child: SizedBox(

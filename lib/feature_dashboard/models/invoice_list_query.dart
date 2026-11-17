@@ -106,7 +106,20 @@ class InvoiceListQuery {
     return 'lbl_ReceivedInMonth';
   }
 
+  String get periodPendingLabelKey {
+    if (isCurrentMonth) return 'lbl_ToPayThisMonth';
+    return 'lbl_ToPayInMonth';
+  }
+
+  String get periodWaitingLabelKey {
+    if (isCurrentMonth) return 'lbl_WaitingThisMonth';
+    return 'lbl_WaitingInMonth';
+  }
+
   bool get overviewLabelNeedsMonth => !allTime && !isCurrentMonth;
+
+  bool get periodPendingLabelNeedsMonth =>
+      !allTime && !isCurrentMonth;
 
   InvoiceListQuery get periodOnly => InvoiceListQuery(
         month: month,

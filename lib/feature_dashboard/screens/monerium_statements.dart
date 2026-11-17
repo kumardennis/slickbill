@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
@@ -59,7 +61,8 @@ class MoneriumStatements extends HookWidget {
       error.value = null;
       try {
         final response = await MoneriumService.getOrders(userId: userId);
-        final rows = MoneriumService.extractOrdersList(response)
+        final rawOrders = MoneriumService.extractOrdersList(response);
+        final rows = rawOrders
             .map(MoneriumStatementOrder.fromJson)
             .where((order) => order.id.isNotEmpty)
             .toList()
@@ -69,6 +72,15 @@ class MoneriumStatements extends HookWidget {
             return bDate.compareTo(aDate);
           });
         orders.value = rows;
+
+        // Reuse the list we already fetched — no extra Monerium/Alchemy calls.
+        // Fire-and-forget; debounce lives in MoneriumService + Express.
+        unawaited(
+          MoneriumService.reconcileFromStatements(
+            userId: userId,
+            orders: rawOrders,
+          ),
+        );
       } catch (e) {
         error.value = e.toString();
       } finally {

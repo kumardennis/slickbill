@@ -1,3 +1,11 @@
 {
-  "framework": "express"
+  "framework": "express",
+  "functions": {
+    "src/index.ts": {
+      "maxDuration": 60
+    },
+    "api/index.ts": {
+      "maxDuration": 60
+    }
+  }
 }

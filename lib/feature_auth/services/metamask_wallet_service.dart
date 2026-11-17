@@ -457,6 +457,12 @@ class MetamaskWalletService {
     completer.complete(address);
   }
 
+  static String? _currentUserEmail() {
+    if (!Get.isRegistered<UserController>()) return null;
+    final email = Get.find<UserController>().user.value.email.trim();
+    return email.isEmpty ? null : email;
+  }
+
   static Future<String?> connectWalletAddress({
     String? accessToken,
     String loginProvider = 'google',
@@ -475,11 +481,15 @@ class MetamaskWalletService {
 
     _listenForWebWalletCallback();
 
+    final email = _currentUserEmail();
     final authUri = Uri.parse('$_walletClientBaseUrl$_walletAuthPath').replace(
       queryParameters: {
         'sb': '1',
+        'mode': 'connect',
         'provider': loginProvider,
+        'force_login': '1',
         'callback_uri': _callbackUriForPlatform(),
+        if (email != null) 'email': email,
       },
     );
 
@@ -520,6 +530,7 @@ class MetamaskWalletService {
     required String address,
     String message = moneriumOwnershipMessage,
     WalletClientPaymentPreview? preview,
+    String? userId,
   }) async {
     if (useNativeFlow) {
       return NativeWeb3AuthService.signAddressOwnershipMessage(
@@ -536,6 +547,7 @@ class MetamaskWalletService {
     _listenForWebWalletCallback();
 
     final kind = preview?.kind ?? 'link';
+    final email = _currentUserEmail();
     final signUri = Uri.parse('$_walletClientBaseUrl$_walletAuthPath').replace(
       queryParameters: {
         'sb': '1',
@@ -549,6 +561,8 @@ class MetamaskWalletService {
             'kind': kind,
           },
         ),
+        if ((userId ?? '').trim().isNotEmpty) 'user_id': userId!.trim(),
+        if (email != null) 'email': email,
         ...?preview?.toQueryParameters(),
       },
     );

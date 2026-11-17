@@ -80,12 +80,19 @@ class SignUp extends HookWidget {
       } catch (e) {
         print('❌ Signup error: $e'); // ✅ Debug log
 
+        final message = e.toString().toLowerCase();
+        final alreadyRegistered = message.contains('already registered') ||
+            message.contains('already been registered') ||
+            message.contains('user already exists');
+
         Get.snackbar(
-          'Error',
-          'Failed to create account: ${e.toString()}',
+          alreadyRegistered ? 'Account exists' : 'Error',
+          alreadyRegistered
+              ? 'This email already has an account. Sign in with Google, or use Forgot password to add a password.'
+              : 'Failed to create account: ${e.toString()}',
           backgroundColor: Theme.of(context).colorScheme.red,
           colorText: Colors.white,
-          duration: Duration(seconds: 3),
+          duration: Duration(seconds: 4),
         );
       } finally {
         isLoading.value = false; // ✅ Hide loading state

@@ -66,6 +66,7 @@ class WalletInfo extends HookWidget {
       final signature = await MetamaskWalletService.signAddressOwnershipMessage(
         address: walletAddress,
         preview: const WalletClientPaymentPreview(kind: 'link'),
+        userId: userId,
       );
 
       final linkResponse = await MoneriumService.linkWallet(
@@ -75,82 +76,37 @@ class WalletInfo extends HookWidget {
         signature: signature,
       );
 
-      final linkedConfirmed = linkResponse['linkedConfirmed'];
-      final linkedAfterRequest = linkedConfirmed is bool
-          ? linkedConfirmed
-          : await isAddressLinkedOnMonerium(
-              userId: userId,
-              walletAddress: walletAddress,
-            );
+      if (MoneriumService.isWalletLinkSuccessful(linkResponse)) {
+        return true;
+      }
 
-      return linkedAfterRequest;
+      final linkedConfirmed = linkResponse['linkedConfirmed'];
+      if (linkedConfirmed is bool) {
+        return linkedConfirmed;
+      }
+
+      return isAddressLinkedOnMonerium(
+        userId: userId,
+        walletAddress: walletAddress,
+      );
     }
 
     String userFriendlyMoneriumError(Object error) {
       final message = error.toString();
+      if (message.toLowerCase().contains('another account') ||
+          message.contains('MONERIUM_WALLET_LINKED_ELSEWHERE')) {
+        return 'This wallet is already linked to another Monerium account. Sign in with that Monerium profile, or add this wallet there first.';
+      }
       if (message.contains("429") || message.contains("Non-200 status code")) {
         return 'Rate limited by wallet provider. Wait 30-60 seconds and try again.';
       }
       return message;
     }
 
-    String normalizeWalletAddress(String? address) {
-      if (address == null) return '';
-      return address.trim().toLowerCase();
-    }
-
     String resolveMoneriumUserId() {
-      final privateUserId = userController.user.value.privateUserId;
-      if (privateUserId != null && privateUserId > 0) {
-        return privateUserId.toString();
-      }
-      return userController.user.value.id.toString();
-    }
-
-    String? getMoneriumAddressFromRow(dynamic row) {
-      if (row is! Map<String, dynamic>) {
-        return null;
-      }
-
-      final candidates = [
-        row['address'],
-        row['walletAddress'],
-        row['wallet_address'],
-      ];
-
-      for (final candidate in candidates) {
-        if (candidate is String && candidate.trim().isNotEmpty) {
-          return candidate.trim();
-        }
-      }
-
-      final wallet = row['wallet'];
-      if (wallet is Map<String, dynamic>) {
-        final nested = wallet['address'];
-        if (nested is String && nested.trim().isNotEmpty) {
-          return nested.trim();
-        }
-      }
-
-      return null;
-    }
-
-    List<dynamic> filterIbansForWallet({
-      required List<dynamic> ibans,
-      required String? walletAddress,
-    }) {
-      final normalizedWallet = normalizeWalletAddress(walletAddress);
-      if (normalizedWallet.isEmpty) {
-        return ibans;
-      }
-
-      return ibans.where((row) {
-        final rowAddress = getMoneriumAddressFromRow(row);
-        if (rowAddress == null || rowAddress.isEmpty) {
-          return true;
-        }
-        return normalizeWalletAddress(rowAddress) == normalizedWallet;
-      }).toList(growable: false);
+      return PaymentSetupController.resolveMoneriumUserId(
+        userController.user.value,
+      );
     }
 
     String? extractMoneriumIbanFromRow(dynamic row) {
@@ -202,18 +158,23 @@ class WalletInfo extends HookWidget {
     Future<List<dynamic>> refreshMoneriumIbansNow({
       required String userId,
       String? walletAddress,
+      List<dynamic>? seedRows,
     }) async {
-      final ibansResponse = await MoneriumService.getIbans(userId: userId);
-      var ibans = MoneriumService.extractIbansFromResponse(ibansResponse);
-      final filteredIbans = filterIbansForWallet(
+      var ibans = seedRows;
+      if (ibans == null) {
+        final ibansResponse = await MoneriumService.getIbans(
+          userId: userId,
+          address: walletAddress,
+        );
+        ibans = MoneriumService.extractIbansFromResponse(ibansResponse);
+      }
+      final filteredIbans = MoneriumService.filterIbansForWallet(
         ibans: ibans,
         walletAddress: walletAddress,
       );
 
-      final sourceRows = filteredIbans.isNotEmpty ? filteredIbans : ibans;
-
       final moneriumBankAccounts = <BankAccount>[];
-      for (final row in sourceRows) {
+      for (final row in filteredIbans) {
         final moneriumIban = extractMoneriumIbanFromRow(row);
         if (moneriumIban == null || moneriumIban.isEmpty) {
           continue;
@@ -407,21 +368,15 @@ class WalletInfo extends HookWidget {
 
       try {
         final userId = resolveMoneriumUserId();
-        final wasAlreadyConnected = isMoneriumConnected.value;
-        final shouldStartOAuth = forceBrowserReconnect || !wasAlreadyConnected;
-
-        if (shouldStartOAuth) {
-          if (forceBrowserReconnect) {
-            await MoneriumService.clearStoredSession(userId: userId);
-          }
-          // OAuth-only connect: do not pass walletAddress (avoids SIWE signing).
-          // Address ownership signing belongs in the Link Address step.
-          await MoneriumService.connect(
-            userId: userId,
-            email: email,
-            forceLogin: true,
-          );
-        }
+        // Always run Monerium OAuth with a fresh login. Never reuse a local
+        // token or the browser's Monerium cookie session silently.
+        await MoneriumService.clearStoredSession(userId: userId);
+        await MoneriumService.connect(
+          userId: userId,
+          email: email,
+          forceLogin: true,
+          walletAddress: walletAddress,
+        );
 
         final hasSession =
             await MoneriumService.hasActiveSession(userId: userId);
@@ -491,7 +446,7 @@ class WalletInfo extends HookWidget {
           return;
         }
 
-        final requestResponse = await MoneriumService.requestIban(
+        final ensureResponse = await MoneriumService.ensureIbanForWallet(
           userId: userId,
           address: walletAddress,
         );
@@ -499,6 +454,13 @@ class WalletInfo extends HookWidget {
           userId: userId,
           walletAddress: walletAddress,
         );
+        if (!MoneriumService.hasIssuedIban(ibans)) {
+          ibans = await refreshMoneriumIbansNow(
+            userId: userId,
+            walletAddress: walletAddress,
+            seedRows: MoneriumService.extractIbansFromResponse(ensureResponse),
+          );
+        }
         if (isMounted()) {
           moneriumIbans.value = ibans;
           isAddressLinked.value = true;
@@ -508,7 +470,9 @@ class WalletInfo extends HookWidget {
           await paymentSetupController.markIbanReady();
           Get.snackbar(
             'Payments ready',
-            'Your Monerium IBAN is set up.',
+            ensureResponse['moved'] == true
+                ? 'Existing Monerium IBAN is now linked to this wallet.'
+                : 'Your Monerium IBAN is set up.',
             backgroundColor: Theme.of(context).colorScheme.green,
             colorText: Colors.white,
             duration: const Duration(seconds: 3),
@@ -516,12 +480,9 @@ class WalletInfo extends HookWidget {
           return;
         }
 
-        final alreadyExists = requestResponse['alreadyExists'] == true;
         Get.snackbar(
           'KYC pending',
-          alreadyExists
-              ? 'Monerium is still issuing your IBAN. Finish KYC, then tap Reconnect.'
-              : 'IBAN requested. Finish Monerium KYC, then tap Reconnect.',
+          'IBAN requested. Finish Monerium KYC, then tap Reconnect.',
           backgroundColor: Colors.orange.shade700,
           colorText: Colors.white,
           duration: const Duration(seconds: 5),
@@ -814,16 +775,22 @@ class WalletInfo extends HookWidget {
           return;
         }
 
-        final requestResponse = await MoneriumService.requestIban(
+        final ensureResponse = await MoneriumService.ensureIbanForWallet(
           userId: userId,
           address: walletAddress,
         );
 
-        final ibans = await refreshMoneriumIbansNow(
+        var ibans = await refreshMoneriumIbansNow(
           userId: userId,
           walletAddress: walletAddress,
         );
-        final alreadyExists = requestResponse['alreadyExists'] == true;
+        if (!MoneriumService.hasIssuedIban(ibans)) {
+          ibans = await refreshMoneriumIbansNow(
+            userId: userId,
+            walletAddress: walletAddress,
+            seedRows: MoneriumService.extractIbansFromResponse(ensureResponse),
+          );
+        }
 
         if (isMounted()) {
           moneriumIbans.value = ibans;
@@ -844,12 +811,12 @@ class WalletInfo extends HookWidget {
         Get.snackbar(
           MoneriumService.hasIssuedIban(ibans)
               ? 'IBAN ready'
-              : (alreadyExists ? 'KYC pending' : 'IBAN Request Submitted'),
+              : 'KYC pending',
           MoneriumService.hasIssuedIban(ibans)
-              ? 'SlickBills/Monerium IBAN found'
-              : (alreadyExists
-                  ? 'Monerium is still issuing your IBAN. Finish KYC, then tap Reconnect.'
-                  : 'Your IBAN request was accepted. Finish KYC, then tap Reconnect.'),
+              ? (ensureResponse['moved'] == true
+                  ? 'Existing Monerium IBAN is now linked to this wallet.'
+                  : 'SlickBills/Monerium IBAN found')
+              : 'Finish Monerium KYC, then tap Reconnect.',
           backgroundColor: MoneriumService.hasIssuedIban(ibans)
               ? Theme.of(context).colorScheme.green
               : Colors.orange.shade700,
