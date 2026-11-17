@@ -68,20 +68,24 @@ class PaymentSetupController extends GetxController {
   }
 
   static String resolveMoneriumUserId(ClientUserModel user) {
-    final privateUserId = user.privateUserId;
-    if (privateUserId != null && privateUserId > 0) {
-      return privateUserId.toString();
+    final privateUserId = user.validPrivateUserId;
+    if (privateUserId == null) {
+      return '';
     }
-    return user.id.toString();
+    return privateUserId.toString();
   }
 
   Future<void> refresh() async {
     isRefreshing.value = true;
-    String userId = '0';
+    String userId = '';
     String? trackAddress;
     try {
       final userController = Get.find<UserController>();
       final user = userController.user.value;
+      if (user.id <= 0) {
+        reset();
+        return;
+      }
       final address = user.metamaskWalletAddress?.trim();
       trackAddress = (address != null && address.isNotEmpty)
           ? address

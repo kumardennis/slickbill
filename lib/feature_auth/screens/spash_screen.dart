@@ -4,6 +4,7 @@ import 'package:slickbill/color_scheme.dart';
 import 'package:slickbill/core/services/push_notification_service.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/services/deep_links.dart';
+import 'package:slickbill/feature_auth/utils/auth_callback_uri.dart';
 import 'package:slickbill/feature_auth/utils/supabase_auth_manger.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/foundation.dart';
@@ -29,6 +30,14 @@ class _SplashScreenState extends State<SplashScreen> {
   Future<void> _checkAuth() async {
     await Future.delayed(const Duration(seconds: 2));
 
+    if (kIsWeb &&
+        (AuthCallbackUri.isPasswordRecovery(Uri.base) ||
+            AuthCallbackUri.passwordRecoveryPending)) {
+      AuthCallbackUri.passwordRecoveryPending = true;
+      Get.offAllNamed('/reset-password');
+      return;
+    }
+
     final pendingBillToken = consumePendingBillToken();
     if (pendingBillToken != null && pendingBillToken.isNotEmpty) {
       print('🔗 Splash consumed pending bill token: $pendingBillToken');
@@ -49,6 +58,12 @@ class _SplashScreenState extends State<SplashScreen> {
       print(
           '🔗 Bill deep link detected in splash, preserving route: $currentRoute');
       // Don't navigate away, let the deep link handler take over
+      return;
+    }
+
+    if (AuthCallbackUri.isAuthFlowRoute(currentRoute) &&
+        currentRoute != '/sign-in' &&
+        !currentRoute.startsWith('/sign-in')) {
       return;
     }
 
@@ -114,8 +129,15 @@ class _SplashScreenState extends State<SplashScreen> {
         currentRoute.contains('/public-invoice/');
 
     if (mounted) {
-      if (session != null) {
-        print('✅ Splash: active session found, fetching user from DB');
+    if (session != null) {
+      if (AuthCallbackUri.passwordRecoveryPending ||
+          (kIsWeb && AuthCallbackUri.isPasswordRecovery(Uri.base))) {
+        AuthCallbackUri.passwordRecoveryPending = true;
+        Get.offAllNamed('/reset-password');
+        return;
+      }
+
+      print('✅ Splash: active session found, fetching user from DB');
 
         try {
           final userLoaded = await _supabaseAuthManager.loadFreshUser(

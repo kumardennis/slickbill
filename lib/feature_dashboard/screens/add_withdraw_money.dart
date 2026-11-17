@@ -6,7 +6,6 @@ import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
-import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/feature_auth/getx_controllers/app_lock_controller.dart';
 import 'package:slickbill/feature_auth/getx_controllers/user_controller.dart';
 import 'package:slickbill/feature_auth/models/user_model.dart';
@@ -182,8 +181,14 @@ class AddWithdrawMoneyScreen extends HookWidget {
       try {
         final userId = resolveUserId(user);
         await MoneriumService.hasActiveSession(userId: userId);
-        final ibansResponse = await MoneriumService.getIbans(userId: userId);
-        final ibans = MoneriumService.extractIbansFromResponse(ibansResponse);
+        final ibansResponse = await MoneriumService.getIbans(
+          userId: userId,
+          address: walletAddress,
+        );
+        final ibans = MoneriumService.filterIbansForWallet(
+          ibans: MoneriumService.extractIbansFromResponse(ibansResponse),
+          walletAddress: walletAddress,
+        );
         moneriumIbans.value = ibans;
 
         if (ibans.isEmpty) {
@@ -196,7 +201,7 @@ class AddWithdrawMoneyScreen extends HookWidget {
           defaultValue: '',
         ).trim();
         if (chain.isEmpty) {
-          chain = AppEnv.isProduction ? 'ethereum' : 'polygon';
+          chain = MoneriumService.defaultWalletChain();
         }
         for (final row in ibans) {
           if (row is Map && row['chain']?.toString().trim().isNotEmpty == true) {

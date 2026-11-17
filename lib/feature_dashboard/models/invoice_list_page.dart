@@ -26,3 +26,10 @@ double paidInvoiceSum(Iterable<InvoiceModel> invoices) {
       .where((invoice) => invoice.status.trim().toUpperCase() == 'PAID')
       .fold<double>(0.0, (sum, invoice) => sum + invoice.amount);
 }
+
+int openInvoiceCount(Iterable<InvoiceModel> invoices) {
+  return invoices.where((invoice) {
+    final status = invoice.status.trim().toUpperCase();
+    return status != 'PAID';
+  }).length;
+}

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hooks/flutter_hooks.dart';
 import 'package:get/get.dart';
 import 'package:slickbill/color_scheme.dart';
-import 'package:slickbill/config/app_env.dart';
 import 'package:slickbill/feature_auth/models/user_model.dart';
 import 'package:slickbill/feature_auth/services/monerium_service.dart';
 import 'package:slickbill/feature_dashboard/getx_controllers/payment_setup_controller.dart';
@@ -28,62 +27,7 @@ class MoneriumBalanceCard extends HookWidget {
         PaymentSetupController.userHasMoneriumIban(user);
 
     String resolveMoneriumUserId() {
-      final privateUserId = user.privateUserId;
-      if (privateUserId != null && privateUserId > 0) {
-        return privateUserId.toString();
-      }
-      return user.id.toString();
-    }
-
-    String normalizeWalletAddress(String? address) {
-      if (address == null) return '';
-      return address.trim().toLowerCase();
-    }
-
-    String? getMoneriumAddressFromRow(dynamic row) {
-      if (row is! Map<String, dynamic>) {
-        return null;
-      }
-
-      final candidates = [
-        row['address'],
-        row['walletAddress'],
-        row['wallet_address'],
-      ];
-
-      for (final candidate in candidates) {
-        if (candidate is String && candidate.trim().isNotEmpty) {
-          return candidate.trim();
-        }
-      }
-
-      final wallet = row['wallet'];
-      if (wallet is Map<String, dynamic>) {
-        final nested = wallet['address'];
-        if (nested is String && nested.trim().isNotEmpty) {
-          return nested.trim();
-        }
-      }
-
-      return null;
-    }
-
-    List<dynamic> filterIbansForWallet({
-      required List<dynamic> ibans,
-      required String? walletAddress,
-    }) {
-      final normalizedWallet = normalizeWalletAddress(walletAddress);
-      if (normalizedWallet.isEmpty) {
-        return ibans;
-      }
-
-      return ibans.where((row) {
-        final rowAddress = getMoneriumAddressFromRow(row);
-        if (rowAddress == null || rowAddress.isEmpty) {
-          return true;
-        }
-        return normalizeWalletAddress(rowAddress) == normalizedWallet;
-      }).toList(growable: false);
+      return PaymentSetupController.resolveMoneriumUserId(user);
     }
 
     String resolveMoneriumChainForBalances(List<dynamic> ibans) {
@@ -103,7 +47,7 @@ class MoneriumBalanceCard extends HookWidget {
       if (configured.trim().isNotEmpty) {
         return configured.trim();
       }
-      return AppEnv.isProduction ? 'ethereum' : 'polygon';
+      return MoneriumService.defaultWalletChain();
     }
 
     String summarizeMoneriumBalances(dynamic data) {
@@ -176,10 +120,13 @@ class MoneriumBalanceCard extends HookWidget {
         final userId = resolveMoneriumUserId();
         await MoneriumService.hasActiveSession(userId: userId);
 
-        final ibansResponse = await MoneriumService.getIbans(userId: userId);
+        final ibansResponse = await MoneriumService.getIbans(
+          userId: userId,
+          address: walletAddress,
+        );
         final rawIbans =
             MoneriumService.extractIbansFromResponse(ibansResponse);
-        final filteredIbans = filterIbansForWallet(
+        final filteredIbans = MoneriumService.filterIbansForWallet(
           ibans: rawIbans,
           walletAddress: walletAddress,
         );

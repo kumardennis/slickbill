@@ -21,6 +21,7 @@ import https from "node:https";
 import fetch from "node-fetch";
 import cors from "cors";
 import process from "node:process";
+import { waitUntil } from "@vercel/functions";
 import { CdpClient } from "@coinbase/cdp-sdk";
 import { generateJwt } from "@coinbase/cdp-sdk/auth";
 import { parseUnits } from "viem";
@@ -45,11 +46,15 @@ import {
 } from "./lib/moneriumOrderSummary.js";
 import {
   settleInvoicesFromOrders,
-  linkInvoiceToMoneriumOrder,
+  linkInvoicesToMoneriumOrder,
   listProcessingInvoicesForPayer,
+  reconcileInvoicesFromStatementOrders,
 } from "./lib/moneriumSettle.js";
 import { addAddressesToAlchemyWebhook } from "./lib/alchemyAddresses.js";
-import { registerMoneriumWallet } from "./lib/registerMoneriumWallet.js";
+import {
+  lookupWalletFromUsers,
+  registerMoneriumWallet,
+} from "./lib/registerMoneriumWallet.js";
 import { notifyUserViaSupabase, notifyMoneriumFundsArrived, resolveAppUserIdFromPrivateUserId } from "./lib/notifyUser.js";
 import { claimNotifiedOrder } from "./lib/moneriumOrderWebhook.js";
 import { stripInvalidMoneriumReference } from "./lib/moneriumRemittance.js";
@@ -104,6 +109,7 @@ type MoneriumPkceEntry = {
   appRedirectUri?: string;
   appAutoRedirect?: boolean;
   walletAddress?: string;
+  walletClientUrl?: string;
   createdAt: number;
   expiresAt: number;
 };
@@ -142,6 +148,7 @@ type MoneriumStatePayload = {
   appRedirectUri?: string;
   appAutoRedirect?: boolean;
   walletAddress?: string;
+  walletClientUrl?: string;
   iat: number;
   exp: number;
   nonce: string;
@@ -362,6 +369,47 @@ const collectAddressCandidates = (entry: Record<string, unknown>): string[] => {
   return normalized;
 };
 
+const listMoneriumProfileIds = (data: unknown): string[] => {
+  if (!data) {
+    return [];
+  }
+
+  const rows: unknown[] = [];
+  if (Array.isArray(data)) {
+    rows.push(...data);
+  } else if (typeof data === "object") {
+    const record = data as Record<string, unknown>;
+    if (Array.isArray(record.profiles)) {
+      rows.push(...record.profiles);
+    } else if (Array.isArray(record.items)) {
+      rows.push(...record.items);
+    } else if (typeof record.id === "string") {
+      rows.push(record);
+    }
+  }
+
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (!row || typeof row !== "object") {
+      continue;
+    }
+    const candidate =
+      typeof (row as { id?: unknown }).id === "string"
+        ? (row as { id: string }).id.trim()
+        : "";
+    if (!candidate || seen.has(candidate)) {
+      continue;
+    }
+    seen.add(candidate);
+    ids.push(candidate);
+  }
+  return ids;
+};
+
+const pickFirstMoneriumProfileId = (data: unknown): string =>
+  listMoneriumProfileIds(data)[0] ?? "";
+
 const summarizeMoneriumAddressRow = (entry: unknown) => {
   if (!entry || typeof entry !== "object") {
     return null;
@@ -432,7 +480,167 @@ const isMoneriumAddressLinked = (data: unknown, address: string) => {
     }
   }
 
-  return false;
+  return jsonContainsEvmAddress(data, address);
+};
+
+const jsonContainsEvmAddress = (data: unknown, address: string): boolean => {
+  const target = normalizeEvmAddress(address);
+  if (!target) {
+    return false;
+  }
+  const walk = (value: unknown): boolean => {
+    if (typeof value === "string") {
+      const normalized = normalizeEvmAddress(value);
+      return normalized === target || value.toLowerCase().includes(target);
+    }
+    if (Array.isArray(value)) {
+      return value.some(walk);
+    }
+    if (value && typeof value === "object") {
+      return Object.values(value as Record<string, unknown>).some(walk);
+    }
+    return false;
+  };
+  return walk(data);
+};
+
+const isAddressLinkedElsewhereError = (error: unknown): boolean => {
+  const blob = JSON.stringify(error ?? "").toLowerCase();
+  return (
+    blob.includes("already linked to another profile") ||
+    blob.includes("already linked to another account") ||
+    blob.includes("monerium_wallet_linked_elsewhere")
+  );
+};
+
+const lookupMoneriumAddress = async (params: {
+  userId: string;
+  address: string;
+  tokenOverride?: MoneriumTokenOverride;
+  timeoutMs?: number;
+}): Promise<
+  | { kind: "owned"; profile: string; data: unknown }
+  | { kind: "elsewhere" }
+  | { kind: "missing" }
+> => {
+  const address = normalizeEvmAddress(params.address);
+  if (!address) {
+    return { kind: "missing" };
+  }
+
+  try {
+    const data = await moneriumApiRequest({
+      userId: params.userId,
+      method: "GET",
+      path: `${moneriumWalletLinkPath.replace(/\/$/, "")}/${encodeURIComponent(address)}`,
+      tokenOverride: params.tokenOverride,
+      timeoutMs: params.timeoutMs,
+    });
+    const profile =
+      data &&
+      typeof data === "object" &&
+      typeof (data as { profile?: unknown }).profile === "string"
+        ? (data as { profile: string }).profile.trim()
+        : "";
+    return { kind: "owned", profile, data };
+  } catch (error) {
+    const status = Number((error as { status?: unknown }).status);
+    if (status === 403 || isAddressLinkedElsewhereError(error)) {
+      return { kind: "elsewhere" };
+    }
+    if (status === 404 || status === 400) {
+      return { kind: "missing" };
+    }
+    throw error;
+  }
+};
+
+const loadMoneriumProfileIds = async (params: {
+  userId: string;
+  tokenOverride?: MoneriumTokenOverride;
+}): Promise<string[]> => {
+  try {
+    const data = await moneriumApiRequest({
+      userId: params.userId,
+      method: "GET",
+      path: moneriumProfilesPath,
+      tokenOverride: params.tokenOverride,
+    });
+    return listMoneriumProfileIds(data);
+  } catch (error) {
+    console.warn("⚠️ Could not list Monerium profiles", {
+      userId: params.userId,
+      error,
+    });
+    return [];
+  }
+};
+
+const fetchMoneriumAddresses = async (params: {
+  userId: string;
+  tokenOverride?: MoneriumTokenOverride;
+  profile?: string;
+  timeoutMs?: number;
+}) => {
+  return moneriumApiRequest({
+    userId: params.userId,
+    method: "GET",
+    path: moneriumWalletLinkPath,
+    query: params.profile ? { profile: params.profile } : undefined,
+    tokenOverride: params.tokenOverride,
+    timeoutMs: params.timeoutMs,
+  });
+};
+
+const findLinkedAddressAcrossProfiles = async (params: {
+  userId: string;
+  address: string;
+  tokenOverride?: MoneriumTokenOverride;
+  profileIds?: string[];
+  timeoutMs?: number;
+}): Promise<{
+  data: unknown;
+  profileId: string;
+  row: unknown;
+} | null> => {
+  const seen = new Set<string>();
+  const targets = ["", ...(params.profileIds ?? [])];
+  for (const profileId of targets) {
+    if (seen.has(profileId)) {
+      continue;
+    }
+    seen.add(profileId);
+    try {
+      const data = await fetchMoneriumAddresses({
+        userId: params.userId,
+        tokenOverride: params.tokenOverride,
+        profile: profileId || undefined,
+        timeoutMs: params.timeoutMs,
+      });
+      if (!isMoneriumAddressLinked(data, params.address)) {
+        continue;
+      }
+      const row = findLinkedMoneriumAddressRow(data, params.address);
+      const fromRow =
+        row &&
+        typeof row === "object" &&
+        typeof (row as { profile?: unknown }).profile === "string"
+          ? (row as { profile: string }).profile.trim()
+          : "";
+      return {
+        data,
+        profileId: fromRow || profileId,
+        row,
+      };
+    } catch (error) {
+      console.warn("⚠️ GET /addresses failed", {
+        userId: params.userId,
+        profile: profileId || "default",
+        error,
+      });
+    }
+  }
+  return null;
 };
 
 const randomBase64Url = (bytes = 32) =>
@@ -498,6 +706,7 @@ const createMoneriumStateToken = (entry: MoneriumPkceEntry) => {
     appRedirectUri: entry.appRedirectUri,
     appAutoRedirect: entry.appAutoRedirect,
     walletAddress: entry.walletAddress,
+    walletClientUrl: entry.walletClientUrl,
     iat: Date.now(),
     exp: entry.expiresAt,
     nonce: randomBase64Url(16),
@@ -562,6 +771,11 @@ const parseMoneriumStateToken = (state: string): MoneriumPkceEntry | null => {
         typeof parsed.walletAddress === "string" &&
         parsed.walletAddress.trim().length > 0
           ? parsed.walletAddress.trim()
+          : undefined,
+      walletClientUrl:
+        typeof parsed.walletClientUrl === "string" &&
+        parsed.walletClientUrl.trim().length > 0
+          ? parsed.walletClientUrl.trim()
           : undefined,
       createdAt,
       expiresAt,
@@ -674,6 +888,17 @@ const toMoneriumChainFields = (apiChain: string) => {
   return network ? { chain: apiChain, network } : { chain: apiChain };
 };
 
+const defaultMoneriumWalletChain = isMoneriumSandboxHost
+  ? "sepolia"
+  : "ethereum";
+
+const resolveRequestedMoneriumChain = (requestedChain: string) =>
+  toMoneriumApiChain(
+    requestedChain.trim() ||
+      configuredMoneriumWalletChain ||
+      defaultMoneriumWalletChain,
+  );
+
 console.log("Monerium API host", {
   base: moneriumBaseUrl,
   configuredChain: configuredMoneriumWalletChain || null,
@@ -726,6 +951,7 @@ const extractMoneriumAddressRows = (data: unknown): unknown[] => {
 
   const map = data as Record<string, unknown>;
   const candidates = [
+    map.ibans,
     map.addresses,
     map.items,
     map.results,
@@ -739,7 +965,94 @@ const extractMoneriumAddressRows = (data: unknown): unknown[] => {
     }
   }
 
+  if (map.data && typeof map.data === "object" && !Array.isArray(map.data)) {
+    return extractMoneriumAddressRows(map.data);
+  }
+
   return [];
+};
+
+const listMoneriumIbanRowsFromApiData = (data: unknown): unknown[] => {
+  if (Array.isArray(data)) {
+    return data;
+  }
+  return extractMoneriumAddressRows(data);
+};
+
+const compactIssuedIban = (value: unknown): string | null => {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const compact = value.replace(/\s+/g, "").toUpperCase();
+  if (!compact) {
+    return null;
+  }
+  const lower = compact.toLowerCase();
+  if (
+    lower.includes("unknown") ||
+    lower.includes("pending") ||
+    lower === "n/a" ||
+    lower === "na" ||
+    lower === "-"
+  ) {
+    return null;
+  }
+  return compact;
+};
+
+const issuedIbanFromRow = (entry: unknown): string | null => {
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+  const row = entry as Record<string, unknown>;
+  const nested =
+    row.iban && typeof row.iban === "object"
+      ? (row.iban as Record<string, unknown>)
+      : null;
+  return (
+    compactIssuedIban(row.iban) ??
+    compactIssuedIban(row.ibanNumber) ??
+    compactIssuedIban(row.iban_number) ??
+    compactIssuedIban(nested?.iban)
+  );
+};
+
+const ibanRowMatchesWallet = (entry: unknown, address: string): boolean => {
+  const target = normalizeEvmAddress(address);
+  if (!target || !entry || typeof entry !== "object") {
+    return false;
+  }
+  return collectAddressCandidates(entry as Record<string, unknown>).includes(
+    target,
+  );
+};
+
+const isIbanAlreadyProvisionedError = (error: unknown): boolean => {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const status = Number((error as { status?: unknown }).status);
+  const message = String(
+    (error as { error?: { message?: unknown }; message?: unknown }).error
+      ?.message ??
+      (error as { message?: unknown }).message ??
+      "",
+  ).toLowerCase();
+  const nested = JSON.stringify(
+    (error as { error?: { details?: unknown } }).error?.details ?? "",
+  ).toLowerCase();
+  if (status === 304) {
+    return true;
+  }
+  if (status !== 400) {
+    return false;
+  }
+  return (
+    message.includes("already requested") ||
+    message.includes("already provisioned") ||
+    nested.includes("already requested") ||
+    nested.includes("already provisioned")
+  );
 };
 
 const maskTokenForLog = (value?: string) => {
@@ -1072,15 +1385,35 @@ const moneriumApiRequest = async (params: {
 const eurcContractAddress = "0x808456652fdb597867f38412077A9182bf77359F"; // EURC contract address on Base
 
 app.use(cors());
-app.use(
-  express.json({
-    limit: "50mb",
-    verify: (req: any, _res, buf) => {
-      // Preserve raw body for Alchemy HMAC verification.
+
+// Alchemy HMAC must use the exact request bytes. On Vercel, a global
+// express.json() + JSON.stringify fallback breaks verification. Parse this
+// path with express.raw first; everything else keeps JSON.
+const alchemyRawParser = express.raw({ type: "*/*", limit: "50mb" });
+const jsonParser = express.json({
+  limit: "50mb",
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf.toString("utf8");
+  },
+});
+app.use((req: any, res, next) => {
+  if (req.method === "POST" && req.path === "/monerium/chain/transfers") {
+    return alchemyRawParser(req, res, (err) => {
+      if (err) return next(err);
+      const buf = Buffer.isBuffer(req.body)
+        ? req.body
+        : Buffer.from(typeof req.body === "string" ? req.body : "");
       req.rawBody = buf.toString("utf8");
-    },
-  }),
-);
+      try {
+        req.body = req.rawBody ? JSON.parse(req.rawBody) : {};
+      } catch {
+        req.body = {};
+      }
+      return next();
+    });
+  }
+  return jsonParser(req, res, next);
+});
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 app.use(express.text());
 
@@ -2065,7 +2398,15 @@ app.post("/monerium/oauth/start", async (req: any, res: any) => {
         );
     }
 
-    const { userId, email, appRedirectUri, appAutoRedirect, forceLogin } =
+    const {
+      userId,
+      email,
+      appRedirectUri,
+      appAutoRedirect,
+      forceLogin,
+      walletAddress,
+      walletClientUrl,
+    } =
       req.body ?? {};
     if (!userId || typeof userId !== "string") {
       return res
@@ -2087,6 +2428,14 @@ app.post("/monerium/oauth/start", async (req: any, res: any) => {
           ? appRedirectUri.trim()
           : undefined,
       appAutoRedirect: appAutoRedirect === true,
+      walletAddress:
+        typeof walletAddress === "string" && walletAddress.trim().length > 0
+          ? walletAddress.trim()
+          : undefined,
+      walletClientUrl:
+        typeof walletClientUrl === "string" && walletClientUrl.trim().length > 0
+          ? walletClientUrl.trim().replace(/\/$/, "")
+          : undefined,
       createdAt: Date.now(),
       expiresAt: Date.now() + moneriumPkceTtlMs,
     };
@@ -2114,10 +2463,11 @@ app.post("/monerium/oauth/start", async (req: any, res: any) => {
       skip_kyc: "false",
     };
 
-    if (forceLogin === true) {
-      authQuery.prompt = "login";
-      authQuery.max_age = "0";
-    }
+    // Ask Monerium's OAuth authorize endpoint for a fresh login. Do NOT send
+    // users to sandbox.monerium.dev / monerium.app portal logout/login pages —
+    // those are not the OAuth flow and cannot redirect back with a code.
+    authQuery.prompt = "login";
+    authQuery.max_age = "0";
 
     const authUrl = makeMoneriumUrl(moneriumAuthorizePath, authQuery);
 
@@ -2178,7 +2528,7 @@ app.get("/monerium/oauth/callback", async (req: any, res: any) => {
     const finishByRedirect = (
       status: string,
       message?: string,
-      session?: MoneriumTokenEntry | MoneriumTokenOverride,
+      _session?: MoneriumTokenEntry | MoneriumTokenOverride,
     ) => {
       if (!entry.appRedirectUri) return false;
       try {
@@ -2186,15 +2536,6 @@ app.get("/monerium/oauth/callback", async (req: any, res: any) => {
         url.searchParams.set("provider", "monerium");
         url.searchParams.set("status", status);
         url.searchParams.set("userId", entry.userId);
-        if (session?.accessToken) {
-          url.searchParams.set("accessToken", session.accessToken);
-        }
-        if (session?.refreshToken) {
-          url.searchParams.set("refreshToken", session.refreshToken);
-        }
-        if (typeof session?.expiresAt === "number") {
-          url.searchParams.set("expiresAt", String(session.expiresAt));
-        }
         if (message) {
           url.searchParams.set("message", message);
         }
@@ -2203,15 +2544,20 @@ app.get("/monerium/oauth/callback", async (req: any, res: any) => {
         const isNativeAppRedirect = /^(slickbill|slickbills):/i.test(
           entry.appRedirectUri,
         );
+        const isHttpAppRedirect = /^https?:/i.test(entry.appRedirectUri);
         const shouldAutoRedirect =
           isNativeAppRedirect ||
+          isHttpAppRedirect ||
           (moneriumAppAutoRedirectEnabled && entry.appAutoRedirect === true);
         const title = shouldAutoRedirect
-          ? "Returning to app"
-          : "Continue to app";
+          ? "Returning to SlickBills"
+          : "Continue to SlickBills";
         const subtitle = shouldAutoRedirect
-          ? "You are being returned to the app..."
-          : "Tap the button below to return to the app.";
+          ? "You are being returned to SlickBills…"
+          : "Tap continue to return to SlickBills.";
+        const continueLabel = isHttpAppRedirect
+          ? "Continue to SlickBills"
+          : "Open the app";
         res.status(200).setHeader("Content-Type", "text/html; charset=utf-8")
           .send(`<!doctype html>
 <html lang="en">
@@ -2237,7 +2583,7 @@ app.get("/monerium/oauth/callback", async (req: any, res: any) => {
     <div>
       <p>${subtitle}</p>
       <p>${safeMessage}</p>
-      <p><a href="${nextUrl}">Open the app</a></p>
+      <p><a href="${nextUrl}">${continueLabel}</a></p>
     </div>
     ${shouldAutoRedirect ? `<script>window.location.replace(${JSON.stringify(nextUrl)});</script>` : ""}
   </body>
@@ -2287,9 +2633,46 @@ app.get("/monerium/oauth/callback", async (req: any, res: any) => {
     await setMoneriumToken(entry.userId, token);
     await registerMoneriumWallet({
       privateUserId: entry.userId,
+      walletAddress: entry.walletAddress,
       token,
     });
     moneriumPkceStore.delete(state);
+
+    const savedWallet =
+      entry.walletAddress?.trim() ||
+      (await lookupWalletFromUsers(entry.userId));
+    const walletClientBase = (entry.walletClientUrl || "").replace(/\/$/, "");
+    const appRedirectIsHttp = /^https?:/i.test(entry.appRedirectUri ?? "");
+    if (savedWallet && walletClientBase && appRedirectIsHttp && entry.appRedirectUri) {
+      try {
+        const callback = new URL(entry.appRedirectUri);
+        callback.searchParams.set("monerium", "1");
+        callback.searchParams.set("provider", "monerium");
+        callback.searchParams.set("status", "success");
+        callback.searchParams.set("userId", entry.userId);
+        callback.searchParams.set("metamask", "1");
+        callback.searchParams.set("privy", "1");
+        callback.searchParams.set("flow", "sign");
+        callback.searchParams.set("kind", "link");
+        const linkUrl = new URL(`${walletClientBase}/wallet/privy-auth`);
+        linkUrl.searchParams.set("sb", "1");
+        linkUrl.searchParams.set("mode", "sign");
+        linkUrl.searchParams.set("kind", "link");
+        linkUrl.searchParams.set("address", savedWallet);
+        linkUrl.searchParams.set("user_id", entry.userId);
+        linkUrl.searchParams.set(
+          "sign_message",
+          "I hereby declare that I am the address owner.",
+        );
+        linkUrl.searchParams.set("callback_uri", callback.toString());
+        entry.appRedirectUri = linkUrl.toString();
+      } catch (error) {
+        console.warn("⚠️ Could not redirect OAuth success to wallet-client", {
+          userId: entry.userId,
+          error,
+        });
+      }
+    }
 
     if (finishByRedirect("success", undefined, token)) {
       return;
@@ -2635,13 +3018,10 @@ app.post("/monerium/wallet/register", async (req: any, res: any) => {
 
 app.post("/monerium/wallet/link", async (req: any, res: any) => {
   try {
-    const { userId, address, chain, profile, message, signature } =
-      req.body ?? {};
+    const { userId, address, chain, message, signature } = req.body ?? {};
     const requestedChain =
       typeof chain === "string" && chain.trim().length > 0 ? chain.trim() : "";
-    const resolvedChain = toMoneriumApiChain(
-      configuredMoneriumWalletChain || requestedChain,
-    );
+    const resolvedChain = resolveRequestedMoneriumChain(requestedChain);
 
     if (!userId || typeof userId !== "string") {
       return res
@@ -2684,16 +3064,6 @@ app.post("/monerium/wallet/link", async (req: any, res: any) => {
         );
     }
 
-    const payload = {
-      ...(typeof profile === "string" && profile.trim()
-        ? { profile: profile.trim() }
-        : {}),
-      address,
-      ...toMoneriumChainFields(resolvedChain),
-      message,
-      signature,
-    };
-
     const overrideAccessToken =
       typeof req.body?.moneriumAccessToken === "string"
         ? req.body.moneriumAccessToken
@@ -2706,13 +3076,105 @@ app.post("/monerium/wallet/link", async (req: any, res: any) => {
       typeof req.body?.moneriumExpiresAt === "number"
         ? req.body.moneriumExpiresAt
         : undefined;
+    const tokenOverride = {
+      accessToken: overrideAccessToken,
+      refreshToken: overrideRefreshToken,
+      expiresAt: overrideExpiresAt,
+    };
+
+    const profileIds = await loadMoneriumProfileIds({
+      userId,
+      tokenOverride,
+    });
+
+    const lookup = await lookupMoneriumAddress({
+      userId,
+      address,
+      tokenOverride,
+      timeoutMs: moneriumLinkVerifyFetchTimeoutMs,
+    });
+
+    if (lookup.kind === "owned") {
+      console.log("ℹ️ Monerium address already on this account", {
+        userId,
+        address,
+        profileId: lookup.profile || null,
+      });
+      await registerMoneriumWallet({
+        privateUserId: userId,
+        walletAddress: address,
+        token:
+          moneriumTokenStore.get(userId) ?? (await loadMoneriumToken(userId)),
+      });
+      return res.status(200).json({
+        ok: true,
+        alreadyLinked: true,
+        linkedConfirmed: true,
+        data: lookup.data,
+        linkedAddresses: lookup.data,
+        matchedEntry: {
+          address: normalizeEvmAddress(address),
+          profile: lookup.profile || undefined,
+        },
+      });
+    }
+
+    if (lookup.kind === "elsewhere") {
+      return res.status(409).json(
+        makeError(
+          "MONERIUM_WALLET_LINKED_ELSEWHERE",
+          "This wallet is already linked to another Monerium profile. It is not on this Monerium login, so it cannot be attached here.",
+          { address },
+          409,
+        ),
+      );
+    }
+
+    const alreadyLinked = await findLinkedAddressAcrossProfiles({
+      userId,
+      address,
+      tokenOverride,
+      profileIds,
+      timeoutMs: moneriumLinkVerifyFetchTimeoutMs,
+    });
+
+    if (alreadyLinked) {
+      const matchedEntry = summarizeMoneriumAddressRow(alreadyLinked.row);
+      console.log("ℹ️ Monerium address already on this account", {
+        userId,
+        address,
+        profileId: alreadyLinked.profileId || null,
+      });
+      await registerMoneriumWallet({
+        privateUserId: userId,
+        walletAddress: address,
+        token:
+          moneriumTokenStore.get(userId) ?? (await loadMoneriumToken(userId)),
+      });
+      return res.status(200).json({
+        ok: true,
+        alreadyLinked: true,
+        linkedConfirmed: true,
+        data: alreadyLinked.data,
+        linkedAddresses: alreadyLinked.data,
+        matchedEntry,
+      });
+    }
+
+    const targetProfile = profileIds[0] ?? "";
+
+    const payload = {
+      address,
+      ...toMoneriumChainFields(resolvedChain),
+      message,
+      signature,
+    };
 
     console.log("➡️ Monerium wallet link request", {
       userId,
       address,
       chain: (payload as any).chain,
       network: (payload as any).network,
-      hasProfile: Boolean((payload as any).profile),
       hasMessage: Boolean(message),
       hasSignature: Boolean(signature),
       hasOverrideToken: Boolean(overrideAccessToken),
@@ -2721,41 +3183,72 @@ app.post("/monerium/wallet/link", async (req: any, res: any) => {
       overrideExpiresAt,
     });
 
-    const data = await moneriumApiRequest({
-      userId,
-      method: "POST",
-      path: moneriumWalletLinkPath,
-      body: payload,
-      tokenOverride: {
-        accessToken: overrideAccessToken,
-        refreshToken: overrideRefreshToken,
-        expiresAt: overrideExpiresAt,
-      },
-    });
-
-    let linkedConfirmed = false;
-    let lastAddressesData: unknown = null;
-
-    for (let attempt = 1; attempt <= moneriumLinkVerifyAttempts; attempt += 1) {
-      const addresses = await moneriumApiRequest({
+    let data: unknown = null;
+    try {
+      data = await moneriumApiRequest({
         userId,
-        method: "GET",
+        method: "POST",
         path: moneriumWalletLinkPath,
-        tokenOverride: {
-          accessToken: overrideAccessToken,
-          refreshToken: overrideRefreshToken,
-          expiresAt: overrideExpiresAt,
-        },
+        body: payload,
+        tokenOverride,
+      });
+    } catch (error) {
+      if (!isAddressLinkedElsewhereError(error)) {
+        throw error;
+      }
+      const owned = await lookupMoneriumAddress({
+        userId,
+        address,
+        tokenOverride,
         timeoutMs: moneriumLinkVerifyFetchTimeoutMs,
       });
+      if (owned.kind === "owned") {
+        await registerMoneriumWallet({
+          privateUserId: userId,
+          walletAddress: address,
+          token:
+            moneriumTokenStore.get(userId) ?? (await loadMoneriumToken(userId)),
+        });
+        return res.status(200).json({
+          ok: true,
+          alreadyLinked: true,
+          linkedConfirmed: true,
+          data: owned.data,
+          linkedAddresses: owned.data,
+          matchedEntry: {
+            address: normalizeEvmAddress(address),
+            profile: owned.profile || undefined,
+          },
+        });
+      }
+      return res.status(409).json(
+        makeError(
+          "MONERIUM_WALLET_LINKED_ELSEWHERE",
+          "This wallet is already linked to another Monerium profile. It is not on this Monerium login, so it cannot be attached here.",
+          { address, upstream: error },
+          409,
+        ),
+      );
+    }
 
-      lastAddressesData = addresses;
-      linkedConfirmed = isMoneriumAddressLinked(addresses, address);
+    let linkedConfirmed = false;
+    let lastAddressesData: unknown = data;
+    let matchedProfileId = targetProfile;
 
-      if (linkedConfirmed) {
+    for (let attempt = 1; attempt <= moneriumLinkVerifyAttempts; attempt += 1) {
+      const owned = await findLinkedAddressAcrossProfiles({
+        userId,
+        address,
+        tokenOverride,
+        profileIds,
+        timeoutMs: moneriumLinkVerifyFetchTimeoutMs,
+      });
+      if (owned) {
+        linkedConfirmed = true;
+        lastAddressesData = owned.data;
+        matchedProfileId = owned.profileId || targetProfile;
         break;
       }
-
       if (attempt < moneriumLinkVerifyAttempts) {
         await sleep(moneriumLinkVerifyIntervalMs);
       }
@@ -2766,6 +3259,9 @@ app.post("/monerium/wallet/link", async (req: any, res: any) => {
           findLinkedMoneriumAddressRow(lastAddressesData, address),
         )
       : null;
+    if (matchedEntry && matchedProfileId && !matchedEntry.profile) {
+      (matchedEntry as { profile?: string }).profile = matchedProfileId;
+    }
 
     console.log("ℹ️ Monerium wallet link verification result", {
       userId,
@@ -2780,8 +3276,7 @@ app.post("/monerium/wallet/link", async (req: any, res: any) => {
         privateUserId: userId,
         walletAddress: address,
         token:
-          moneriumTokenStore.get(userId) ??
-          (await loadMoneriumToken(userId)),
+          moneriumTokenStore.get(userId) ?? (await loadMoneriumToken(userId)),
       });
     }
 
@@ -2849,6 +3344,12 @@ app.get("/monerium/wallet/addresses", async (req: any, res: any) => {
         );
     }
 
+    const tokenOverride = {
+      accessToken: overrideAccessToken,
+      refreshToken: overrideRefreshToken,
+      expiresAt: overrideExpiresAt,
+    };
+
     console.log("➡️ Monerium wallet addresses request", {
       userId,
       hasOverrideToken: Boolean(overrideAccessToken),
@@ -2858,16 +3359,24 @@ app.get("/monerium/wallet/addresses", async (req: any, res: any) => {
       expectedAddress: expectedAddress || undefined,
     });
 
-    const data = await moneriumApiRequest({
+    const profileIds = await loadMoneriumProfileIds({
       userId,
-      method: "GET",
-      path: moneriumWalletLinkPath,
-      tokenOverride: {
-        accessToken: overrideAccessToken,
-        refreshToken: overrideRefreshToken,
-        expiresAt: overrideExpiresAt,
-      },
+      tokenOverride,
     });
+    const owned = expectedAddress
+      ? await findLinkedAddressAcrossProfiles({
+          userId,
+          address: expectedAddress,
+          tokenOverride,
+          profileIds,
+        })
+      : null;
+    const data =
+      owned?.data ??
+      (await fetchMoneriumAddresses({
+        userId,
+        tokenOverride,
+      }));
 
     const addresses = extractMoneriumAddressRows(data);
     const topLevelKeys =
@@ -2876,7 +3385,7 @@ app.get("/monerium/wallet/addresses", async (req: any, res: any) => {
         : undefined;
     const firstAddressRow = addresses.length > 0 ? addresses[0] : undefined;
     const linked = expectedAddress
-      ? isMoneriumAddressLinked(data, expectedAddress)
+      ? Boolean(owned) || isMoneriumAddressLinked(data, expectedAddress)
       : undefined;
 
     const trackedAddress =
@@ -2950,9 +3459,13 @@ app.get("/monerium/ibans", async (req: any, res: any) => {
       typeof req.query?.moneriumExpiresAt === "string"
         ? Number(req.query.moneriumExpiresAt)
         : undefined;
+    const requestedAddress =
+      typeof req.query.address === "string" ? req.query.address.trim() : "";
+    const normalizedRequestedAddress = normalizeEvmAddress(requestedAddress);
 
     console.log("➡️ Monerium IBAN fetch request", {
       userId,
+      address: requestedAddress || null,
       hasOverrideToken: Boolean(overrideAccessToken),
       overrideAccessToken: maskTokenForLog(overrideAccessToken),
       hasOverrideRefreshToken: Boolean(overrideRefreshToken),
@@ -2970,7 +3483,7 @@ app.get("/monerium/ibans", async (req: any, res: any) => {
       },
     });
 
-    const ibanRows = extractMoneriumAddressRows({
+    const rawIbanRows = extractMoneriumAddressRows({
       ibans: Array.isArray(data)
         ? data
         : data && typeof data === "object"
@@ -2992,44 +3505,38 @@ app.get("/monerium/ibans", async (req: any, res: any) => {
           : [],
     });
 
+    const ibanRows = normalizedRequestedAddress
+      ? rawIbanRows.filter((entry) => {
+          if (!entry || typeof entry !== "object") {
+            return false;
+          }
+          return collectAddressCandidates(
+            entry as Record<string, unknown>,
+          ).includes(normalizedRequestedAddress);
+        })
+      : rawIbanRows;
+
     const topLevelKeys =
       data && typeof data === "object" && !Array.isArray(data)
         ? Object.keys(data as Record<string, unknown>).slice(0, 20)
         : undefined;
     const firstIbanRow = ibanRows.length > 0 ? ibanRows[0] : undefined;
 
-    const ibanCount = Array.isArray(data)
-      ? data.length
-      : data && typeof data === "object"
-        ? (() => {
-            const record = data as Record<string, unknown>;
-            const candidates = [
-              record.ibans,
-              record.items,
-              record.results,
-              record.data,
-            ];
-            for (const candidate of candidates) {
-              if (Array.isArray(candidate)) {
-                return candidate.length;
-              }
-            }
-            return undefined;
-          })()
-        : undefined;
-
     console.log("✅ Monerium IBAN fetch success", {
       userId,
+      address: requestedAddress || null,
       resultType: Array.isArray(data) ? "array" : typeof data,
-      count: ibanCount,
+      count: ibanRows.length,
+      unscopedCount: rawIbanRows.length,
       topLevelKeys,
       firstIbanRow,
     });
 
     return res.status(200).json({
       ok: true,
-      data,
-      count: ibanCount,
+      data: { ibans: ibanRows },
+      ibans: ibanRows,
+      count: ibanRows.length,
       resultType: Array.isArray(data) ? "array" : typeof data,
       topLevelKeys,
       firstIbanRow,
@@ -3049,14 +3556,269 @@ app.get("/monerium/ibans", async (req: any, res: any) => {
   }
 });
 
+app.post("/monerium/ibans/ensure", async (req: any, res: any) => {
+  try {
+    const { userId, address, chain } = req.body ?? {};
+    const requestedChain =
+      typeof chain === "string" && chain.trim().length > 0 ? chain.trim() : "";
+    const resolvedChain = resolveRequestedMoneriumChain(requestedChain);
+
+    if (!userId || typeof userId !== "string") {
+      return res
+        .status(400)
+        .json(makeError("MONERIUM_USER_ID_MISSING", "Missing userId."));
+    }
+    if (!address || typeof address !== "string") {
+      return res
+        .status(400)
+        .json(makeError("MONERIUM_ADDRESS_MISSING", "Missing wallet address."));
+    }
+    if (!resolvedChain) {
+      return res
+        .status(400)
+        .json(
+          makeError(
+            "MONERIUM_CHAIN_MISSING",
+            "Missing chain. Provide chain in request or set MONERIUM_WALLET_CHAIN.",
+          ),
+        );
+    }
+
+    const overrideAccessToken =
+      typeof req.body?.moneriumAccessToken === "string"
+        ? req.body.moneriumAccessToken
+        : undefined;
+    const overrideRefreshToken =
+      typeof req.body?.moneriumRefreshToken === "string"
+        ? req.body.moneriumRefreshToken
+        : undefined;
+    const overrideExpiresAt =
+      typeof req.body?.moneriumExpiresAt === "number"
+        ? req.body.moneriumExpiresAt
+        : undefined;
+    const tokenOverride = {
+      accessToken: overrideAccessToken,
+      refreshToken: overrideRefreshToken,
+      expiresAt: overrideExpiresAt,
+    };
+
+    const profileIds = await loadMoneriumProfileIds({
+      userId,
+      tokenOverride,
+    });
+
+    const fetchIbanRows = async () => {
+      const collected: unknown[] = [];
+      const seen = new Set<string>();
+      const addRows = (rows: unknown[]) => {
+        for (const row of rows) {
+          const iban = issuedIbanFromRow(row) ?? JSON.stringify(row);
+          if (seen.has(iban)) {
+            continue;
+          }
+          seen.add(iban);
+          collected.push(row);
+        }
+      };
+
+      const targets = ["", ...profileIds];
+      const fetched = new Set<string>();
+      for (const profile of targets) {
+        if (fetched.has(profile)) {
+          continue;
+        }
+        fetched.add(profile);
+        try {
+          const data = await moneriumApiRequest({
+            userId,
+            method: "GET",
+            path: moneriumIbansPath,
+            query: profile ? { profile } : undefined,
+            tokenOverride,
+          });
+          addRows(listMoneriumIbanRowsFromApiData(data));
+        } catch (error) {
+          console.warn("⚠️ GET /ibans failed", {
+            userId,
+            profile: profile || "default",
+            error,
+          });
+        }
+      }
+      return collected;
+    };
+
+    const matchingIssued = (rows: unknown[]) =>
+      rows.filter(
+        (row) => issuedIbanFromRow(row) && ibanRowMatchesWallet(row, address),
+      );
+
+    const issuedOnProfile = (rows: unknown[]) =>
+      rows.filter((row) => issuedIbanFromRow(row));
+
+    const waitForWalletIban = async () => {
+      let rows = await fetchIbanRows();
+      let matching = matchingIssued(rows);
+      for (let attempt = 1; attempt < 3 && matching.length === 0; attempt += 1) {
+        await sleep(400);
+        rows = await fetchIbanRows();
+        matching = matchingIssued(rows);
+      }
+      return { rows, matching };
+    };
+
+    const moveExistingIban = async (iban: string) => {
+      console.log("➡️ Moving existing Monerium IBAN to wallet", {
+        userId,
+        address,
+        chain: resolvedChain,
+      });
+      await moneriumApiRequest({
+        userId,
+        method: "PATCH",
+        path: `${moneriumIbansPath.replace(/\/$/, "")}/${encodeURIComponent(iban)}`,
+        body: {
+          address,
+          ...toMoneriumChainFields(resolvedChain),
+        },
+        tokenOverride,
+      });
+    };
+
+    console.log("➡️ Monerium IBAN ensure", {
+      userId,
+      address,
+      chain: resolvedChain,
+    });
+
+    let profileRows = await fetchIbanRows();
+    let matching = matchingIssued(profileRows);
+    if (matching.length > 0) {
+      return res.status(200).json({
+        ok: true,
+        attached: true,
+        moved: false,
+        requested: false,
+        alreadyExists: false,
+        ibans: matching,
+        data: { ibans: matching },
+        firstIbanRow: matching[0],
+      });
+    }
+
+    let existing = issuedOnProfile(profileRows)[0];
+    if (existing) {
+      const iban = issuedIbanFromRow(existing);
+      if (!iban) {
+        return res
+          .status(500)
+          .json(
+            makeError(
+              "MONERIUM_IBAN_MOVE_FAILED",
+              "Profile has an IBAN but it could not be read.",
+              existing,
+              500,
+            ),
+          );
+      }
+      await moveExistingIban(iban);
+      ({ matching } = await waitForWalletIban());
+      const movedRows =
+        matching.length > 0
+          ? matching
+          : [
+              {
+                ...(existing as Record<string, unknown>),
+                address,
+                chain: resolvedChain,
+                iban,
+              },
+            ];
+      return res.status(200).json({
+        ok: true,
+        attached: true,
+        moved: true,
+        requested: false,
+        alreadyExists: true,
+        ibans: movedRows,
+        data: { ibans: movedRows },
+        firstIbanRow: movedRows[0],
+      });
+    }
+
+    let requested = false;
+    try {
+      await moneriumApiRequest({
+        userId,
+        method: "POST",
+        path: moneriumIbansPath,
+        body: {
+          address,
+          ...toMoneriumChainFields(resolvedChain),
+        },
+        tokenOverride,
+      });
+      requested = true;
+    } catch (error) {
+      if (!isIbanAlreadyProvisionedError(error)) {
+        throw error;
+      }
+      profileRows = await fetchIbanRows();
+      existing = issuedOnProfile(profileRows)[0];
+      const iban = issuedIbanFromRow(existing);
+      if (iban) {
+        await moveExistingIban(iban);
+      }
+    }
+
+    ({ matching } = await waitForWalletIban());
+    const fallbackIban = issuedIbanFromRow(existing);
+    const ensuredRows =
+      matching.length > 0
+        ? matching
+        : fallbackIban
+          ? [
+              {
+                ...((existing && typeof existing === "object"
+                  ? existing
+                  : {}) as Record<string, unknown>),
+                address,
+                chain: resolvedChain,
+                iban: fallbackIban,
+              },
+            ]
+          : matching;
+    return res.status(200).json({
+      ok: true,
+      attached: ensuredRows.length > 0,
+      moved: Boolean(existing) && !requested,
+      requested,
+      alreadyExists: Boolean(existing) && !requested,
+      ibans: ensuredRows,
+      data: { ibans: ensuredRows },
+      firstIbanRow: ensuredRows[0],
+    });
+  } catch (error) {
+    console.error("❌ Monerium IBAN ensure failed:", error);
+    const failure =
+      error && typeof error === "object" && "status" in error
+        ? (error as any)
+        : makeError(
+            "MONERIUM_IBAN_ENSURE_FAILED",
+            error instanceof Error ? error.message : "Unknown error",
+            error,
+            500,
+          );
+    return res.status(failure.status ?? 500).json(failure);
+  }
+});
+
 app.post("/monerium/ibans/request", async (req: any, res: any) => {
   try {
     const { userId, address, chain } = req.body ?? {};
     const requestedChain =
       typeof chain === "string" && chain.trim().length > 0 ? chain.trim() : "";
-    const resolvedChain = toMoneriumApiChain(
-      configuredMoneriumWalletChain || requestedChain,
-    );
+    const resolvedChain = resolveRequestedMoneriumChain(requestedChain);
 
     if (!userId || typeof userId !== "string") {
       return res
@@ -3123,12 +3885,7 @@ app.post("/monerium/ibans/request", async (req: any, res: any) => {
       data,
     });
   } catch (error) {
-    if (
-      error &&
-      typeof error === "object" &&
-      "status" in error &&
-      Number((error as any).status) === 304
-    ) {
+    if (isIbanAlreadyProvisionedError(error)) {
       const details = (error as any)?.error?.details;
       return res.status(200).json({
         ok: true,
@@ -3436,11 +4193,27 @@ app.post("/monerium/orders/send", async (req: any, res: any) => {
       walletAddress: orderPayload.address,
     });
 
-    const invoiceIdRaw =
-      typeof req.body?.invoiceId === "string" ||
-      typeof req.body?.invoiceId === "number"
-        ? String(req.body.invoiceId).trim()
-        : "";
+    const parsePositiveIntIds = (value: unknown): number[] => {
+      const out: number[] = [];
+      const push = (item: unknown) => {
+        const n =
+          typeof item === "number" ? item : Number(String(item ?? "").trim());
+        if (Number.isInteger(n) && n > 0) out.push(n);
+      };
+      if (Array.isArray(value)) {
+        value.forEach(push);
+      } else if (value != null && String(value).trim() !== "") {
+        push(value);
+      }
+      return [...new Set(out)];
+    };
+    const invoiceIds = [
+      ...new Set([
+        ...parsePositiveIntIds(req.body?.invoiceIds),
+        ...parsePositiveIntIds(req.body?.invoiceId),
+      ]),
+    ];
+    const invoiceIdRaw = invoiceIds[0] != null ? String(invoiceIds[0]) : "";
     // In-platform: machine invoice id only. Do not put the description on the
     // payment memo (that is leaked on bank statements and is not used to match).
     // Never invent `sb…` as referenceNumber — Monerium sends that field as an
@@ -3562,20 +4335,20 @@ app.post("/monerium/orders/send", async (req: any, res: any) => {
 
     // Persist order id on the invoice so Alchemy settle can match even if the
     // client fails to write moneriumOrderId before the webhook arrives.
-    if (invoiceIdRaw && /^\d+$/.test(invoiceIdRaw)) {
+    if (invoiceIds.length > 0) {
       const created = summarizeMoneriumOrder(data);
       const nested = readMoneriumOrdersArray(data).map(summarizeMoneriumOrder);
       const orderId =
         created.id?.trim() || nested.find((o) => o.id)?.id?.trim() || "";
       if (orderId) {
-        const linked = await linkInvoiceToMoneriumOrder({
-          invoiceId: Number(invoiceIdRaw),
+        const linked = await linkInvoicesToMoneriumOrder({
+          invoiceIds,
           orderId,
           payerPrivateUserId: userId,
         });
         if (!linked.ok) {
           console.warn("⚠️ Failed to link invoice to Monerium order", {
-            invoiceId: invoiceIdRaw,
+            invoiceIds,
             orderId,
             detail: linked.detail,
           });
@@ -4326,6 +5099,82 @@ const notifyMoneriumAccountTransfer = async (params: {
   return { ...result, appUserId };
 };
 
+/** Per-user debounce for statements reconcile (no Monerium/Alchemy spam). */
+const statementsReconcileLastAt = new Map<string, number>();
+const STATEMENTS_RECONCILE_DEBOUNCE_MS = 45_000;
+const STATEMENTS_RECONCILE_BODY_MAX = 40;
+
+/**
+ * Catch-up settle using orders the app already fetched for Statements.
+ * POST /monerium/settle/from-statements
+ * Body: { userId, orders: [...] }
+ * Does not call Monerium or Alchemy — matches against Supabase only.
+ */
+app.post("/monerium/settle/from-statements", async (req: any, res: any) => {
+  try {
+    const userId =
+      typeof req.body?.userId === "string" ? req.body.userId.trim() : "";
+    if (!userId) {
+      return res
+        .status(400)
+        .json(makeError("MONERIUM_USER_ID_MISSING", "Missing userId."));
+    }
+
+    const token = await loadMoneriumToken(userId);
+    if (!token?.accessToken) {
+      return res
+        .status(401)
+        .json(
+          makeError(
+            "MONERIUM_SESSION_MISSING",
+            "No Monerium session for this user.",
+          ),
+        );
+    }
+
+    const now = Date.now();
+    const lastAt = statementsReconcileLastAt.get(userId) ?? 0;
+    if (now - lastAt < STATEMENTS_RECONCILE_DEBOUNCE_MS) {
+      return res.status(200).json({
+        ok: true,
+        skipped: true,
+        reason: "debounced",
+        retryAfterMs: STATEMENTS_RECONCILE_DEBOUNCE_MS - (now - lastAt),
+      });
+    }
+    statementsReconcileLastAt.set(userId, now);
+
+    const rawOrders = Array.isArray(req.body?.orders) ? req.body.orders : [];
+    const orders = rawOrders.slice(0, STATEMENTS_RECONCILE_BODY_MAX);
+
+    const result = await reconcileInvoicesFromStatementOrders({
+      privateUserId: userId,
+      orders,
+    });
+
+    return res.status(200).json({
+      ok: true,
+      skipped: false,
+      scanned: result.scanned,
+      matched: result.matched,
+      newlyRecorded: result.newlyRecorded,
+      results: result.results,
+    });
+  } catch (error) {
+    console.error("❌ settle/from-statements failed:", error);
+    const failure =
+      error && typeof error === "object" && "status" in error
+        ? (error as any)
+        : makeError(
+            "SETTLE_FROM_STATEMENTS_FAILED",
+            error instanceof Error ? error.message : "Unknown error",
+            error,
+            500,
+          );
+    return res.status(failure.status ?? 500).json(failure);
+  }
+});
+
 /**
  * Manual Phase 2 test: resolve Monerium order(s) for a mint/burn txHash.
  * POST /monerium/settle/by-txhash
@@ -4411,7 +5260,8 @@ app.post("/monerium/webhooks", async (_req: any, res: any) => {
 });
 
 /**
- * Alchemy Address Activity — txHash hit → FCM, then invoice match. Always 2xx.
+ * Alchemy Address Activity — ack fast (Alchemy ~5s timeout), then settle in
+ * waitUntil. Slow Monerium/Supabase work after 200 was pausing the webhook.
  */
 app.post("/monerium/chain/transfers", async (req: any, res: any) => {
   try {
@@ -4419,11 +5269,14 @@ app.post("/monerium/chain/transfers", async (req: any, res: any) => {
       typeof req.headers["x-alchemy-signature"] === "string"
         ? req.headers["x-alchemy-signature"]
         : undefined;
-    const rawBody: Buffer | string =
-      req.rawBody ??
-      (typeof req.body === "string"
-        ? req.body
-        : JSON.stringify(req.body ?? {}));
+    const rawBody =
+      typeof req.rawBody === "string"
+        ? req.rawBody
+        : Buffer.isBuffer(req.body)
+          ? req.body.toString("utf8")
+          : typeof req.body === "string"
+            ? req.body
+            : "";
 
     const valid = verifyAlchemySignature({
       rawBody,
@@ -4434,20 +5287,25 @@ app.post("/monerium/chain/transfers", async (req: any, res: any) => {
       console.warn("⚠️ Alchemy webhook signature invalid or key missing", {
         hasSigningKey: Boolean(alchemyWebhookSigningKey),
         hasSignature: Boolean(signature),
+        bodyBytes: Buffer.byteLength(rawBody, "utf8"),
+        signatureLen: signature?.trim().length ?? 0,
+        keyLen: alchemyWebhookSigningKey.trim().length,
+        usedRawBody: typeof req.rawBody === "string",
       });
+      // Still 200 so Alchemy does not retry/pause on a bad key paste.
       return res.status(200).json({ ok: false, reason: "invalid_signature" });
     }
 
     const payload =
-      typeof req.body === "string"
-        ? (() => {
+      typeof req.body === "object" && req.body != null
+        ? req.body
+        : (() => {
             try {
-              return JSON.parse(req.body);
+              return JSON.parse(rawBody);
             } catch {
               return null;
             }
-          })()
-        : req.body;
+          })();
 
     const payloadSummary = summarizeAlchemyPayload(payload);
     const transfers = extractMintBurnTransfers(
@@ -4456,7 +5314,7 @@ app.post("/monerium/chain/transfers", async (req: any, res: any) => {
       { mintBurnOnly: false },
     );
 
-    console.log("➡️ Alchemy chain transfers", {
+    console.log("➡️ Alchemy chain transfers (acked)", {
       activityCount: payloadSummary.activityCount,
       sample: payloadSummary.sample,
       transferCount: transfers.length,
@@ -4466,77 +5324,94 @@ app.post("/monerium/chain/transfers", async (req: any, res: any) => {
       eureFilter: moneriumEureTokenAddress || null,
     });
 
-    const results = [];
-    for (const transfer of transfers) {
-      let notification: unknown = null;
-      try {
-        if (transfer.kind === "burn") {
-          notification = { skipped: true, reason: "burn" };
-        } else {
-          const byWallet = await loadMoneriumTokenByWallet(
-            transfer.walletAddress,
-          );
-          if (!byWallet) {
-            console.warn("⚠️ Alchemy transfer wallet not in monerium_tokens", {
+    // Respond before Monerium/FCM/settle — Alchemy aborts ~5s and pauses webhooks.
+    res.status(200).json({
+      ok: true,
+      accepted: true,
+      transferCount: transfers.length,
+    });
+
+    if (transfers.length === 0) return;
+
+    waitUntil(
+      (async () => {
+        for (const transfer of transfers) {
+          let notification: unknown = null;
+          try {
+            if (transfer.kind === "burn") {
+              notification = { skipped: true, reason: "burn" };
+            } else {
+              const byWallet = await loadMoneriumTokenByWallet(
+                transfer.walletAddress,
+              );
+              if (!byWallet) {
+                console.warn("⚠️ Alchemy transfer wallet not in monerium_tokens", {
+                  wallet: transfer.walletAddress,
+                  txHash: transfer.txHash,
+                });
+                notification = { skipped: true, reason: "unknown_wallet" };
+              } else {
+                notification = await notifyMoneriumAccountTransfer({
+                  privateUserId: byWallet.privateUserId,
+                  kind: transfer.kind,
+                  txHash: transfer.txHash,
+                  amountHint: transfer.value,
+                });
+              }
+            }
+          } catch (err) {
+            console.error("❌ Alchemy transfer notify failed", {
+              txHash: transfer.txHash,
               wallet: transfer.walletAddress,
-              txHash: transfer.txHash,
+              error: err instanceof Error ? err.message : err,
             });
-            notification = { skipped: true, reason: "unknown_wallet" };
-          } else {
-            notification = await notifyMoneriumAccountTransfer({
-              privateUserId: byWallet.privateUserId,
-              kind: transfer.kind,
+            notification = {
+              error: err instanceof Error ? err.message : String(err),
+            };
+          }
+
+          let settle: unknown = null;
+          try {
+            settle = await resolveOrdersForTransfer({
               txHash: transfer.txHash,
+              walletAddress: transfer.walletAddress,
+              kind: transfer.kind,
               amountHint: transfer.value,
             });
+          } catch (err) {
+            console.error("❌ Alchemy invoice match failed", {
+              txHash: transfer.txHash,
+              wallet: transfer.walletAddress,
+              error: err instanceof Error ? err.message : err,
+            });
+            settle = {
+              error: err instanceof Error ? err.message : String(err),
+            };
           }
+
+          console.log("ℹ️ Alchemy transfer processed", {
+            txHash: transfer.txHash,
+            wallet: transfer.walletAddress,
+            kind: transfer.kind,
+            notification,
+            settleOk:
+              settle &&
+              typeof settle === "object" &&
+              (settle as { ok?: boolean }).ok === true,
+          });
         }
-      } catch (err) {
-        console.error("❌ Alchemy transfer notify failed", {
-          txHash: transfer.txHash,
-          wallet: transfer.walletAddress,
-          error: err instanceof Error ? err.message : err,
-        });
-        notification = {
-          error: err instanceof Error ? err.message : String(err),
-        };
-      }
-
-      let settle: unknown = null;
-      try {
-        settle = await resolveOrdersForTransfer({
-          txHash: transfer.txHash,
-          walletAddress: transfer.walletAddress,
-          kind: transfer.kind,
-          amountHint: transfer.value,
-        });
-      } catch (err) {
-        console.error("❌ Alchemy invoice match failed", {
-          txHash: transfer.txHash,
-          wallet: transfer.walletAddress,
-          error: err instanceof Error ? err.message : err,
-        });
-        settle = {
-          error: err instanceof Error ? err.message : String(err),
-        };
-      }
-
-      results.push({ transfer, notification, settle });
-    }
-
-    return res.status(200).json({
-      ok: true,
-      data: {
-        transferCount: transfers.length,
-        results,
-      },
-    });
+      })().catch((err) => {
+        console.error("❌ Alchemy background settle failed:", err);
+      }),
+    );
   } catch (error) {
     console.error("❌ Alchemy chain transfers webhook failed:", error);
-    return res.status(200).json({
-      ok: false,
-      error: error instanceof Error ? error.message : "Unknown error",
-    });
+    if (!res.headersSent) {
+      return res.status(200).json({
+        ok: false,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   }
 });
 

@@ -16,6 +16,8 @@ import 'package:slickbill/config/env_config.dart';
 import 'package:slickbill/core/services/app_analytics.dart';
 import 'package:slickbill/core/services/push_notification_service.dart';
 import 'package:slickbill/feature_auth/screens/home_screen.dart';
+import 'package:slickbill/feature_auth/screens/forgot_password.dart';
+import 'package:slickbill/feature_auth/screens/reset_password.dart';
 import 'package:slickbill/feature_auth/screens/sign_up.dart';
 import 'package:slickbill/feature_auth/screens/spash_screen.dart';
 import 'package:slickbill/feature_auth/services/deep_links.dart';
@@ -261,6 +263,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               page: () => SignIn(
                 invoice_token: Get.parameters['invoice_token'],
               ),
+            ),
+            GetPage(
+              name: '/forgot-password',
+              page: () => const ForgotPassword(),
+            ),
+            GetPage(
+              name: '/reset-password',
+              page: () => const ResetPassword(),
             ),
             GetPage(name: '/home-screen', page: () => HomeScreen()),
             GetPage(

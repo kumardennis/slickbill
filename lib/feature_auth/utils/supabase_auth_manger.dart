@@ -223,6 +223,34 @@ class SupabaseAuthManger {
     return '${AppEnv.appBaseUrl}/sign-in?verified=1';
   }
 
+  String _passwordRedirectTo() {
+    if (kIsWeb && Uri.base.host.contains('localhost')) {
+      return '${Uri.base.origin}/reset-password';
+    }
+    return '${AppEnv.appBaseUrl}/reset-password';
+  }
+
+  Future<void> sendPasswordResetEmail(String email) async {
+    final trimmed = email.trim();
+    if (trimmed.isEmpty) {
+      throw Exception('Please enter your email address first.');
+    }
+
+    await supabseClient.auth.resetPasswordForEmail(
+      trimmed,
+      redirectTo: _passwordRedirectTo(),
+    );
+  }
+
+  Future<void> updatePassword(String password) async {
+    final response = await supabseClient.auth.updateUser(
+      UserAttributes(password: password),
+    );
+    if (response.user == null) {
+      throw Exception('Could not save password. Try the reset link again.');
+    }
+  }
+
   Future<bool> signInWithGoogle() async {
     return _handleOAuthSignIn(
       authProvider: () => _googleAuthService.signInWithGoogle(),

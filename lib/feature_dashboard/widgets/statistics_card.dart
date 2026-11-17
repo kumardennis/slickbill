@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:slickbill/shared_widgets/sb_money_text.dart';
 import 'package:slickbill/theme/sb_colors.dart';
 
@@ -54,6 +55,55 @@ class StatisticsCard extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class OverviewAllUnpaidBanner extends StatelessWidget {
+  final VoidCallback onSelectAllTime;
+  final VoidCallback onOpenProfile;
+
+  const OverviewAllUnpaidBanner({
+    super.key,
+    required this.onSelectAllTime,
+    required this.onOpenProfile,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final labelStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: SbColors.onSurfaceVariant,
+          fontSize: 12,
+        );
+    final linkStyle = Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: SbColors.secondary,
+          fontWeight: FontWeight.w600,
+          fontSize: 12,
+        );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: SbColors.surfaceLowest,
+        borderRadius: BorderRadius.circular(SbRadii.md),
+      ),
+      child: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text('lbl_SeeAllUnpaidPrefix'.tr, style: labelStyle),
+          const SizedBox(width: 4),
+          InkWell(
+            onTap: onSelectAllTime,
+            child: Text('lbl_AllTime'.tr, style: linkStyle),
+          ),
+          Text(' · ', style: labelStyle),
+          InkWell(
+            onTap: onOpenProfile,
+            child: Text('lbl_Profile'.tr, style: linkStyle),
+          ),
+        ],
+      ),
     );
   }
 }

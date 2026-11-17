@@ -177,6 +177,21 @@ class SentInvoicesClass {
         .fold<double>(0.0, (sum, invoice) => sum + invoice.amount);
   }
 
+  /// Open amount created in [period]'s month. Uses existing list API (no Edge change).
+  Future<double?> getOpenSumInMonth(InvoiceListQuery period) async {
+    if (period.allTime) return getPendingInvoicesSum();
+    final invoices = await getPrivateSentInvoices(
+      query: InvoiceListQuery(
+        month: period.month,
+        status: InvoiceStatusFilter.all,
+        monthBasis: period.monthBasis,
+      ),
+      silent: true,
+    );
+    if (invoices == null) return null;
+    return openInvoiceSum(invoices);
+  }
+
   Future<double?> getPaidInPeriod(InvoiceListQuery period) async {
     if (period.allTime) {
       final invoices = await getPrivateSentInvoices(

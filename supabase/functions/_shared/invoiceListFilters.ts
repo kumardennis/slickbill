@@ -6,6 +6,7 @@ export type InvoiceListFilterBody = {
   matchAnyDate?: boolean;
   openOnly?: boolean;
   invoiceId?: number;
+  senderPrivateUserId?: number;
   /** Skip date window entirely (status filter only, or no status = everything). */
   allTime?: boolean;
   includeStats?: boolean;
@@ -43,12 +44,17 @@ export function applyInvoiceListFilters(
     matchAnyDate,
     openOnly,
     invoiceId,
+    senderPrivateUserId,
   } = body;
   const allTime = Boolean(body.allTime);
 
   if (invoiceId) {
     query.eq("id", invoiceId);
     return query;
+  }
+
+  if (senderPrivateUserId) {
+    query.eq("senderPrivateUserId", senderPrivateUserId);
   }
 
   if (openOnly) {
